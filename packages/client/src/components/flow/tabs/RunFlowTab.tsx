@@ -467,9 +467,11 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
           />
         ))}
 
-        {isDone && totalDuration !== null && (
-          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 flex items-center justify-between">
-            <span>Completed in {(totalDuration / 1000).toFixed(1)}s</span>
+        {isDone && totalDuration !== null && (() => {
+          const hasErrors = liveSteps.some((s) => s.state === 'error');
+          return (
+          <div className={`rounded-lg border px-4 py-3 text-sm flex items-center justify-between ${hasErrors ? 'border-red-200 bg-red-50 text-red-800' : 'border-green-200 bg-green-50 text-green-800'}`}>
+            <span>{hasErrors ? 'Failed' : 'Completed'} in {(totalDuration / 1000).toFixed(1)}s</span>
             <button
               type="button"
               onClick={handleReset}
@@ -478,7 +480,8 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
               Clear Output
             </button>
           </div>
-        )}
+          );
+        })()}
       </div>
 
       <Modal
@@ -702,7 +705,11 @@ function LiveStepCard({ step, onApprove, onOutputEdit, onRefresh, isRefreshing }
       )}
 
       {/* Output */}
-      {step.output && Object.entries(step.output).map(([key, value]) => (
+      {step.output && Object.entries(step.output).filter(([key]) => !key.startsWith('__type_')).map(([key, value]) => {
+        const outputType = step.output?.[`__type_${key}`];
+        const isImage = outputType === 'image_url' || outputType === 'image_base64' || value?.startsWith('data:image/') || value?.match(/^https?:\/\/.*\.(png|jpg|jpeg|webp|gif)/i);
+
+        return (
         <div key={key} className="mt-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-gray-500 uppercase">{key}</span>
@@ -739,7 +746,19 @@ function LiveStepCard({ step, onApprove, onOutputEdit, onRefresh, isRefreshing }
               )}
             </div>
           </div>
-          {viewMode === 'edit' ? (
+          {isImage ? (
+            <div className="mt-1">
+              <img
+                src={value}
+                alt="Generated image"
+                className="max-h-96 rounded-lg border border-gray-200"
+              />
+              <a href={value} target="_blank" rel="noopener noreferrer"
+                className="mt-1 inline-block text-xs text-brand-600 hover:text-brand-800">
+                Open full size
+              </a>
+            </div>
+          ) : viewMode === 'edit' ? (
             <div className="mt-1 space-y-2">
               <textarea
                 value={editBuffer[key] ?? value}
@@ -777,7 +796,7 @@ function LiveStepCard({ step, onApprove, onOutputEdit, onRefresh, isRefreshing }
             </div>
           )}
         </div>
-      ))}
+      );})}
 
       {/* Editor Rounds */}
       {step.editorRounds && step.editorRounds.length > 0 && (

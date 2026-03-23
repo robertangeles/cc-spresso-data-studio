@@ -7,9 +7,21 @@ import { interpolate } from './skills/interpolate.js';
 import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
 import { getActiveRules } from './profile.service.js';
+import { getSetting } from './admin.service.js';
 
-const AI_TIMEOUT_MS = 120_000;
+const DEFAULT_AI_TIMEOUT_MS = 180_000;
 const MAX_EDITOR_ROUNDS = 10;
+
+async function getAITimeoutMs(): Promise<number> {
+  try {
+    const setting = await getSetting('site');
+    if (setting) {
+      const config = JSON.parse(setting.value);
+      if (config.aiTimeoutSeconds) return config.aiTimeoutSeconds * 1000;
+    }
+  } catch { /* use default */ }
+  return DEFAULT_AI_TIMEOUT_MS;
+}
 
 export async function executeFlow(
   flowId: string,
@@ -146,18 +158,28 @@ async function executeStep(
 
     // Map response to skill outputs
     const outputs: Record<string, string> = {};
+    const outputContent = response.imageUrl ?? response.content;
+
     if (step.skillId) {
       const skill = await loadSkill(step.skillId, step.skillVersion);
       const skillConfig = skill.config as SkillConfig;
-      // For single-output skills, map the entire response to the first output key
       if (skillConfig.outputs.length === 1) {
-        outputs[skillConfig.outputs[0].key] = response.content;
+        outputs[skillConfig.outputs[0].key] = outputContent;
+        // Store content type hint for the UI
+        if (response.contentType) {
+          outputs[`__type_${skillConfig.outputs[0].key}`] = response.contentType;
+        }
       } else {
-        // For multi-output, put full response as 'result'
-        outputs['result'] = response.content;
+        outputs['result'] = outputContent;
+        if (response.contentType) {
+          outputs['__type_result'] = response.contentType;
+        }
       }
     } else {
-      outputs['result'] = response.content;
+      outputs['result'] = outputContent;
+      if (response.contentType) {
+        outputs['__type_result'] = response.contentType;
+      }
     }
 
     return {
@@ -439,6 +461,8 @@ async function executeStepWithTimeout(
   context: Record<string, string>,
   globalRules?: string,
 ): Promise<StepResult> {
+  const timeoutMs = await getAITimeoutMs();
+
   const attempt = async (): Promise<StepResult> => {
     return new Promise<StepResult>((resolve) => {
       const timer = setTimeout(() => {
@@ -448,11 +472,11 @@ async function executeStepWithTimeout(
           outputs: {},
           usage: { inputTokens: 0, outputTokens: 0 },
           model: step.model || 'unknown',
-          durationMs: AI_TIMEOUT_MS,
+          durationMs: timeoutMs,
           status: 'error',
-          error: 'AI provider timed out after 30 seconds',
+          error: `AI provider timed out after ${timeoutMs / 1000} seconds`,
         });
-      }, AI_TIMEOUT_MS);
+      }, timeoutMs);
 
       executeStep(step, context, globalRules).then((result) => {
         clearTimeout(timer);
@@ -465,7 +489,7 @@ async function executeStepWithTimeout(
           outputs: {},
           usage: { inputTokens: 0, outputTokens: 0 },
           model: step.model || 'unknown',
-          durationMs: AI_TIMEOUT_MS,
+          durationMs: timeoutMs,
           status: 'error',
           error: err instanceof Error ? err.message : 'Unknown error',
         });
