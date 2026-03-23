@@ -74,6 +74,7 @@ export class OpenRouterProvider implements IAIProvider {
             image_url?: { url: string };
             inline_data?: { mime_type: string; data: string };
           }>;
+          images?: Array<{ type: string; image_url?: { url: string } }>;
         };
         finish_reason: string;
       }>;
@@ -82,13 +83,23 @@ export class OpenRouterProvider implements IAIProvider {
 
     const choice = data.choices[0];
     const rawContent = choice?.message?.content;
+    const rawImages = choice?.message?.images;
 
-    // Handle multimodal responses (image models return array of content parts)
+    // Handle multimodal responses
     let content = '';
     let contentType: 'text' | 'image_url' | 'image_base64' | undefined;
     let imageUrl: string | undefined;
 
-    if (Array.isArray(rawContent)) {
+    // Check message.images field first (Gemini image models use this)
+    if (rawImages && rawImages.length > 0) {
+      const img = rawImages[0];
+      if (img.image_url?.url) {
+        imageUrl = img.image_url.url;
+        contentType = imageUrl.startsWith('data:') ? 'image_base64' : 'image_url';
+        content = imageUrl;
+        logger.info({ model: request.model, imageUrlLength: imageUrl.length }, 'Image extracted from message.images field');
+      }
+    } else if (Array.isArray(rawContent)) {
       // Multimodal response — extract text and images
       const textParts: string[] = [];
       for (const part of rawContent) {

@@ -42,6 +42,9 @@ const DEFAULT_PROVIDERS: ProviderDef[] = [
       { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', description: 'Latest DeepSeek — strong reasoning and coding' },
       { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1', description: 'Reasoning model — deep chain-of-thought' },
       { id: 'deepseek/deepseek-chat-v3.1', name: 'DeepSeek V3.1', description: 'Fast and capable general model' },
+      { id: 'mistralai/mistral-large-2512', name: 'Mistral Large', description: 'Best Mistral — creative writing + reasoning ($0.50/M)' },
+      { id: 'mistralai/mistral-small-2603', name: 'Mistral Small', description: 'Fast structured output — great for editing ($0.15/M)' },
+      { id: 'mistralai/mistral-medium-3.1', name: 'Mistral Medium 3.1', description: 'Balanced speed and quality ($0.40/M)' },
     ],
   },
   {

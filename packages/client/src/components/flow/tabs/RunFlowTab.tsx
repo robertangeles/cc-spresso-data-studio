@@ -753,10 +753,18 @@ function LiveStepCard({ step, onApprove, onOutputEdit, onRefresh, isRefreshing }
                 alt="Generated image"
                 className="max-h-96 rounded-lg border border-gray-200"
               />
-              <a href={value} target="_blank" rel="noopener noreferrer"
-                className="mt-1 inline-block text-xs text-brand-600 hover:text-brand-800">
-                Open full size
-              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = value;
+                  link.download = `content-pilot-image-${Date.now()}.jpg`;
+                  link.click();
+                }}
+                className="mt-1 inline-block text-xs text-brand-600 hover:text-brand-800"
+              >
+                Download Image
+              </button>
             </div>
           ) : viewMode === 'edit' ? (
             <div className="mt-1 space-y-2">

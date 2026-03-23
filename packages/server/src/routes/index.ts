@@ -8,6 +8,7 @@ import { executionRoutes, executionStreamRoutes } from './execution.routes.js';
 import { contentRoutes } from './content.routes.js';
 import roleRoutes from './role.routes.js';
 import profileRoutes from './profile.routes.js';
+import { chatRoutes } from './chat.routes.js';
 
 const router = Router();
 
@@ -28,5 +29,6 @@ router.use('/flows', executionRoutes);
 router.use('/content', contentRoutes);
 router.use('/roles', roleRoutes);
 router.use('/profile', profileRoutes);
+router.use('/chat', chatRoutes);
 
 export { router };
