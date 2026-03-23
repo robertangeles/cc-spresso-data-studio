@@ -202,3 +202,23 @@ export const pendingApprovals = pgTable('pending_approvals', {
   userFeedback: text('user_feedback'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const conversations = pgTable('conversations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 255 }).notNull().default('New Chat'),
+  model: varchar('model', { length: 100 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const messages = pgTable('messages', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  conversationId: uuid('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  role: varchar('role', { length: 20 }).notNull(),
+  content: text('content').notNull(),
+  contentType: varchar('content_type', { length: 20 }).notNull().default('text'),
+  model: varchar('model', { length: 100 }),
+  tokens: integer('tokens').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

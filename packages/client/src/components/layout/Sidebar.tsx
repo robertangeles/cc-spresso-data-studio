@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Workflow, Zap, FileText, Settings, User, LogOut } from 'lucide-react';
+import { MessageSquare, LayoutDashboard, Workflow, Zap, FileText, Settings, User, LogOut } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const navItems: { to: string; label: string; icon: LucideIcon }[] = [
+  { to: '/chat', label: 'Chat', icon: MessageSquare },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/flows', label: 'Orchestrations', icon: Workflow },
   { to: '/skills', label: 'Skills', icon: Zap },

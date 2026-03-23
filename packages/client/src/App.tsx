@@ -17,6 +17,7 @@ import { ProfilePage } from './pages/settings/ProfilePage';
 import { MediaSettingsPage } from './pages/settings/MediaSettingsPage';
 import { SiteSettingsPage } from './pages/settings/SiteSettingsPage';
 import { ContentLibraryPage } from './pages/ContentLibraryPage';
+import { ChatPage } from './pages/ChatPage';
 
 export function App() {
   return (
@@ -30,6 +31,7 @@ export function App() {
           {/* Protected routes */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
+              <Route path="/chat" element={<ChatPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/flows" element={<DashboardPage />} />
               <Route path="/flows/:id" element={<FlowBuilderPage />} />
@@ -50,7 +52,7 @@ export function App() {
           </Route>
 
           {/* Redirects */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<Navigate to="/chat" replace />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </AuthProvider>

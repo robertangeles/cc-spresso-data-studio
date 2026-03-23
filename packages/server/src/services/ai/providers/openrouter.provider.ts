@@ -55,18 +55,87 @@ export class OpenRouterProvider implements IAIProvider {
       throw new Error(`OpenRouter API error ${response.status}: ${errorBody}`);
     }
 
-    const data = (await response.json()) as {
+    const rawJson = await response.json();
+
+    // Log raw response for image models to debug format
+    const isImageModel = request.model.includes('image');
+    if (isImageModel) {
+      logger.info({ model: request.model, rawResponse: JSON.stringify(rawJson).slice(0, 2000) }, 'Image model raw response');
+    }
+
+    const data = rawJson as {
       id: string;
       model: string;
-      choices: Array<{ message: { content: string }; finish_reason: string }>;
+      choices: Array<{
+        message: {
+          content: string | null | Array<{
+            type: string;
+            text?: string;
+            image_url?: { url: string };
+            inline_data?: { mime_type: string; data: string };
+          }>;
+          images?: Array<{ type: string; image_url?: { url: string } }>;
+        };
+        finish_reason: string;
+      }>;
       usage: { prompt_tokens: number; completion_tokens: number };
     };
 
     const choice = data.choices[0];
+    const rawContent = choice?.message?.content;
+    const rawImages = choice?.message?.images;
+
+    // Handle multimodal responses
+    let content = '';
+    let contentType: 'text' | 'image_url' | 'image_base64' | undefined;
+    let imageUrl: string | undefined;
+
+    // Check message.images field first (Gemini image models use this)
+    if (rawImages && rawImages.length > 0) {
+      const img = rawImages[0];
+      if (img.image_url?.url) {
+        imageUrl = img.image_url.url;
+        contentType = imageUrl.startsWith('data:') ? 'image_base64' : 'image_url';
+        content = imageUrl;
+        logger.info({ model: request.model, imageUrlLength: imageUrl.length }, 'Image extracted from message.images field');
+      }
+    } else if (Array.isArray(rawContent)) {
+      // Multimodal response — extract text and images
+      const textParts: string[] = [];
+      for (const part of rawContent) {
+        if (part.type === 'text' && part.text) {
+          textParts.push(part.text);
+        } else if (part.type === 'image_url' && part.image_url?.url) {
+          imageUrl = part.image_url.url;
+          contentType = part.image_url.url.startsWith('data:') ? 'image_base64' : 'image_url';
+        } else if (part.inline_data?.data) {
+          // Gemini-style inline base64 image
+          const mime = part.inline_data.mime_type || 'image/png';
+          imageUrl = `data:${mime};base64,${part.inline_data.data}`;
+          contentType = 'image_base64';
+        }
+      }
+      content = textParts.join('\n') || (imageUrl ? `![Generated Image](${imageUrl})` : '');
+    } else if (rawContent === null || rawContent === undefined) {
+      // Some image models return null content — check for other response fields
+      content = '';
+    } else {
+      content = rawContent;
+      // Check if text response contains a base64 image or image URL
+      if (content.startsWith('data:image/')) {
+        contentType = 'image_base64';
+        imageUrl = content;
+      } else if (content.match(/^https?:\/\/.*\.(png|jpg|jpeg|webp|gif)/i)) {
+        contentType = 'image_url';
+        imageUrl = content;
+      }
+    }
 
     return {
       id: data.id,
-      content: choice?.message?.content ?? '',
+      content,
+      contentType,
+      imageUrl,
       model: data.model,
       provider: ProviderType.OPENROUTER,
       usage: {

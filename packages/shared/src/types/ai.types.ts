@@ -34,6 +34,8 @@ export interface AICompletionRequest {
 export interface AICompletionResponse {
   id: string;
   content: string;
+  contentType?: 'text' | 'image_url' | 'image_base64';
+  imageUrl?: string;
   model: string;
   provider: ProviderType;
   usage: {
