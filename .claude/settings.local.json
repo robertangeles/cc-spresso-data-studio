@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install:*)",
+      "Bash(pnpm approve-builds:*)",
+      "Bash(pnpm --filter @cc/shared build)",
+      "Bash(timeout 5 pnpm --filter @cc/server dev)",
+      "Bash(pnpm --filter @cc/server add cookie-parser)",
+      "Bash(pnpm --filter @cc/server add -D @types/cookie-parser)"
+    ]
+  }
+}

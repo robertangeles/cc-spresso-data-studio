@@ -1,0 +1,82 @@
+import type { Request, Response, NextFunction } from 'express';
+import type { ApiResponse } from '@cc/shared';
+import { UnauthorizedError } from '../utils/errors.js';
+import * as profileService from '../services/profile.service.js';
+
+// --- Profile ---
+
+export async function getProfile(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const profile = await profileService.getProfile(req.user.userId);
+    res.json({ success: true, data: profile });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateProfile(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const profile = await profileService.updateProfile(req.user.userId, req.body);
+    res.json({ success: true, data: profile });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Rules ---
+
+export async function listRules(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const rules = await profileService.listRules(req.user.userId);
+    res.json({ success: true, data: rules });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createRule(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const rule = await profileService.createRule(req.user.userId, req.body);
+    res.status(201).json({ success: true, data: rule });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateRule(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const rule = await profileService.updateRule(req.user.userId, req.params.id, req.body);
+    res.json({ success: true, data: rule });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteRule(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    await profileService.deleteRule(req.user.userId, req.params.id);
+    res.json({ success: true, data: null, message: 'Rule deleted' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Password change ---
+
+export async function changePassword(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    // Delegate to auth service — import lazily to avoid circular deps
+    const { changePassword: doChange } = await import('../services/auth.service.js');
+    await doChange(req.user.userId, req.body.currentPassword, req.body.newPassword);
+    res.json({ success: true, data: null, message: 'Password changed' });
+  } catch (err) {
+    next(err);
+  }
+}
