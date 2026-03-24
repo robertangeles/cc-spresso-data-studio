@@ -108,18 +108,51 @@ function checkSentenceLength(sentences: Array<{ text: string; line: number }>, m
 
 function checkTriads(sentences: Array<{ text: string; line: number }>): Violation[] {
   const violations: Violation[] = [];
-  // Pattern: "X, Y, and Z" or "X, Y, or Z"
-  const triadRegex = /\b\w+(?:\s\w+)*,\s+\w+(?:\s\w+)*,\s+(?:and|or)\s+\w+/i;
+
+  // Skip sentences with dialogue attribution — characters can speak in triads
+  const isDialogue = (text: string) => /\b(?:she|he|they)\s+(?:says?|said|tells?|told|asks?|asked)\b/i.test(text)
+    || /^[""\u201C]/.test(text.trim());
+
+  // Pattern 1: "X, Y, and Z" or "X, Y, or Z"
+  const commaAndTriad = /\b\w+(?:\s\w+)*,\s+\w+(?:\s\w+)*,\s+(?:and|or)\s+\w+/i;
+  // Pattern 2: "X and Y and Z" (sequential and-chains)
+  const andChain = /\band\b[^.!?]*\band\b[^.!?]*\band\b/i;
+  // Pattern 3: Three comma-separated phrases (no "and" needed) — e.g. "pressed flat, brown at edges, smelling faintly"
+  const commaList = /(?:^|[.!?]\s+)[^,]*,[^,]*,[^,]*(?:[.!?]|$)/;
+  // Pattern 4: Stacked participles — "doing, seeing, feeling"
+  const stackedParticiples = /\b\w+ing\b[^.]*,\s*\b\w+ing\b[^.]*,\s*\b\w+ing\b/i;
 
   for (const s of sentences) {
-    if (triadRegex.test(s.text)) {
+    if (isDialogue(s.text)) continue;
+
+    let matched = false;
+    let explanation = 'Three items grouped in a sentence — cut one, combine two, or break apart';
+
+    if (stackedParticiples.test(s.text)) {
+      matched = true;
+      explanation = 'Stacked participles (doing, seeing, feeling) — banned pattern';
+    } else if (commaAndTriad.test(s.text)) {
+      matched = true;
+    } else if (andChain.test(s.text)) {
+      matched = true;
+      explanation = 'Three "and"-chained clauses — cut one or restructure';
+    } else if (commaList.test(s.text)) {
+      // Only flag if there are 3+ comma-separated phrases of substance (not just short words)
+      const commas = s.text.split(',').filter((p) => p.trim().split(/\s+/).length >= 2);
+      if (commas.length >= 3) {
+        matched = true;
+        explanation = 'Three comma-separated phrases — cut one or combine two';
+      }
+    }
+
+    if (matched) {
       violations.push({
         type: 'mechanical',
         rule: 'Triad (3-item list)',
         sentence: s.text,
         line: s.line,
         severity: 'medium',
-        explanation: 'Three items grouped in a sentence — cut one, combine two, or break apart',
+        explanation,
       });
     }
   }
@@ -211,10 +244,10 @@ function checkSimilarLengths(sentences: Array<{ text: string; line: number }>): 
     const len2 = countWords(sentences[i + 1].text);
     const len3 = countWords(sentences[i + 2].text);
 
-    // Skip short sentences (under 10 words) — they naturally cluster in length
-    if (len1 < 10 || len2 < 10 || len3 < 10) continue;
+    // Skip short sentences (under 12 words) — they naturally cluster in length
+    if (len1 < 12 || len2 < 12 || len3 < 12) continue;
 
-    if (Math.abs(len1 - len2) <= 5 && Math.abs(len2 - len3) <= 5 && Math.abs(len1 - len3) <= 5) {
+    if (Math.abs(len1 - len2) <= 4 && Math.abs(len2 - len3) <= 4 && Math.abs(len1 - len3) <= 4) {
       violations.push({
         type: 'mechanical',
         rule: 'Three similar-length sentences',
@@ -399,17 +432,34 @@ export async function reworkViolations(
     .map((v, i) => `${i + 1}. ${v.rule}: "${v.sentence}" — ${v.explanation ?? v.rule}`)
     .join('\n');
 
-  const prompt = `The following text has specific rule violations. Fix ONLY the listed violations. Preserve everything else — voice, structure, facts, flow, paragraph breaks.
+  const wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;
 
-Do NOT add new content. Do NOT remove content that isn't violated. Do NOT change the overall structure. Just fix the specific violations listed below.
+  const prompt = `You are a surgical text editor. Fix ONLY the listed violations below. This is a ${wordCount}-word text. Your output MUST be between ${Math.floor(wordCount * 0.95)} and ${Math.ceil(wordCount * 1.05)} words.
+
+CRITICAL RULES:
+- Do NOT rewrite paragraphs. Make the smallest possible change to fix each violation.
+- Do NOT remove sentences, paragraphs, or sections unless a violation specifically requires it.
+- Do NOT add new content, commentary, or transitions.
+- Preserve all facts, names, dates, quotes, and structure exactly.
+- Return the COMPLETE text with fixes applied — not just the changed parts.
+
+FIX INSTRUCTIONS BY VIOLATION TYPE:
+- Banned word: Remove the word or restructure only that clause. Do not rewrite the whole sentence.
+- Sentence too long: Split into two shorter sentences (each under 35 words). Keep all information from the original.
+- Triad (3-item list): Cut one item or combine two into one phrase. Maximum two items.
+- Passive voice: Rewrite with the actor as subject. If actor is unknown, describe through physical evidence.
+- Consecutive same openers: Change the opening word of the second sentence only. Keep meaning identical.
+- Semicolon: Replace with a period. Capitalize the next word.
+- "There is/are": Rewrite with a concrete subject performing an action.
+- Similar-length sentences: Vary one sentence — shorten it or combine with its neighbor.
 
 VIOLATIONS TO FIX:
 ${violationList}
 
-TEXT:
+TEXT (${wordCount} words — preserve this count):
 ${content}
 
-Return the full revised text with only the violations fixed. No commentary, no explanation — just the revised text.`;
+Return the full revised text. No commentary, no explanation, no word count — just the text.`;
 
   const response = await providerRegistry.complete({
     model,
@@ -418,7 +468,19 @@ Return the full revised text with only the violations fixed. No commentary, no e
     maxTokens: 8000,
   });
 
-  return stripThinkingBlocks(response.content);
+  const result = stripThinkingBlocks(response.content);
+
+  // Word count guard: reject if result dropped more than 10%
+  const resultWordCount = result.split(/\s+/).filter((w) => w.length > 0).length;
+  if (resultWordCount < wordCount * 0.9) {
+    logger.warn(
+      { original: wordCount, result: resultWordCount, drop: `${Math.round((1 - resultWordCount / wordCount) * 100)}%` },
+      'Rework dropped too many words — keeping original',
+    );
+    return content;
+  }
+
+  return result;
 }
 
 // --- Rework Loop (auto-fix with re-audit) ---
