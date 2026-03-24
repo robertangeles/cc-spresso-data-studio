@@ -94,11 +94,17 @@ After every new feature, before marking work complete:
 2. Run integration tests: `pnpm test:integration`
 3. Check for TypeScript errors: `pnpm tsc`
 4. If any DB schema changes were made, run `drizzle-kit push` (from `packages/server/`) to sync the remote database
-5. Smoke test all affected routes and list them in your task summary
-6. Confirm no existing tests were broken, modified, or deleted without justification
-7. Report pass/fail results before closing the task
+5. **MANDATORY: Test every new/updated API route via curl or ctx_execute fetch:**
+   - List every route the feature touches
+   - Verify 200 + correct response shape for happy path
+   - Verify 401 without token
+   - Verify 404/400 for invalid params
+   - Only wire the frontend AFTER backend routes are verified
+6. Smoke test all affected routes and list them in your task summary
+7. Confirm no existing tests were broken, modified, or deleted without justification
+8. Report pass/fail results before closing the task
 
-Never consider a feature done until all existing tests pass and the database schema is in sync.    
+Never consider a feature done until all existing tests pass, the database schema is in sync, and all API routes are verified via curl.    
 
 ## 8. Enterprise Code Quality
 
@@ -130,6 +136,81 @@ The system must follow:
 
 Frontend, backend, AI services, prompts, and knowledge content must
 remain separated.
+
+## Database Design — Mandatory Standards
+
+Apply these rules to ALL database work in this project, including migrations,
+schema files, Drizzle ORM definitions, and any ad-hoc SQL.
+
+---
+
+### 1. Normalization (2NF)
+
+- Every table must be in Second Normal Form before review.
+- No transitive dependencies. Each non-key column depends only on the primary key.
+- Repeating groups, comma-separated values, and JSON blobs used as relational
+  columns are not allowed.
+- Exception: pgvector `embedding` columns and JSONB audit/metadata columns
+  are permitted where explicitly noted in a comment.
+
+---
+
+### 2. Star Schema (Analytics Layer)
+
+- Separate OLTP tables (normalized, transactional) from OLAP tables
+  (denormalized, reporting).
+- Analytics tables follow strict star schema:
+  - One central fact table per analytical domain (e.g. `fact_usage`)
+  - Dimension tables prefixed with `dim_` (e.g. `dim_user`, `dim_role`)
+  - Fact tables hold foreign keys to dimensions and numeric measures only.
+  - No dimension data lives inside a fact table.
+- Do not mix OLTP and OLAP concerns in the same table.
+
+---
+
+### 3. Naming Conventions
+
+| Object         | Pattern                          | Example                    |
+|----------------|----------------------------------|----------------------------|
+| Tables         | `snake_case`, plural noun        | `recipe_versions`          |
+| Fact tables    | `fact_` prefix                   | `fact_recipe_usage`        |
+| Dimension tables | `dim_` prefix                  | `dim_ingredient`           |
+| Primary key    | `id` (UUID preferred)            | `id uuid primary key`      |
+| Foreign keys   | `{referenced_table_singular}_id` | `user_id`, `recipe_id`     |
+| Timestamps     | `created_at`, `updated_at`       | standard on every table    |
+| Boolean cols   | `is_` or `has_` prefix           | `is_published`, `has_image`|
+| Junction tables | both entity names, alphabetical | `ingredient_recipe`        |
+
+- No abbreviations unless universally understood (e.g. `id`, `url`).
+- No camelCase in SQL or schema files.
+
+---
+
+### 4. Index Strategy
+
+- Every foreign key column gets an index. No exceptions.
+- Add a composite index when two or more columns are consistently queried together.
+- Unique constraints replace unique indexes wherever the constraint is semantic
+  (e.g. `unique(user_id, recipe_id)` on a junction table).
+- pgvector columns use `ivfflat` index with `lists` tuned to dataset size.
+- Do not add indexes speculatively. Every index must have a stated query it serves,
+  written as a comment directly above the index definition.
+- Partial indexes are preferred over full indexes for low-selectivity boolean
+  columns (e.g. `WHERE is_published = true`).
+
+---
+
+### Enforcement
+
+Before generating or reviewing any schema:
+1. State which normal form the table satisfies.
+2. Confirm every FK has an index.
+3. Flag any column that violates naming conventions.
+4. Identify whether the table is OLTP or OLAP and confirm it follows the
+   correct design pattern for that layer.
+
+If a design decision deviates from any rule above, state the deviation
+explicitly and provide a justification before proceeding.
 
 ------------------------------------------------------------------------
 

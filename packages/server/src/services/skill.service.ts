@@ -156,7 +156,7 @@ export async function updateSkill(skillId: string, data: UpdateSkillData, userId
   const user = await db.query.users.findFirst({
     where: eq(schema.users.id, userId),
   });
-  const isAdmin = user?.role === 'administrator';
+  const isAdmin = user?.role === 'Administrator';
 
   // Only admins can edit built-in skills
   if (skill.source === 'builtin' && !isAdmin) {
@@ -211,7 +211,7 @@ export async function deleteSkill(skillId: string, userId: string) {
   const user = await db.query.users.findFirst({
     where: eq(schema.users.id, userId),
   });
-  const isAdmin = user?.role === 'administrator';
+  const isAdmin = user?.role === 'Administrator';
 
   if (skill.source === 'builtin' && !isAdmin) {
     throw new ForbiddenError('Only administrators can delete built-in skills');

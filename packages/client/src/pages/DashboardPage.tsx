@@ -46,8 +46,8 @@ export function DashboardPage() {
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">Manage your orchestrations</p>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900">Orchestrations</h1>
+          <p className="mt-0.5 text-sm text-gray-400">One idea in. Twelve assets out.</p>
         </div>
         <Button onClick={() => setShowCreate(true)}>+ New Orchestration</Button>
       </div>
@@ -73,8 +73,8 @@ export function DashboardPage() {
       {flows.length === 0 ? (
         <EmptyState
           icon={Workflow}
-          title="Your content engine starts here"
-          description="Create your first orchestration to turn ideas into published content across every channel."
+          title="Nothing brewing yet."
+          description="Create an orchestration. One idea in, twelve assets out."
           actionLabel="+ New Orchestration"
           onAction={() => setShowCreate(true)}
         />

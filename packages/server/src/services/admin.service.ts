@@ -104,10 +104,10 @@ const DEFAULT_PROVIDERS: ProviderDef[] = [
 // --- Role seed ---
 
 const DEFAULT_ROLES = [
-  { name: 'administrator', description: 'Full system access — manage users, roles, settings, and all content', isSystem: true },
-  { name: 'subscriber', description: 'Free tier — access to built-in skills and basic flows', isSystem: true },
-  { name: 'paid_subscriber', description: 'Paid tier — custom skill creation, advanced flows, and priority execution', isSystem: true },
-  { name: 'founder_member', description: 'Early adopter — full access with lifetime benefits', isSystem: true },
+  { name: 'Administrator', description: 'Full system access — manage users, roles, settings, and all content', isSystem: true },
+  { name: 'Subscriber', description: 'Free tier — access to built-in skills and basic flows', isSystem: true },
+  { name: 'Paid Subscriber', description: 'Paid tier — custom skill creation, advanced flows, and priority execution', isSystem: true },
+  { name: 'Founder Member', description: 'Early adopter — full access with lifetime benefits', isSystem: true },
 ];
 
 export async function seedRoles(): Promise<void> {

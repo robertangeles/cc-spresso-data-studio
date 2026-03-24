@@ -75,7 +75,7 @@ export function SiteSettingsPage() {
     <div>
       <h3 className="text-lg font-semibold text-gray-900">Site Settings</h3>
       <p className="mt-1 text-sm text-gray-500 mb-6">
-        System-wide configuration for Content Pilot.
+        System-wide configuration for Spresso.
       </p>
 
       <Card padding="lg">

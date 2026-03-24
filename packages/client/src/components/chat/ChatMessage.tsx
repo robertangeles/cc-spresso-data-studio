@@ -38,10 +38,18 @@ export function ChatMessage({ message }: ChatMessageProps) {
           {isImage ? (
             <div>
               <img src={message.content} alt="Generated" className="max-h-96 rounded-lg" />
-              <a href={message.content} target="_blank" rel="noopener noreferrer"
-                className="mt-2 inline-block text-xs text-brand-600 hover:text-brand-800">
-                Open full size
-              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = message.content;
+                  link.download = `spresso-image-${Date.now()}.jpg`;
+                  link.click();
+                }}
+                className="mt-2 inline-block text-xs text-brand-600 hover:text-brand-800"
+              >
+                Download Image
+              </button>
             </div>
           ) : isUser ? (
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>

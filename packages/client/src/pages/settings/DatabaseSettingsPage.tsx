@@ -116,28 +116,42 @@ function TableViewerCard() {
           <div className="h-6 w-6 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
         </div>
       ) : tables.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-left text-gray-500">
-                <th className="pb-2 pr-4 font-medium">Table Name</th>
-                <th className="pb-2 pr-4 font-medium text-right">Rows</th>
-                <th className="pb-2 pr-4 font-medium text-right">Size</th>
-                <th className="pb-2 font-medium text-right">Columns</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tables.map((t) => (
-                <tr key={t.name} className="border-b border-gray-100">
-                  <td className="py-2 pr-4 font-mono text-xs">{t.name}</td>
-                  <td className="py-2 pr-4 text-right">{t.rowCount.toLocaleString()}</td>
-                  <td className="py-2 pr-4 text-right">{t.sizePretty}</td>
-                  <td className="py-2 text-right">{t.columnCount}</td>
+        <>
+          <div className="mb-3 flex items-center gap-4 text-sm">
+            <span className="text-gray-500">Total size:</span>
+            <span className="font-semibold text-gray-900">
+              {(tables.reduce((sum, t) => sum + t.sizeBytes, 0) / (1024 * 1024)).toFixed(2)} MB
+            </span>
+            <span className="text-gray-300">|</span>
+            <span className="text-gray-500">Tables:</span>
+            <span className="font-semibold text-gray-900">{tables.length}</span>
+            <span className="text-gray-300">|</span>
+            <span className="text-gray-500">Total rows:</span>
+            <span className="font-semibold text-gray-900">{tables.reduce((sum, t) => sum + t.rowCount, 0).toLocaleString()}</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-gray-500">
+                  <th className="pb-2 pr-4 font-medium">Table Name</th>
+                  <th className="pb-2 pr-4 font-medium text-right">Rows</th>
+                  <th className="pb-2 pr-4 font-medium text-right">Size (MB)</th>
+                  <th className="pb-2 font-medium text-right">Columns</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {tables.map((t) => (
+                  <tr key={t.name} className="border-b border-gray-100">
+                    <td className="py-2 pr-4 font-mono text-xs">{t.name}</td>
+                    <td className="py-2 pr-4 text-right">{t.rowCount.toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-right">{(t.sizeBytes / (1024 * 1024)).toFixed(3)}</td>
+                    <td className="py-2 text-right">{t.columnCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : (
         <p className="text-sm text-gray-500">No tables found.</p>
       )}

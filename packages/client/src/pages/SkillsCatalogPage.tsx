@@ -29,7 +29,7 @@ export function SkillsCatalogPage() {
   const navigate = useNavigate();
 
   const canEditSkill = (skill: Skill) =>
-    user?.role === 'administrator' || (skill.userId === user?.id && skill.source !== 'builtin');
+    user?.role === 'Administrator' || (skill.userId === user?.id && skill.source !== 'builtin');
 
   const { skills, isLoading, refresh } = useSkills({
     category: category || undefined,
@@ -120,8 +120,8 @@ export function SkillsCatalogPage() {
       ) : (
         <EmptyState
           icon={Zap}
-          title="Build your first skill"
-          description="Skills are reusable AI-powered building blocks for your orchestrations. Create one or import from GitHub."
+          title="No skills yet."
+          description="Build one. It takes 60 seconds. Or import from GitHub."
           actionLabel="Create Skill"
           onAction={() => navigate('/skills/create')}
         />

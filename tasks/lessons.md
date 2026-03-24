@@ -56,3 +56,20 @@
 **Fix:** Moved `useState` above the early return.
 
 **Rule:** ALL hooks (useState, useEffect, useCallback, useRef) must be declared BEFORE any conditional return. When adding state to an existing component, always check for early returns and place the new hook above them.
+
+## 7. Test all routes via curl before marking feature done
+
+**Problem:** Multiple features shipped with endpoints that returned 404, 401, or wrong data — only discovered when the user tested in the browser, burning API credits.
+
+**Fix:** After every new or updated API endpoint, test it with curl before touching the frontend:
+```
+curl -X POST http://localhost:3003/api/chat/conversations -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"model":"claude-sonnet-4-6"}'
+```
+
+**Rule:** MANDATORY for every new/updated feature:
+1. List every API route the feature touches
+2. Test each with curl (or ctx_execute fetch) — verify status 200 and correct response shape
+3. Test auth: verify 401 without token, 403 for wrong role
+4. Test error paths: missing params, invalid IDs
+5. Only THEN wire the frontend
+6. This is non-negotiable — no exceptions
