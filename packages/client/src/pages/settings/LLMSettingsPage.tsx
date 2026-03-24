@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Save, DollarSign } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { MaskedField } from '../../components/ui/MaskedField';
 import { api } from '../../lib/api';
@@ -85,6 +86,8 @@ export function LLMSettingsPage() {
           ))}
         </div>
       )}
+
+      <ModelPricingSection />
     </div>
   );
 }
@@ -95,6 +98,154 @@ interface ProviderCardProps {
   onFetchKey: () => Promise<string>;
   onSaveKey: (key: string) => Promise<void>;
 }
+
+// --- Model Pricing Section ---
+
+interface DimModel {
+  id: string;
+  modelId: string;
+  provider: string;
+  displayName: string;
+  inputCostPerM: number;
+  outputCostPerM: number;
+  isActive: boolean;
+}
+
+function ModelPricingSection() {
+  const [models, setModels] = useState<DimModel[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<{ inputCostPerM: string; outputCostPerM: string }>({ inputCostPerM: '', outputCostPerM: '' });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get('/admin/usage/models').then(({ data }) => {
+      setModels(data.data);
+      setIsLoading(false);
+    }).catch(() => setIsLoading(false));
+  }, []);
+
+  const startEdit = (model: DimModel) => {
+    setEditingId(model.id);
+    setEditValues({
+      inputCostPerM: model.inputCostPerM.toString(),
+      outputCostPerM: model.outputCostPerM.toString(),
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    setSaving(true);
+    try {
+      const { data } = await api.patch(`/admin/usage/models/${id}`, {
+        inputCostPerM: parseFloat(editValues.inputCostPerM),
+        outputCostPerM: parseFloat(editValues.outputCostPerM),
+      });
+      setModels((prev) => prev.map((m) => (m.id === id ? data.data : m)));
+      setEditingId(null);
+    } catch {
+      // keep editing state
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading) return null;
+  if (models.length === 0) return null;
+
+  // Group by provider
+  const grouped = models.reduce<Record<string, DimModel[]>>((acc, m) => {
+    (acc[m.provider] ??= []).push(m);
+    return acc;
+  }, {});
+
+  return (
+    <>
+      <div className="border-t border-gray-200 pt-6">
+        <div className="flex items-center gap-2 mb-1">
+          <DollarSign className="h-5 w-5 text-brand-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Model Pricing</h3>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">
+          Cost per 1M tokens for usage tracking. Click a row to edit.
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="px-4 py-2 text-left font-medium text-gray-600">Model</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-600">Input $/1M</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-600">Output $/1M</th>
+              <th className="px-4 py-2 w-12" />
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(grouped).map(([provider, providerModels]) => (
+              <>
+                <tr key={`header-${provider}`} className="bg-gray-50/50">
+                  <td colSpan={4} className="px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    {provider}
+                  </td>
+                </tr>
+                {providerModels.map((model) => (
+                  <tr
+                    key={model.id}
+                    className={`border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${editingId === model.id ? 'bg-brand-50' : ''}`}
+                    onClick={() => editingId !== model.id && startEdit(model)}
+                  >
+                    <td className="px-4 py-2 text-gray-900">{model.displayName}</td>
+                    <td className="px-4 py-2 text-right">
+                      {editingId === model.id ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-20 rounded border border-gray-300 px-2 py-0.5 text-right text-sm"
+                          value={editValues.inputCostPerM}
+                          onChange={(e) => setEditValues((v) => ({ ...v, inputCostPerM: e.target.value }))}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span className="text-gray-700">${model.inputCostPerM}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {editingId === model.id ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-20 rounded border border-gray-300 px-2 py-0.5 text-right text-sm"
+                          value={editValues.outputCostPerM}
+                          onChange={(e) => setEditValues((v) => ({ ...v, outputCostPerM: e.target.value }))}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span className="text-gray-700">${model.outputCostPerM}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      {editingId === model.id && (
+                        <button
+                          disabled={saving}
+                          onClick={(e) => { e.stopPropagation(); saveEdit(model.id); }}
+                          className="rounded p-1 text-brand-600 hover:bg-brand-100 disabled:opacity-50"
+                        >
+                          <Save className="h-4 w-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+// --- Provider Card ---
 
 function ProviderCard({ provider, rawKey, onFetchKey: _onFetchKey, onSaveKey }: ProviderCardProps) {
   const [fetchedKey, setFetchedKey] = useState<string | null>(null);

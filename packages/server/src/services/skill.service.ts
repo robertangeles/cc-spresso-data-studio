@@ -117,9 +117,21 @@ export async function createSkill(data: CreateSkillData, userId: string) {
       icon: data.icon,
       tags: data.tags ?? [],
       config: data.config,
+      // Scalar columns from config
+      promptTemplate: data.config.promptTemplate,
+      systemPrompt: data.config.systemPrompt ?? null,
+      capabilities: data.config.capabilities ?? [],
+      defaultProvider: data.config.defaultProvider ?? null,
+      defaultModel: data.config.defaultModel ?? null,
+      temperature: data.config.temperature ?? null,
+      maxTokens: data.config.maxTokens ?? null,
       isPublished: true,
     })
     .returning();
+
+  // Sync normalized inputs/outputs
+  await syncSkillInputs(skill.id, data.config.inputs ?? []);
+  await syncSkillOutputs(skill.id, data.config.outputs ?? []);
 
   // Create initial version
   await db.insert(schema.skillVersions).values({
@@ -176,11 +188,19 @@ export async function updateSkill(skillId: string, data: UpdateSkillData, userId
   if (data.tags !== undefined) updates.tags = data.tags;
   if (data.isPublished !== undefined) updates.isPublished = data.isPublished;
 
-  // If config changed, create a new version
+  // If config changed, create a new version + sync normalized tables
   if (data.config) {
     const newVersion = skill.currentVersion + 1;
     updates.config = data.config;
     updates.currentVersion = newVersion;
+    // Scalar columns
+    updates.promptTemplate = data.config.promptTemplate;
+    updates.systemPrompt = data.config.systemPrompt ?? null;
+    updates.capabilities = data.config.capabilities ?? [];
+    updates.defaultProvider = data.config.defaultProvider ?? null;
+    updates.defaultModel = data.config.defaultModel ?? null;
+    updates.temperature = data.config.temperature ?? null;
+    updates.maxTokens = data.config.maxTokens ?? null;
 
     await db.insert(schema.skillVersions).values({
       skillId: skill.id,
@@ -188,6 +208,10 @@ export async function updateSkill(skillId: string, data: UpdateSkillData, userId
       config: data.config,
       changelog: data.changelog ?? `Version ${newVersion}`,
     });
+
+    // Sync normalized inputs/outputs
+    await syncSkillInputs(skill.id, data.config.inputs ?? []);
+    await syncSkillOutputs(skill.id, data.config.outputs ?? []);
   }
 
   const [updated] = await db
@@ -222,4 +246,45 @@ export async function deleteSkill(skillId: string, userId: string) {
   }
 
   await db.delete(schema.skills).where(eq(schema.skills.id, skillId));
+}
+
+// --- Normalized table sync helpers ---
+
+async function syncSkillInputs(skillId: string, inputs: SkillConfig['inputs']) {
+  await db.delete(schema.skillInputs).where(eq(schema.skillInputs.skillId, skillId));
+
+  if (inputs.length === 0) return;
+
+  await db.insert(schema.skillInputs).values(
+    inputs.map((inp, i) => ({
+      skillId,
+      inputId: inp.id ?? inp.key,
+      key: inp.key,
+      type: inp.type,
+      label: inp.label,
+      description: inp.description ?? null,
+      isRequired: inp.required ?? false,
+      defaultValue: inp.defaultValue ?? null,
+      options: inp.options ?? [],
+      sortOrder: i,
+    })),
+  );
+}
+
+async function syncSkillOutputs(skillId: string, outputs: SkillConfig['outputs']) {
+  await db.delete(schema.skillOutputs).where(eq(schema.skillOutputs.skillId, skillId));
+
+  if (outputs.length === 0) return;
+
+  await db.insert(schema.skillOutputs).values(
+    outputs.map((out, i) => ({
+      skillId,
+      key: out.key,
+      type: out.type,
+      label: out.label,
+      description: out.description ?? null,
+      isVisible: out.visible ?? true,
+      sortOrder: i,
+    })),
+  );
 }

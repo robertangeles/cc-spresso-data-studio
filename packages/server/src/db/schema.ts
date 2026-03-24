@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, jsonb, integer, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, date, boolean, jsonb, integer, real, index, uniqueIndex } from 'drizzle-orm/pg-core';
 
 // ============================================================
 // USERS
@@ -130,7 +130,7 @@ export const aiProviders = pgTable('ai_providers', {
 
 // ============================================================
 // SKILLS
-// Normal form: 1NF — config JSONB contains relational data (will normalize in Batch 5)
+// Normal form: 2NF (config JSONB deprecated — use skill_inputs + skill_outputs + scalar columns)
 // ============================================================
 
 export const skills = pgTable('skills', {
@@ -144,12 +144,20 @@ export const skills = pgTable('skills', {
   userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
   icon: varchar('icon', { length: 50 }),
   tags: jsonb('tags').notNull().default('[]'),
+  // DEPRECATED: config JSONB — kept during migration
   config: jsonb('config').notNull(),
+  // NEW: scalar fields extracted from config
+  promptTemplate: text('prompt_template'),
+  systemPrompt: text('system_prompt'),
+  capabilities: jsonb('capabilities').default('[]'),
+  defaultProvider: varchar('default_provider', { length: 100 }),
+  defaultModel: varchar('default_model', { length: 100 }),
+  temperature: real('temperature'),
+  maxTokens: integer('max_tokens'),
   isPublished: boolean('is_published').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
-  // Index: list skills by user
   index('idx_skills_user_id').on(t.userId),
 ]);
 
@@ -171,6 +179,49 @@ export const skillVersions = pgTable('skill_versions', {
 }, (t) => [
   // Index: list versions for a skill
   index('idx_skill_versions_skill_id').on(t.skillId),
+]);
+
+// ============================================================
+// SKILL INPUTS (normalized from skills.config.inputs)
+// Normal form: 2NF
+// ============================================================
+
+export const skillInputs = pgTable('skill_inputs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  skillId: uuid('skill_id').notNull().references(() => skills.id, { onDelete: 'cascade' }),
+  inputId: varchar('input_id', { length: 100 }).notNull(),
+  key: varchar('key', { length: 100 }).notNull(),
+  type: varchar('type', { length: 30 }).notNull(),
+  label: varchar('label', { length: 255 }).notNull(),
+  description: text('description'),
+  isRequired: boolean('is_required').notNull().default(false),
+  defaultValue: varchar('default_value', { length: 500 }),
+  options: jsonb('options').default('[]'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_skill_inputs_skill_id').on(t.skillId),
+]);
+
+// ============================================================
+// SKILL OUTPUTS (normalized from skills.config.outputs)
+// Normal form: 2NF
+// ============================================================
+
+export const skillOutputs = pgTable('skill_outputs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  skillId: uuid('skill_id').notNull().references(() => skills.id, { onDelete: 'cascade' }),
+  key: varchar('key', { length: 100 }).notNull(),
+  type: varchar('type', { length: 30 }).notNull(),
+  label: varchar('label', { length: 255 }).notNull(),
+  description: text('description'),
+  isVisible: boolean('is_visible').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_skill_outputs_skill_id').on(t.skillId),
 ]);
 
 // ============================================================
@@ -278,7 +329,7 @@ export const contentItems = pgTable('content_items', {
 
 // ============================================================
 // EXECUTION LOGS (per-step telemetry)
-// Normal form: 2NF (skill_name varchar — will migrate to skill_id FK in Batch 6)
+// Normal form: 2NF (skill_id FK + provider_id FK added; varchar columns deprecated)
 // ============================================================
 
 export const executionLogs = pgTable('execution_logs', {
@@ -286,9 +337,15 @@ export const executionLogs = pgTable('execution_logs', {
   flowId: uuid('flow_id').notNull().references(() => flows.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   stepIndex: integer('step_index').notNull(),
+  // DEPRECATED: skill_name varchar — kept during migration
   skillName: varchar('skill_name', { length: 255 }),
+  // NEW: proper FK to skills table
+  skillId: uuid('skill_id').references(() => skills.id, { onDelete: 'set null' }),
   model: varchar('model', { length: 255 }).notNull(),
+  // DEPRECATED: provider varchar — kept during migration
   provider: varchar('provider', { length: 100 }),
+  // NEW: proper FK to ai_providers table
+  providerId: uuid('provider_id').references(() => aiProviders.id, { onDelete: 'set null' }),
   inputTokens: integer('input_tokens').notNull().default(0),
   outputTokens: integer('output_tokens').notNull().default(0),
   duration: integer('duration').notNull().default(0),
@@ -297,9 +354,11 @@ export const executionLogs = pgTable('execution_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
-  // Index: query logs by flow, by user, by date
+  // Index: query logs by flow, by user, by skill, by provider
   index('idx_execution_logs_flow_id').on(t.flowId),
   index('idx_execution_logs_user_id').on(t.userId),
+  index('idx_execution_logs_skill_id').on(t.skillId),
+  index('idx_execution_logs_provider_id').on(t.providerId),
 ]);
 
 // ============================================================
@@ -448,4 +507,52 @@ export const messages = pgTable('messages', {
 }, (t) => [
   // Index: list messages by conversation
   index('idx_messages_conversation_id').on(t.conversationId),
+]);
+
+// ============================================================
+// OLAP: DIMENSION — MODEL PRICING
+// Normal form: 2NF (dimension table for star schema)
+// ============================================================
+
+export const dimModels = pgTable('dim_models', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  modelId: varchar('model_id', { length: 150 }).notNull().unique(),
+  provider: varchar('provider', { length: 100 }).notNull(),
+  displayName: varchar('display_name', { length: 255 }).notNull(),
+  inputCostPerM: real('input_cost_per_m').notNull().default(0),
+  outputCostPerM: real('output_cost_per_m').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ============================================================
+// OLAP: FACT — USAGE AGGREGATES
+// Normal form: Star schema fact table
+// Grain: one row per (user, model, flow, date, source)
+// ============================================================
+
+export const factUsage = pgTable('fact_usage', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  modelId: uuid('model_id').notNull().references(() => dimModels.id, { onDelete: 'cascade' }),
+  flowId: uuid('flow_id').references(() => flows.id, { onDelete: 'set null' }),
+  usageDate: date('usage_date', { mode: 'string' }).notNull(),
+  source: varchar('source', { length: 20 }).notNull(),
+  totalInputTokens: integer('total_input_tokens').notNull().default(0),
+  totalOutputTokens: integer('total_output_tokens').notNull().default(0),
+  totalCost: real('total_cost').notNull().default(0),
+  requestCount: integer('request_count').notNull().default(0),
+  totalDurationMs: integer('total_duration_ms').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // Index: query by user for per-user dashboards
+  index('idx_fact_usage_user_id').on(t.userId),
+  // Index: query by model for model breakdown
+  index('idx_fact_usage_model_id').on(t.modelId),
+  // Index: query by date range for timeseries
+  index('idx_fact_usage_date').on(t.usageDate),
+  // Unique constraint: one row per grain combination
+  uniqueIndex('idx_fact_usage_grain').on(t.userId, t.modelId, t.flowId, t.usageDate, t.source),
 ]);

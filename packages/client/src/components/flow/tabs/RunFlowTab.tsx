@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Flow, FlowField, SSEStepStart, SSEStepComplete, SSEStepError, SSEEditorRound, SSEEditorApprovalNeeded, SSEDone } from '@cc/shared';
+import type { Flow, FlowField, SSEStepStart, SSEStepComplete, SSEStepError, SSEEditorRound, SSEEditorApprovalNeeded, SSEDone, AuditViolation } from '@cc/shared';
 import Markdown from 'react-markdown';
 import { Card } from '../../ui/Card';
 import { Button } from '../../ui/Button';
@@ -460,6 +460,7 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
           <LiveStepCard
             key={step.index}
             step={step}
+            flowId={flow.id}
             onApprove={(action, feedback) => handleApproval(step.index, action, feedback)}
             onOutputEdit={handleOutputEdit}
             onRefresh={handleStepRefresh}
@@ -559,6 +560,7 @@ function FieldInput({ field, value, onChange, disabled }: FieldInputProps) {
 
 interface LiveStepCardProps {
   step: LiveStep;
+  flowId: string;
   onApprove: (action: 'approve' | 'revise', feedback?: string) => void;
   onOutputEdit?: (stepIndex: number, key: string, value: string) => void;
   onRefresh?: (stepIndex: number) => void;
@@ -636,11 +638,67 @@ function useThinkingMessage(isRunning: boolean) {
   return THINKING_MESSAGES[messageIndex];
 }
 
-function LiveStepCard({ step, onApprove, onOutputEdit, onRefresh, isRefreshing }: LiveStepCardProps) {
+function LiveStepCard({ step, flowId, onApprove, onOutputEdit, onRefresh, isRefreshing }: LiveStepCardProps) {
   const [editFeedback, setEditFeedback] = useState('');
-  const [viewMode, setViewMode] = useState<'raw' | 'preview' | 'edit'>('preview');
+  const [viewMode, setViewMode] = useState<'raw' | 'preview' | 'edit' | 'audit'>('preview');
   const [editBuffer, setEditBuffer] = useState<Record<string, string>>({});
+  const [auditResult, setAuditResult] = useState<{ violations: AuditViolation[]; mechanical: number; subjective: number; total: number } | null>(null);
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [isReworking, setIsReworking] = useState(false);
+  const [reworkRounds, setReworkRounds] = useState<Array<{ round: number; fixedCount: number; remainingCount: number }>>([]);
   const thinkingMessage = useThinkingMessage(step.state === 'running');
+
+  const getOutputText = () => {
+    if (!step.output) return '';
+    return Object.entries(step.output)
+      .filter(([k]) => !k.startsWith('__type_'))
+      .map(([, v]) => v)
+      .join('\n\n');
+  };
+
+  const handleAudit = async (includeAi = true) => {
+    setIsAuditing(true);
+    setAuditResult(null);
+    try {
+      const { data } = await api.post(`/flows/${flowId}/audit`, { content: getOutputText(), includeAi });
+      setAuditResult(data.data);
+      setViewMode('audit');
+    } catch {
+      setAuditResult({ violations: [], mechanical: 0, subjective: 0, total: -1 });
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
+  const handleAutoFix = async () => {
+    setIsReworking(true);
+    setReworkRounds([]);
+    try {
+      const { data } = await api.post(`/flows/${flowId}/rework`, {
+        content: getOutputText(),
+        model: step.model,
+        maxRounds: 3,
+      });
+      const result = data.data;
+      setReworkRounds(result.rounds);
+
+      // Update the step output with the reworked content
+      if (result.finalContent && onOutputEdit) {
+        const outputKey = Object.keys(step.output ?? {}).find((k) => !k.startsWith('__type_'));
+        if (outputKey) {
+          onOutputEdit(step.index, outputKey, result.finalContent);
+        }
+      }
+
+      // Re-audit the final content
+      const auditRes = await api.post(`/flows/${flowId}/audit`, { content: result.finalContent, includeAi: false });
+      setAuditResult(auditRes.data.data);
+    } catch {
+      // keep current state
+    } finally {
+      setIsReworking(false);
+    }
+  };
 
   const stateStyles: Record<StepState, string> = {
     pending: 'border-gray-200 bg-gray-50',
@@ -731,20 +789,36 @@ function LiveStepCard({ step, onApprove, onOutputEdit, onRefresh, isRefreshing }
                 Raw
               </button>
               {step.state === 'done' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (viewMode === 'edit') {
-                      setViewMode('preview');
-                    } else {
-                      setEditBuffer({ ...editBuffer, [key]: value });
-                      setViewMode('edit');
-                    }
-                  }}
-                  className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'edit' ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:text-gray-600'}`}
-                >
-                  {viewMode === 'edit' ? 'Cancel' : 'Edit'}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (viewMode === 'edit') {
+                        setViewMode('preview');
+                      } else {
+                        setEditBuffer({ ...editBuffer, [key]: value });
+                        setViewMode('edit');
+                      }
+                    }}
+                    className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'edit' ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    {viewMode === 'edit' ? 'Cancel' : 'Edit'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (viewMode === 'audit') {
+                        setViewMode('preview');
+                      } else {
+                        handleAudit(true);
+                      }
+                    }}
+                    disabled={isAuditing}
+                    className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'audit' ? 'bg-red-100 text-red-700' : 'text-gray-400 hover:text-gray-600'} disabled:opacity-50`}
+                  >
+                    {isAuditing ? 'Auditing...' : auditResult ? `Audit (${auditResult.total})` : 'Audit'}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -795,6 +869,105 @@ function LiveStepCard({ step, onApprove, onOutputEdit, onRefresh, isRefreshing }
                   Cancel
                 </button>
               </div>
+            </div>
+          ) : viewMode === 'audit' && auditResult ? (
+            <div className="mt-1 max-h-[500px] overflow-auto rounded-lg border border-gray-200 bg-white p-4">
+              {auditResult.total === 0 ? (
+                <div className="flex items-center gap-2 text-sm text-green-700">
+                  <span className="text-lg">&#10003;</span> No violations found
+                </div>
+              ) : auditResult.total === -1 ? (
+                <div className="text-sm text-red-600">Audit failed. Try again.</div>
+              ) : (
+                <>
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-gray-900">
+                      {auditResult.total} violation{auditResult.total !== 1 ? 's' : ''} found
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAutoFix}
+                        disabled={isReworking}
+                        className="rounded-lg bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                      >
+                        {isReworking ? 'Fixing...' : 'Auto-Fix'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAudit(false)}
+                        disabled={isAuditing}
+                        className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        Re-audit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditBuffer({ ...editBuffer, [key]: value });
+                          setViewMode('edit');
+                        }}
+                        className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Manual Edit
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Rework progress */}
+                  {reworkRounds.length > 0 && (
+                    <div className="mb-3 rounded-lg bg-brand-50 p-2 text-xs text-brand-700">
+                      {reworkRounds.map((r) => (
+                        <div key={r.round}>
+                          Round {r.round}: {r.fixedCount} fixed, {r.remainingCount} remaining
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Mechanical violations */}
+                  {auditResult.mechanical > 0 && (
+                    <div className="mb-3">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        Mechanical ({auditResult.mechanical})
+                      </p>
+                      <div className="space-y-1">
+                        {auditResult.violations
+                          .filter((v) => v.type === 'mechanical')
+                          .map((v, i) => (
+                            <div key={`m-${i}`} className="rounded border-l-2 border-red-400 bg-red-50 px-3 py-1.5 text-xs">
+                              <span className="font-medium text-red-700">{v.rule}</span>
+                              {v.line > 0 && <span className="ml-1 text-red-400">line {v.line}</span>}
+                              <p className="mt-0.5 text-gray-600">{v.explanation}</p>
+                              <p className="mt-0.5 truncate text-gray-400 italic">{v.sentence.slice(0, 120)}</p>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Subjective violations */}
+                  {auditResult.subjective > 0 && (
+                    <div>
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        Subjective ({auditResult.subjective}) — AI scan
+                      </p>
+                      <div className="space-y-1">
+                        {auditResult.violations
+                          .filter((v) => v.type === 'subjective')
+                          .map((v, i) => (
+                            <div key={`s-${i}`} className="rounded border-l-2 border-amber-400 bg-amber-50 px-3 py-1.5 text-xs">
+                              <span className="font-medium text-amber-700">{v.rule}</span>
+                              {v.line > 0 && <span className="ml-1 text-amber-400">line {v.line}</span>}
+                              <p className="mt-0.5 text-gray-600">{v.explanation}</p>
+                              <p className="mt-0.5 truncate text-gray-400 italic">{v.sentence.slice(0, 120)}</p>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ) : viewMode === 'raw' ? (
             <pre className="mt-1 max-h-96 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700 whitespace-pre-wrap">
