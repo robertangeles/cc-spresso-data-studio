@@ -3,8 +3,7 @@
  * Run with: npx tsx packages/server/src/db/migrations/update-dgf-prompt.ts
  */
 
-import { eq } from 'drizzle-orm';
-import { db, pool, schema } from '../index.js';
+import { db, pool } from '../index.js';
 
 async function findSkill() {
   const skills = await db.query.skills.findMany();

@@ -67,7 +67,7 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const { data } = await axios.post('/api/auth/refresh', {}, { withCredentials: true });
+        const { data } = await axios.post(`${apiBaseUrl}/auth/refresh`, {}, { withCredentials: true });
         const newToken = data.data.accessToken;
         setAccessToken(newToken);
         processQueue(null, newToken);
@@ -77,7 +77,7 @@ api.interceptors.response.use(
         processQueue(refreshError, null);
         setAccessToken(null);
         // Clear stale refresh cookie so it doesn't keep failing
-        axios.post('/api/auth/logout', {}, { withCredentials: true }).catch(() => {});
+        axios.post(`${apiBaseUrl}/auth/logout`, {}, { withCredentials: true }).catch(() => {});
         if (window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
