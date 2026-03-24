@@ -44,7 +44,7 @@ export const refreshTokens = pgTable('refresh_tokens', {
 
 // ============================================================
 // FLOWS (orchestrations)
-// Normal form: 1NF — config JSONB contains relational data (will normalize in Batch 4)
+// Normal form: 2NF (config JSONB deprecated — use flow_fields + flow_steps)
 // ============================================================
 
 export const flows = pgTable('flows', {
@@ -55,12 +55,62 @@ export const flows = pgTable('flows', {
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   status: varchar('status', { length: 50 }).notNull().default('draft'),
+  // DEPRECATED: config JSONB — kept during migration, read from flow_fields + flow_steps
   config: jsonb('config').notNull().default('{"fields":[],"steps":[]}'),
+  style: varchar('style', { length: 50 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
-  // Index: list flows by user
   index('idx_flows_user_id').on(t.userId),
+]);
+
+// ============================================================
+// FLOW FIELDS (normalized from flows.config.fields)
+// Normal form: 2NF
+// ============================================================
+
+export const flowFields = pgTable('flow_fields', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  flowId: uuid('flow_id').notNull().references(() => flows.id, { onDelete: 'cascade' }),
+  fieldId: varchar('field_id', { length: 100 }).notNull(),
+  type: varchar('type', { length: 30 }).notNull(),
+  label: varchar('label', { length: 255 }).notNull(),
+  placeholder: varchar('placeholder', { length: 255 }),
+  isRequired: boolean('is_required').notNull().default(false),
+  options: jsonb('options').default('[]'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // Index: list fields for a flow
+  index('idx_flow_fields_flow_id').on(t.flowId),
+]);
+
+// ============================================================
+// FLOW STEPS (normalized from flows.config.steps)
+// Normal form: 2NF (inputMappings/overrides/editorConfig JSONB acceptable — opaque config)
+// ============================================================
+
+export const flowSteps = pgTable('flow_steps', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  flowId: uuid('flow_id').notNull().references(() => flows.id, { onDelete: 'cascade' }),
+  stepId: varchar('step_id', { length: 100 }).notNull(),
+  skillId: uuid('skill_id').references(() => skills.id, { onDelete: 'set null' }),
+  skillVersion: integer('skill_version'),
+  model: varchar('model', { length: 100 }).notNull().default(''),
+  provider: varchar('provider', { length: 100 }).notNull().default(''),
+  prompt: text('prompt').notNull().default(''),
+  capabilities: jsonb('capabilities').notNull().default('[]'),
+  inputMappings: jsonb('input_mappings').notNull().default('{}'),
+  overrides: jsonb('overrides').default('{}'),
+  editorConfig: jsonb('editor_config'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // Index: list steps for a flow, lookup by skill
+  index('idx_flow_steps_flow_id').on(t.flowId),
+  index('idx_flow_steps_skill_id').on(t.skillId),
 ]);
 
 // ============================================================
