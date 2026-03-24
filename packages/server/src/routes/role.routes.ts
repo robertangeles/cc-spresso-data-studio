@@ -8,7 +8,7 @@ const router = Router();
 
 // All role management routes require admin
 router.use(authenticate);
-router.use(requireRole('administrator'));
+router.use(requireRole('Administrator'));
 
 router.get('/', roleController.listRoles);
 router.get('/:id', roleController.getRole);

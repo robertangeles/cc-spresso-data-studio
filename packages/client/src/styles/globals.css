@@ -4,41 +4,45 @@
 
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-white text-gray-900 antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    letter-spacing: -0.01em;
   }
 
-  /* Better focus rings */
+  /* Crisp focus rings — espresso accent */
   *:focus-visible {
     @apply outline-none ring-2 ring-brand-500 ring-offset-2;
   }
 
-  /* Smooth scrolling */
   html {
     scroll-behavior: smooth;
   }
 }
 
 @layer utilities {
-  /* Animation utilities */
+  /* Fast snap animations — espresso speed */
   .animate-in {
-    animation: animate-in 200ms ease-out;
+    animation: snap-in 150ms ease-out;
   }
 
   .fade-in {
-    animation: fade-in 200ms ease-out;
+    animation: fade-in 150ms ease-out;
   }
 
   .slide-in-from-right {
-    animation: slide-in-from-right 300ms ease-out;
+    animation: slide-in-right 200ms ease-out;
   }
 
   .zoom-in-95 {
-    animation: zoom-in 200ms ease-out;
+    animation: zoom-in 150ms ease-out;
+  }
+
+  .snap-up {
+    animation: snap-up 150ms ease-out;
   }
 }
 
-@keyframes animate-in {
+@keyframes snap-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
@@ -48,12 +52,17 @@
   to { opacity: 1; }
 }
 
-@keyframes slide-in-from-right {
-  from { opacity: 0; transform: translateX(16px); }
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(8px); }
   to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes zoom-in {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes snap-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }

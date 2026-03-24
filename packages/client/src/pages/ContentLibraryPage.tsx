@@ -103,8 +103,8 @@ export function ContentLibraryPage() {
       ) : (
         <EmptyState
           icon={FileText}
-          title="Content will appear here"
-          description="Run an orchestration to generate content, or create content manually."
+          title="Nothing here yet."
+          description="Run an orchestration and watch it fill. One idea, twelve assets."
         />
       )}
 

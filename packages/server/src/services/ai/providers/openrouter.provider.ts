@@ -38,8 +38,8 @@ export class OpenRouterProvider implements IAIProvider {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
-        'HTTP-Referer': 'https://contentpilot.app',
-        'X-Title': 'Content Pilot',
+        'HTTP-Referer': 'https://spresso.app',
+        'X-Title': 'Spresso',
       },
       body: JSON.stringify({
         model: request.model,

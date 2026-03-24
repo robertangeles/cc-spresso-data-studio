@@ -1,4 +1,4 @@
-import { Rocket, PenTool, Search, Lightbulb, BarChart } from 'lucide-react';
+import { Coffee, PenTool, Search, Lightbulb, BarChart } from 'lucide-react';
 
 interface ChatEmptyStateProps {
   onSuggestionClick: (text: string) => void;
@@ -14,13 +14,11 @@ const suggestions = [
 export function ChatEmptyState({ onSuggestionClick }: ChatEmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full px-4">
-      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-600 shadow-lg shadow-brand-200">
-        <Rocket className="h-8 w-8 text-white" />
+      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-yellow shadow-lg">
+        <Coffee className="h-8 w-8 text-brand-700" />
       </div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-2">Content Pilot</h2>
-      <p className="text-sm text-gray-500 mb-8 max-w-md text-center">
-        Your AI-powered content operating system. Ask anything, create content, research topics, or brainstorm ideas.
-      </p>
+      <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">Drop an idea.</h2>
+      <p className="text-sm text-gray-500 mb-8">Walk away with content.</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl w-full">
         {suggestions.map((s) => (

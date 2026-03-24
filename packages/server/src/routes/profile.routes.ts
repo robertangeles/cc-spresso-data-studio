@@ -11,6 +11,7 @@ router.use(authenticate);
 router.get('/', profileController.getProfile);
 router.put('/', validate(updateProfileSchema), profileController.updateProfile);
 router.put('/password', profileController.changePassword);
+router.post('/avatar', profileController.uploadAvatar);
 
 // Rules
 router.get('/rules', profileController.listRules);

@@ -5,6 +5,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
+import { AvatarUpload } from '../../components/ui/AvatarUpload';
+import { api } from '../../lib/api';
 import type { CreateRuleDTO } from '@cc/shared';
 
 type Tab = 'info' | 'rules' | 'brand' | 'preferences' | 'social';
@@ -38,7 +40,7 @@ const SOCIAL_PLATFORMS = [
 
 export function ProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>('info');
-  const { profile, isLoading: profileLoading, updateProfile, changePassword } = useProfile();
+  const { profile, isLoading: profileLoading, refresh, updateProfile, changePassword } = useProfile();
 
   if (profileLoading) {
     return (
@@ -69,7 +71,7 @@ export function ProfilePage() {
         ))}
       </div>
 
-      {activeTab === 'info' && <ProfileInfoTab profile={profile} updateProfile={updateProfile} changePassword={changePassword} />}
+      {activeTab === 'info' && <ProfileInfoTab profile={profile} updateProfile={updateProfile} changePassword={changePassword} refreshProfile={refresh} />}
       {activeTab === 'rules' && <RulesEngineTab />}
       {activeTab === 'brand' && <BrandKitTab profile={profile} updateProfile={updateProfile} />}
       {activeTab === 'preferences' && <PreferencesTab profile={profile} updateProfile={updateProfile} />}
@@ -80,10 +82,11 @@ export function ProfilePage() {
 
 // --- Profile Info Tab ---
 
-function ProfileInfoTab({ profile, updateProfile, changePassword }: {
+function ProfileInfoTab({ profile, updateProfile, changePassword, refreshProfile }: {
   profile: ReturnType<typeof useProfile>['profile'];
   updateProfile: ReturnType<typeof useProfile>['updateProfile'];
   changePassword: ReturnType<typeof useProfile>['changePassword'];
+  refreshProfile: () => Promise<void>;
 }) {
   const [displayName, setDisplayName] = useState(profile?.displayName ?? '');
   const [bio, setBio] = useState(profile?.bio ?? '');
@@ -119,6 +122,19 @@ function ProfileInfoTab({ profile, updateProfile, changePassword }: {
       <Card padding="lg">
         <h4 className="mb-4 font-medium text-gray-900">Personal Information</h4>
         <div className="space-y-4">
+          <AvatarUpload
+            currentUrl={profile?.avatarUrl}
+            initials={displayName ? displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) : '??'}
+            onUpload={async (blob) => {
+              const reader = new FileReader();
+              const base64 = await new Promise<string>((resolve) => {
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+              });
+              await api.post('/profile/avatar', { image: base64 });
+              await refreshProfile();
+            }}
+          />
           <Input label="Display Name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Bio</label>

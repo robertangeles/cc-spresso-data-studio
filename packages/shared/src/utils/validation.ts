@@ -101,13 +101,13 @@ export type ExecuteFlowInput = z.infer<typeof executeFlowSchema>;
 // --- Role validation ---
 
 export const createRoleSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(50).regex(/^[a-z_]+$/, 'Name must be lowercase with underscores only'),
+  name: z.string().min(1, 'Name is required').max(50).regex(/^[a-zA-Z ]+$/, 'Name must contain only letters and spaces'),
   description: z.string().max(500).optional(),
   permissions: z.array(z.string().max(100)).max(50).optional(),
 });
 
 export const updateRoleSchema = z.object({
-  name: z.string().min(1).max(50).regex(/^[a-z_]+$/, 'Name must be lowercase with underscores only').optional(),
+  name: z.string().min(1).max(50).regex(/^[a-zA-Z ]+$/, 'Name must contain only letters and spaces').optional(),
   description: z.string().max(500).optional(),
   permissions: z.array(z.string().max(100)).max(50).optional(),
 });
