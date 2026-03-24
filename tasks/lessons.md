@@ -73,3 +73,15 @@ curl -X POST http://localhost:3003/api/chat/conversations -H "Authorization: Bea
 4. Test error paths: missing params, invalid IDs
 5. Only THEN wire the frontend
 6. This is non-negotiable — no exceptions
+
+## 8. Clean up test data after testing
+
+**Problem:** 12+ test user accounts accumulated in the production database from debugging sessions. Junk data pollutes the DB and confuses the user when viewing admin pages.
+
+**Fix:** Deleted all test accounts: `DELETE FROM users WHERE email != 'trebor.selegna@outlook.com'`
+
+**Rule:** After any testing that creates test accounts, records, or data:
+1. Delete test users: `DELETE FROM users WHERE email LIKE '%test.com'`
+2. Delete orphaned data from related tables
+3. Never leave test data in the DB after a session
+4. Use a consistent test email pattern (e.g., `test*@test.com`) so cleanup is easy
