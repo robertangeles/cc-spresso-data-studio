@@ -20,6 +20,10 @@ router.post('/:id/execute/approve', executionController.approveEditorStep);
 // Single step re-run
 router.post('/:id/execute/step', executionController.rerunStep);
 
+// Content audit + rework
+router.post('/:id/audit', executionController.auditStepOutput);
+router.post('/:id/rework', executionController.reworkStepOutput);
+
 // History
 router.get('/:id/executions', executionController.listExecutionRuns);
 router.get('/:id/executions/:runId', executionController.getExecutionRun);

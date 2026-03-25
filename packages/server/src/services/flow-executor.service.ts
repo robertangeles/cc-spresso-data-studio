@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm';
-import type { FlowConfig, FlowStep, SkillConfig, AICompletionRequest, EditorConfig } from '@cc/shared';
+import type { FlowStep, SkillConfig, AICompletionRequest, EditorConfig } from '@cc/shared';
 import type { StepResult, FlowExecutionResponse, SSEEvent } from '@cc/shared';
 import { db, schema } from '../db/index.js';
 import { providerRegistry } from './ai/index.js';
@@ -8,6 +8,7 @@ import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
 import { getActiveRules } from './profile.service.js';
 import { getSetting } from './admin.service.js';
+import { getModelPricing, calculateCost } from './usage.service.js';
 
 const DEFAULT_AI_TIMEOUT_MS = 180_000;
 const MAX_EDITOR_ROUNDS = 10;
@@ -38,8 +39,7 @@ export async function executeFlow(
   if (!flow) throw new NotFoundError('Flow not found');
   if (flow.userId !== userId) throw new ForbiddenError('Access denied');
 
-  const config = flow.config as FlowConfig;
-  const steps = [...config.steps].sort((a, b) => a.order - b.order);
+  const steps = await loadFlowSteps(flowId);
 
   if (steps.length === 0) {
     throw new AppError(400, 'Flow has no steps to execute');
@@ -97,8 +97,7 @@ async function executeStep(
 
     if (step.skillId) {
       // Skill-based step
-      const skill = await loadSkill(step.skillId, step.skillVersion);
-      const skillConfig = skill.config as SkillConfig;
+      const skillConfig = await loadSkillConfig(step.skillId, step.skillVersion);
 
       // Resolve input mappings
       const resolvedInputs: Record<string, string> = {};
@@ -156,13 +155,12 @@ async function executeStep(
     const response = await providerRegistry.complete(request);
     const durationMs = Date.now() - start;
 
-    // Map response to skill outputs
+    // Map response to skill outputs — strip thinking blocks from reasoning models
     const outputs: Record<string, string> = {};
-    const outputContent = response.imageUrl ?? response.content;
+    const outputContent = response.imageUrl ?? stripThinkingBlocks(response.content);
 
     if (step.skillId) {
-      const skill = await loadSkill(step.skillId, step.skillVersion);
-      const skillConfig = skill.config as SkillConfig;
+      const skillConfig = await loadSkillConfig(step.skillId, step.skillVersion);
       if (skillConfig.outputs.length === 1) {
         outputs[skillConfig.outputs[0].key] = outputContent;
         // Store content type hint for the UI
@@ -226,6 +224,82 @@ async function loadSkill(skillId: string, version?: number) {
 
   if (!skill) throw new NotFoundError(`Skill ${skillId} not found`);
   return skill;
+}
+
+// --- Load from normalized tables ---
+
+async function loadFlowSteps(flowId: string): Promise<FlowStep[]> {
+  const rows = await db.query.flowSteps.findMany({
+    where: eq(schema.flowSteps.flowId, flowId),
+  });
+  return rows
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((r) => ({
+      id: r.stepId,
+      skillId: r.skillId ?? undefined,
+      skillVersion: r.skillVersion ?? undefined,
+      inputMappings: (r.inputMappings as Record<string, string>) ?? {},
+      overrides: (r.overrides as FlowStep['overrides']) ?? undefined,
+      editor: (r.editorConfig as EditorConfig) ?? undefined,
+      provider: r.provider,
+      model: r.model,
+      prompt: r.prompt,
+      capabilities: (r.capabilities as FlowStep['capabilities']) ?? [],
+      order: r.sortOrder,
+    }));
+}
+
+async function loadSkillConfig(skillId: string, version?: number): Promise<SkillConfig> {
+  // Versioned skills still use JSONB (not normalized)
+  if (version) {
+    const sv = await db.query.skillVersions.findFirst({
+      where: and(
+        eq(schema.skillVersions.skillId, skillId),
+        eq(schema.skillVersions.version, version),
+      ),
+    });
+    if (sv) return sv.config as SkillConfig;
+  }
+
+  // Current skill — read from normalized tables + scalar columns
+  const skill = await db.query.skills.findFirst({
+    where: eq(schema.skills.id, skillId),
+  });
+  if (!skill) throw new NotFoundError(`Skill ${skillId} not found`);
+
+  const inputRows = await db.query.skillInputs.findMany({
+    where: eq(schema.skillInputs.skillId, skillId),
+  });
+  const outputRows = await db.query.skillOutputs.findMany({
+    where: eq(schema.skillOutputs.skillId, skillId),
+  });
+
+  return {
+    inputs: inputRows.sort((a, b) => a.sortOrder - b.sortOrder).map((i) => ({
+      id: i.inputId,
+      key: i.key,
+      type: i.type as SkillConfig['inputs'][number]['type'],
+      label: i.label,
+      description: i.description ?? undefined,
+      required: i.isRequired,
+      defaultValue: i.defaultValue ?? undefined,
+      options: (i.options as string[]) ?? [],
+    })),
+    outputs: outputRows.sort((a, b) => a.sortOrder - b.sortOrder).map((o) => ({
+      key: o.key,
+      type: o.type as SkillConfig['outputs'][number]['type'],
+      label: o.label,
+      description: o.description ?? undefined,
+      visible: o.isVisible,
+    })),
+    promptTemplate: skill.promptTemplate ?? '',
+    systemPrompt: skill.systemPrompt ?? undefined,
+    temperature: skill.temperature ?? undefined,
+    maxTokens: skill.maxTokens ?? undefined,
+    capabilities: (skill.capabilities as SkillConfig['capabilities']) ?? [],
+    defaultProvider: skill.defaultProvider ?? undefined,
+    defaultModel: skill.defaultModel ?? undefined,
+  };
 }
 
 // --- Streaming executor ---
@@ -307,8 +381,7 @@ export async function executeFlowStreaming(
   if (!flow) throw new NotFoundError('Orchestration not found');
   if (flow.userId !== userId) throw new ForbiddenError('Access denied');
 
-  const config = flow.config as FlowConfig;
-  const steps = [...config.steps].sort((a, b) => a.order - b.order);
+  const steps = await loadFlowSteps(flowId);
 
   if (steps.length === 0) {
     throw new AppError(400, 'Orchestration has no steps to execute');
@@ -339,7 +412,7 @@ export async function executeFlowStreaming(
     const stepResult = await executeStepWithTimeout(step, executionContext, globalRules);
 
     // Log execution
-    await logExecution(flowId, userId, i, skillName, stepResult);
+    await logExecution(flowId, userId, i, skillName, stepResult, 0, step.skillId);
 
     if (stepResult.status === 'success') {
       // Run editor loop if enabled
@@ -358,13 +431,16 @@ export async function executeFlowStreaming(
           await logExecution(flowId, userId, i, `${skillName} (editor)`, {
             ...stepResult,
             outputs: finalOutput,
-          }, editorRounds);
+          }, editorRounds, step.skillId);
         }
       }
 
       for (const [key, value] of Object.entries(finalOutput)) {
         executionContext[`step_${step.id}.${key}`] = value;
       }
+
+      const pricing = await getModelPricing();
+      const stepCost = calculateCost(stepResult.model, stepResult.usage.inputTokens, stepResult.usage.outputTokens, pricing);
 
       emit({
         type: 'step_complete',
@@ -374,6 +450,7 @@ export async function executeFlowStreaming(
           duration: stepResult.durationMs,
           tokens: { input: stepResult.usage.inputTokens, output: stepResult.usage.outputTokens },
           model: stepResult.model,
+          estimatedCost: stepCost,
         },
       });
       collectedResults.push({ stepIndex: i, skillName, model: stepResult.model, output: finalOutput, duration: stepResult.durationMs, tokens: { input: stepResult.usage.inputTokens, output: stepResult.usage.outputTokens }, status: 'success' });
@@ -402,9 +479,22 @@ export async function executeFlowStreaming(
     logger.error({ err }, 'Failed to save execution run — non-blocking');
   }
 
+  // Calculate total cost across all steps
+  let totalCost: number | null = null;
+  try {
+    const pricing = await getModelPricing();
+    totalCost = 0;
+    for (const r of collectedResults) {
+      if (r.status === 'success') {
+        const c = calculateCost(r.model, r.tokens.input, r.tokens.output, pricing);
+        if (c !== null) totalCost += c;
+      }
+    }
+  } catch { /* non-blocking */ }
+
   emit({
     type: 'done',
-    data: { totalDuration, status: finalStatus },
+    data: { totalDuration, status: finalStatus, totalEstimatedCost: totalCost },
   });
 }
 
@@ -429,8 +519,7 @@ export async function rerunSingleStep(
     ? activeRules.map((r) => r.rules).join('\n\n')
     : undefined;
 
-  const config = flow.config as FlowConfig;
-  const steps = [...config.steps].sort((a, b) => a.order - b.order);
+  const steps = await loadFlowSteps(flowId);
 
   if (stepIndex < 0 || stepIndex >= steps.length) {
     throw new AppError(400, `Invalid step index: ${stepIndex}`);
@@ -441,7 +530,7 @@ export async function rerunSingleStep(
 
   // Log the re-run
   const skillName = await getSkillName(step);
-  await logExecution(flowId, userId, stepIndex, `${skillName} (rerun)`, result);
+  await logExecution(flowId, userId, stepIndex, `${skillName} (rerun)`, result, 0, step.skillId);
 
   return result;
 }
@@ -510,16 +599,74 @@ async function executeStepWithTimeout(
   return result;
 }
 
+// --- Strip thinking/reasoning blocks from AI output ---
+
+/**
+ * Strips chain-of-thought reasoning that reasoning models dump into output.
+ * Handles: Qwen (<think>, plain text), DeepSeek R1 (<think>), Kimi K2 (<think>),
+ *          GLM-5 (<reasoning>), and generic self-dialogue patterns.
+ */
+export function stripThinkingBlocks(content: string): string {
+  let cleaned = content;
+
+  // 1. XML-style thinking tags (DeepSeek R1, Kimi K2, Qwen)
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  cleaned = cleaned.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '').trim();
+  cleaned = cleaned.replace(/<internal_monologue>[\s\S]*?<\/internal_monologue>/gi, '').trim();
+
+  // 2. "Thinking Process:" plain text block (Qwen 3.x)
+  //    Match from "Thinking Process:" until the actual content starts
+  //    Content starts at: a markdown heading, "Block 1", a title in proper case, or JSON
+  cleaned = cleaned.replace(
+    /^(?:Thinking Process|Chain of Thought|Internal Reasoning|Reasoning|Analysis):?\s*\n[\s\S]*?(?=^(?:#{1,3}\s|Block \d|[A-Z][a-z]+ [A-Z][a-z]+\n|\{))/im,
+    '',
+  ).trim();
+
+  // 3. "Wait, check..." self-dialogue loops (Qwen reasoning artifacts)
+  //    These appear as blocks of short lines starting with "Wait,", "OK.", "Review against", "Check"
+  cleaned = cleaned.replace(
+    /(?:^(?:Wait,|OK\.|Review against|Check |Fix:|I need to|I will|Let me|Scan |Revision|My |Total:)[^\n]*\n?){3,}/gim,
+    '',
+  ).trim();
+
+  // 4. Numbered self-check lines: "Sentence 1: ... (OK)" or "Sentence 1: ... (Active, no banned words)."
+  cleaned = cleaned.replace(
+    /(?:^Sentence \d+:.*\n?){3,}/gim,
+    '',
+  ).trim();
+
+  // 5. Word-by-word banned word scanning: lines like '"Rain"(1) taps(2)...' or 'Wait, check "that" in "..."'
+  cleaned = cleaned.replace(
+    /(?:^(?:Wait, check|"[A-Za-z]+"(?:\(\d+\))?)[^\n]*\n?){3,}/gim,
+    '',
+  ).trim();
+
+  // 6. If content still starts with a huge reasoning block before the real output,
+  //    look for common essay/content markers and trim everything before
+  if (cleaned.length > 3000) {
+    const contentMarkers = [
+      /^Block 1\s*[—–-]\s*Essay/im,
+      /^#{1,2}\s+[A-Z]/m,
+      /^[A-Z][a-z]+(?:\s[A-Za-z]+){1,5}\n\n/m, // Title line followed by blank line
+    ];
+    for (const marker of contentMarkers) {
+      const match = cleaned.match(marker);
+      if (match && match.index && match.index > 500) {
+        cleaned = cleaned.slice(match.index).trim();
+        break;
+      }
+    }
+  }
+
+  return cleaned;
+}
+
 // --- Editor critique loop ---
 
 function parseEditorVerdict(raw: string): { verdict: string; feedback: string } {
-  // Strip thinking/reasoning blocks from models with extended thinking
-  let cleaned = raw;
-  // Remove <think>...</think> blocks
-  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  // Remove "Thinking Process:" blocks — match from start until the first JSON or until end
-  cleaned = cleaned.replace(/^Thinking Process:[\s\S]*?(?=\{)/i, '').trim();
-  // If still huge (>5000 chars) and contains a JSON object, extract just the JSON
+  // Strip thinking/reasoning blocks
+  let cleaned = stripThinkingBlocks(raw);
+  // For editor verdicts: if still huge, extract just the JSON
   if (cleaned.length > 5000) {
     const jsonExtract = cleaned.match(/\{[\s\S]*?"verdict"[\s\S]*?"feedback"[\s\S]*?\}/);
     if (jsonExtract) cleaned = jsonExtract[0];
@@ -729,6 +876,7 @@ async function logExecution(
   skillName: string,
   result: StepResult,
   editorRounds = 0,
+  skillId?: string | null,
 ): Promise<void> {
   try {
     await db.insert(schema.executionLogs).values({
@@ -736,8 +884,10 @@ async function logExecution(
       userId,
       stepIndex,
       skillName,
+      skillId: skillId ?? null,
       model: result.model,
       provider: null,
+      providerId: null,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
       duration: result.durationMs,

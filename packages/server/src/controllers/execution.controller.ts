@@ -3,6 +3,7 @@ import type { ApiResponse, FlowExecutionResponse } from '@cc/shared';
 import { eq, and, desc } from 'drizzle-orm';
 import { UnauthorizedError, AppError } from '../utils/errors.js';
 import * as flowExecutor from '../services/flow-executor.service.js';
+import * as contentAuditor from '../services/content-auditor.service.js';
 import { signAccessToken } from '../utils/jwt.js';
 import { logger } from '../config/logger.js';
 import { db, schema } from '../db/index.js';
@@ -323,6 +324,55 @@ export async function rerunStep(
     const result = await flowExecutor.rerunSingleStep(id, req.user.userId, stepIndex, executionContext);
 
     res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Content Audit ---
+
+export async function auditStepOutput(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const { content, includeAi } = req.body;
+    if (!content || typeof content !== 'string') {
+      throw new AppError(400, 'content (string) is required');
+    }
+
+    let result;
+    if (includeAi) {
+      result = await contentAuditor.fullAudit(content, req.user.userId);
+    } else {
+      result = await contentAuditor.auditContent(content, req.user.userId);
+    }
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function reworkStepOutput(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const { content, model, maxRounds } = req.body;
+    if (!content || typeof content !== 'string') {
+      throw new AppError(400, 'content (string) is required');
+    }
+
+    const reworkModel = model || 'claude-sonnet-4-6';
+    const rounds = Math.min(maxRounds || 3, 5);
+
+    const result = await contentAuditor.reworkLoop(content, req.user.userId, reworkModel, rounds);
+
+    res.json({
+      success: true,
+      data: {
+        finalContent: result.finalContent,
+        rounds: result.rounds,
+        remainingViolations: result.remainingViolations,
+      },
+    });
   } catch (err) {
     next(err);
   }

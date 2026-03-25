@@ -16,6 +16,7 @@ import { RoleManagementPage } from './pages/settings/RoleManagementPage';
 import { ProfilePage } from './pages/settings/ProfilePage';
 import { MediaSettingsPage } from './pages/settings/MediaSettingsPage';
 import { SiteSettingsPage } from './pages/settings/SiteSettingsPage';
+import UsageDashboardPage from './pages/settings/UsageDashboardPage';
 import { ContentLibraryPage } from './pages/ContentLibraryPage';
 import { ChatPage } from './pages/ChatPage';
 
@@ -47,6 +48,7 @@ export function App() {
                 <Route path="integrations/media" element={<MediaSettingsPage />} />
                 <Route path="admin/roles" element={<RoleManagementPage />} />
                 <Route path="admin/site" element={<SiteSettingsPage />} />
+                <Route path="admin/usage" element={<UsageDashboardPage />} />
               </Route>
             </Route>
           </Route>

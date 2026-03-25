@@ -9,6 +9,7 @@ import { contentRoutes } from './content.routes.js';
 import roleRoutes from './role.routes.js';
 import profileRoutes from './profile.routes.js';
 import { chatRoutes } from './chat.routes.js';
+import usageRoutes from './usage.routes.js';
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use('/content', contentRoutes);
 router.use('/roles', roleRoutes);
 router.use('/profile', profileRoutes);
 router.use('/chat', chatRoutes);
+router.use('/admin/usage', usageRoutes);
 
 export { router };

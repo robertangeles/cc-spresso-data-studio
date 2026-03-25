@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -8,10 +10,14 @@ import { logger } from './config/logger.js';
 import { router } from './routes/index.js';
 import { errorHandler } from './middleware/error.middleware.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const app = express();
 
-// Security
-app.use(helmet());
+// Security — relax CSP in production to allow inline styles from Vite build
+app.use(helmet({
+  contentSecurityPolicy: config.isDev ? undefined : false,
+}));
 app.use(
   cors({
     origin: config.clientUrl,
@@ -27,8 +33,19 @@ app.use(express.urlencoded({ extended: true }));
 // Logging
 app.use(pinoHttp({ logger }));
 
-// Routes
+// API Routes
 app.use('/api', router);
+
+// Production: serve Vite-built client static files
+if (!config.isDev) {
+  const clientDist = path.resolve(__dirname, '../../../client/dist');
+  app.use(express.static(clientDist));
+
+  // SPA fallback — all non-API routes serve index.html
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 // Error handling
 app.use(errorHandler);

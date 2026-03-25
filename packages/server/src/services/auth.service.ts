@@ -17,9 +17,20 @@ export async function createUser(email: string, password: string, name: string) 
 
   const passwordHash = await hashPassword(password);
 
+  // Look up the default 'Subscriber' role for new users
+  const defaultRole = await db.query.roles.findFirst({
+    where: eq(schema.roles.name, 'Subscriber'),
+  });
+
   const [user] = await db
     .insert(schema.users)
-    .values({ email, passwordHash, name })
+    .values({
+      email,
+      passwordHash,
+      name,
+      role: 'Subscriber',
+      roleId: defaultRole?.id ?? null,
+    })
     .returning({
       id: schema.users.id,
       email: schema.users.email,

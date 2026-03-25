@@ -3,6 +3,7 @@ import { db, schema } from '../db/index.js';
 import { providerRegistry } from './ai/index.js';
 import { getActiveRules } from './profile.service.js';
 import { NotFoundError } from '../utils/errors.js';
+import { stripThinkingBlocks } from './flow-executor.service.js';
 import { logger } from '../config/logger.js';
 import type { AICompletionRequest } from '@cc/shared';
 
@@ -114,9 +115,9 @@ export async function sendMessage(
     messages: aiMessages,
   });
 
-  // Detect image response
+  // Detect image response — strip thinking blocks from reasoning models
   const contentType = response.contentType ?? 'text';
-  const responseContent = response.imageUrl ?? response.content;
+  const responseContent = response.imageUrl ?? stripThinkingBlocks(response.content);
 
   // Save assistant message
   const [assistantMsg] = await db.insert(schema.messages).values({
