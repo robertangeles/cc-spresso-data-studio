@@ -47,8 +47,8 @@ export function ContentLibraryPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Content Library</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-2xl font-bold text-text-primary">Content Library</h2>
+        <p className="mt-1 text-sm text-text-secondary">
           All your AI-generated content in one place. Edit, refine, and distribute.
         </p>
       </div>
@@ -59,12 +59,12 @@ export function ContentLibraryPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search content..."
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+          className="rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 focus:ring-offset-surface-0"
         />
         <select
           value={channelFilter}
           onChange={(e) => setChannelFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          className="rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
         >
           <option value="">All Channels</option>
           {channels.map((ch) => (
@@ -74,7 +74,7 @@ export function ContentLibraryPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          className="rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
         >
           <option value="">All Status</option>
           <option value="draft">Draft</option>
@@ -86,18 +86,19 @@ export function ContentLibraryPage() {
 
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
         </div>
       ) : items.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((item) => (
-            <ContentCard
-              key={item.id}
-              item={item}
-              onSelect={() => setSelectedItem(item as ContentItem)}
-              onCopy={() => navigator.clipboard.writeText(item.body)}
-              onDelete={() => setDeleteId(item.id)}
-            />
+          {items.map((item, i) => (
+            <div key={item.id} className="animate-slide-up" style={{ animationDelay: `${i * 75}ms` }}>
+              <ContentCard
+                item={item}
+                onSelect={() => setSelectedItem(item as ContentItem)}
+                onCopy={() => navigator.clipboard.writeText(item.body)}
+                onDelete={() => setDeleteId(item.id)}
+              />
+            </div>
           ))}
         </div>
       ) : (

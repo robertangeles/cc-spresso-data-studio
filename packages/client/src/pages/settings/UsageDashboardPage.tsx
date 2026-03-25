@@ -31,14 +31,14 @@ export default function UsageDashboardPage() {
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-300 border-t-brand-600" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
         {error}
       </div>
     );
@@ -51,13 +51,13 @@ export default function UsageDashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Usage & Costs</h1>
-          <p className="mt-1 text-sm text-gray-500">AI token consumption and cost tracking</p>
+          <h1 className="text-xl font-semibold text-text-primary">Usage & Costs</h1>
+          <p className="mt-1 text-sm text-text-secondary">AI token consumption and cost tracking</p>
         </div>
         <button
           onClick={handleRefresh}
           disabled={isRefreshing}
-          className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg border border-border-default bg-surface-2 px-3 py-2 text-sm font-medium text-text-secondary hover:bg-surface-3 disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           Refresh Data
@@ -68,7 +68,7 @@ export default function UsageDashboardPage() {
       {summary && (
         <div className="grid grid-cols-4 gap-4">
           <SummaryCard
-            icon={<DollarSign className="h-5 w-5 text-brand-600" />}
+            icon={<DollarSign className="h-5 w-5 text-accent" />}
             label="Total Cost"
             value={formatCost(summary.totalCost)}
             subtitle={`${formatTokens(summary.totalInputTokens + summary.totalOutputTokens)} tokens`}
@@ -86,7 +86,7 @@ export default function UsageDashboardPage() {
             subtitle="AI calls"
           />
           <SummaryCard
-            icon={<Clock className="h-5 w-5 text-gray-500" />}
+            icon={<Clock className="h-5 w-5 text-text-secondary" />}
             label="Avg Duration"
             value={formatDuration(summary.avgDurationMs)}
             subtitle="per request"
@@ -96,8 +96,8 @@ export default function UsageDashboardPage() {
 
       {/* Timeseries Chart */}
       {timeseries.length > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Daily Cost Trend</h2>
+        <div className="rounded-lg border border-border-default bg-surface-2 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-text-secondary">Daily Cost Trend</h2>
           <div className="flex h-40 items-end gap-1">
             {timeseries.map((day) => {
               const height = Math.max((day.totalCost / maxTimeseriesCost) * 100, 2);
@@ -107,14 +107,14 @@ export default function UsageDashboardPage() {
                     className="w-full rounded-t bg-brand-400 transition-colors hover:bg-brand-500"
                     style={{ height: `${height}%` }}
                   />
-                  <div className="absolute -top-8 hidden rounded bg-gray-900 px-2 py-1 text-xs text-white group-hover:block">
+                  <div className="absolute -top-8 hidden rounded bg-surface-4 px-2 py-1 text-xs text-text-primary group-hover:block">
                     {day.date}: {formatCost(day.totalCost)}
                   </div>
                 </div>
               );
             })}
           </div>
-          <div className="mt-2 flex justify-between text-xs text-gray-400">
+          <div className="mt-2 flex justify-between text-xs text-text-tertiary">
             <span>{timeseries[0]?.date}</span>
             <span>{timeseries[timeseries.length - 1]?.date}</span>
           </div>
@@ -124,27 +124,27 @@ export default function UsageDashboardPage() {
       {/* Breakdowns */}
       <div className="grid grid-cols-2 gap-4">
         {/* By Model */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Cost by Model</h2>
+        <div className="rounded-lg border border-border-default bg-surface-2 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-text-secondary">Cost by Model</h2>
           {byModel.length === 0 ? (
-            <p className="text-sm text-gray-400">No usage data yet</p>
+            <p className="text-sm text-text-tertiary">No usage data yet</p>
           ) : (
             <div className="space-y-2">
               {byModel.map((m) => (
                 <div key={m.modelId} className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-gray-900">{m.displayName}</span>
-                      <span className="text-xs text-gray-400">{m.percentage}%</span>
+                      <span className="truncate text-sm font-medium text-text-primary">{m.displayName}</span>
+                      <span className="text-xs text-text-tertiary">{m.percentage}%</span>
                     </div>
-                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
                       <div
                         className="h-full rounded-full bg-brand-400"
                         style={{ width: `${m.percentage}%` }}
                       />
                     </div>
                   </div>
-                  <span className="ml-3 shrink-0 text-sm font-semibold text-gray-900">
+                  <span className="ml-3 shrink-0 text-sm font-semibold text-text-primary">
                     {formatCost(m.totalCost)}
                   </span>
                 </div>
@@ -154,19 +154,19 @@ export default function UsageDashboardPage() {
         </div>
 
         {/* By Flow */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Cost by Orchestration</h2>
+        <div className="rounded-lg border border-border-default bg-surface-2 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-text-secondary">Cost by Orchestration</h2>
           {byFlow.length === 0 ? (
-            <p className="text-sm text-gray-400">No usage data yet</p>
+            <p className="text-sm text-text-tertiary">No usage data yet</p>
           ) : (
             <div className="space-y-2">
               {byFlow.map((f) => (
                 <div key={f.flowId} className="flex items-center justify-between">
                   <div>
-                    <span className="text-sm font-medium text-gray-900">{f.flowName}</span>
-                    <span className="ml-2 text-xs text-gray-400">{f.requestCount} runs</span>
+                    <span className="text-sm font-medium text-text-primary">{f.flowName}</span>
+                    <span className="ml-2 text-xs text-text-tertiary">{f.requestCount} runs</span>
                   </div>
-                  <span className="text-sm font-semibold text-gray-900">{formatCost(f.totalCost)}</span>
+                  <span className="text-sm font-semibold text-text-primary">{formatCost(f.totalCost)}</span>
                 </div>
               ))}
             </div>
@@ -176,18 +176,18 @@ export default function UsageDashboardPage() {
 
       {/* Cost Suggestions */}
       {suggestions.length > 0 && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+        <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4">
           <div className="mb-3 flex items-center gap-2">
-            <TrendingDown className="h-5 w-5 text-yellow-600" />
-            <h2 className="text-sm font-semibold text-yellow-800">Cost Optimization Suggestions</h2>
+            <TrendingDown className="h-5 w-5 text-yellow-400" />
+            <h2 className="text-sm font-semibold text-yellow-400">Cost Optimization Suggestions</h2>
           </div>
           <div className="space-y-2">
             {suggestions.slice(0, 5).map((s, i) => (
-              <div key={i} className="text-sm text-yellow-700">
+              <div key={i} className="text-sm text-yellow-300/80">
                 <span className="font-medium">{s.flowName}</span> Step {s.stepIndex + 1} uses{' '}
                 <span className="font-medium">{s.currentModel}</span> — switch to{' '}
                 <span className="font-medium">{s.suggestedModel}</span> for{' '}
-                <span className="font-semibold text-green-700">{s.savingsPercent}% savings</span>
+                <span className="font-semibold text-green-400">{s.savingsPercent}% savings</span>
               </div>
             ))}
           </div>
@@ -209,13 +209,13 @@ function SummaryCard({
   subtitle: string;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
+    <div className="rounded-lg border border-border-default bg-surface-2 p-4">
       <div className="flex items-center gap-2">
         {icon}
-        <span className="text-xs font-medium uppercase tracking-wider text-gray-500">{label}</span>
+        <span className="text-xs font-medium uppercase tracking-wider text-text-secondary">{label}</span>
       </div>
-      <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
-      <p className="mt-0.5 text-xs text-gray-400">{subtitle}</p>
+      <p className="mt-2 text-2xl font-bold text-text-primary">{value}</p>
+      <p className="mt-0.5 text-xs text-text-tertiary">{subtitle}</p>
     </div>
   );
 }

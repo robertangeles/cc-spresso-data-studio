@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Spresso Logo — Geometric coffee cup with steam/content mark -->
+  <!-- Cup body — rounded rectangle with slight taper -->
+  <path d="M32 48h64a4 4 0 0 1 4 4v36a24 24 0 0 1-24 24H52a24 24 0 0 1-24-24V52a4 4 0 0 1 4-4z" fill="currentColor" opacity="0.9"/>
+  <!-- Cup handle — right side arc -->
+  <path d="M96 58h4a12 12 0 0 1 0 24h-4" stroke="currentColor" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.9"/>
+  <!-- Steam lines — three ascending strokes that suggest content/ideas rising -->
+  <path d="M50 38c0-6 4-10 4-16" stroke="currentColor" stroke-width="4" stroke-linecap="round" opacity="0.6"/>
+  <path d="M64 34c0-6 4-10 4-16" stroke="currentColor" stroke-width="4" stroke-linecap="round" opacity="0.4"/>
+  <path d="M78 38c0-6 4-10 4-16" stroke="currentColor" stroke-width="4" stroke-linecap="round" opacity="0.6"/>
+  <!-- Content lines inside cup — suggests text/content -->
+  <line x1="44" y1="68" x2="72" y2="68" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+  <line x1="44" y1="78" x2="84" y2="78" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+  <line x1="44" y1="88" x2="66" y2="88" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+</svg>

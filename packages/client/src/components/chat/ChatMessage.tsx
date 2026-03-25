@@ -20,20 +20,20 @@ export function ChatMessage({ message }: ChatMessageProps) {
   };
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 animate-in`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 animate-slide-up`}>
       <div className={`max-w-[80%] ${isUser ? 'order-2' : ''}`}>
         {/* Role label */}
-        <p className={`text-[10px] font-medium mb-1 ${isUser ? 'text-right text-gray-400' : 'text-gray-400'}`}>
+        <p className={`text-[10px] font-medium mb-1 ${isUser ? 'text-right' : ''} text-text-tertiary`}>
           {isUser ? 'You' : message.model ?? 'Assistant'}
         </p>
 
         {/* Message bubble */}
         <div className={`rounded-2xl px-4 py-3 ${
           isUser
-            ? 'bg-brand-600 text-white'
+            ? 'bg-accent text-text-inverse shadow-[0_2px_8px_rgba(255,214,10,0.15)]'
             : isError
-              ? 'bg-red-50 border border-red-200 text-red-700'
-              : 'bg-white border border-gray-200 text-gray-800'
+              ? 'bg-status-error-dim border border-status-error/30 text-status-error'
+              : 'bg-surface-2 border border-border-subtle text-text-primary'
         }`}>
           {isImage ? (
             <div>
@@ -46,7 +46,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                   link.download = `spresso-image-${Date.now()}.jpg`;
                   link.click();
                 }}
-                className="mt-2 inline-block text-xs text-brand-600 hover:text-brand-800"
+                className="mt-2 inline-block text-xs text-accent hover:text-accent-hover transition-colors"
               >
                 Download Image
               </button>
@@ -54,7 +54,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           ) : isUser ? (
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
           ) : (
-            <div className="prose prose-sm prose-gray max-w-none">
+            <div className="prose prose-sm prose-invert max-w-none prose-headings:text-text-primary prose-p:text-text-secondary prose-a:text-accent prose-a:no-underline hover:prose-a:underline prose-code:bg-surface-3 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-text-primary prose-code:before:content-none prose-code:after:content-none prose-pre:bg-surface-3 prose-pre:border prose-pre:border-border-subtle prose-strong:text-text-primary prose-li:text-text-secondary">
               <Markdown>{message.content}</Markdown>
             </div>
           )}
@@ -66,13 +66,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
             <button
               type="button"
               onClick={handleCopy}
-              className="text-gray-300 hover:text-gray-500 transition-colors"
+              className="text-text-tertiary hover:text-text-secondary transition-colors"
               title="Copy"
             >
-              {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? <Check className="h-3.5 w-3.5 text-status-success" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
             {message.tokens > 0 && (
-              <span className="text-[10px] text-gray-300">{message.tokens} tokens</span>
+              <span className="text-[10px] text-text-tertiary">{message.tokens} tokens</span>
             )}
           </div>
         )}

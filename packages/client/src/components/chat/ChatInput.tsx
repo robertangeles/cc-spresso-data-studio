@@ -68,16 +68,18 @@ export function ChatInput({
     ...(imageMode ? [{ label: 'Image', onRemove: onImageModeToggle }] : []),
   ];
 
+  const hasContent = input.trim().length > 0;
+
   return (
-    <div className="bg-white px-4 pb-4 pt-2">
+    <div className="bg-surface-1 border-t border-border-subtle px-4 pb-4 pt-2">
       <div className="mx-auto max-w-3xl">
         {/* Active mode pills */}
         {activeModes.length > 0 && (
           <div className="flex gap-1.5 mb-2">
             {activeModes.map((m) => (
-              <span key={m.label} className="inline-flex items-center gap-1 rounded-full bg-accent-yellow/20 px-2.5 py-0.5 text-[11px] font-medium text-brand-700">
+              <span key={m.label} className="inline-flex items-center gap-1 rounded-full bg-accent-dim border border-accent/20 px-2.5 py-0.5 text-[11px] font-medium text-accent">
                 {m.label}
-                <button type="button" onClick={m.onRemove} className="hover:text-red-600">
+                <button type="button" onClick={m.onRemove} className="hover:text-status-error transition-colors">
                   <X className="h-3 w-3" />
                 </button>
               </span>
@@ -86,7 +88,11 @@ export function ChatInput({
         )}
 
         {/* Input box */}
-        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm focus-within:border-brand-400 focus-within:shadow-md transition-all">
+        <div className={`rounded-2xl border bg-surface-2 transition-all duration-300 ease-spring ${
+          hasContent
+            ? 'border-accent/40 shadow-glow-accent'
+            : 'border-border-default focus-within:border-accent/40 focus-within:shadow-glow-accent'
+        }`}>
           <textarea
             ref={textareaRef}
             value={input}
@@ -95,7 +101,7 @@ export function ChatInput({
             placeholder={imageMode ? 'Describe the image...' : webSearchMode ? 'Search the web...' : researchMode ? 'What should I research?' : 'Drop an idea...'}
             rows={2}
             disabled={disabled}
-            className="w-full resize-none rounded-t-2xl bg-transparent px-4 pt-3 pb-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50"
+            className="w-full resize-none rounded-t-2xl bg-transparent px-4 pt-3 pb-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50"
           />
 
           {/* Bottom bar */}
@@ -105,40 +111,40 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={() => setShowTools(!showTools)}
-                className={`rounded-full p-1.5 transition-colors ${showTools ? 'bg-gray-200 text-gray-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
+                className={`rounded-full p-1.5 transition-colors ${showTools ? 'bg-surface-4 text-text-primary' : 'text-text-tertiary hover:bg-surface-3 hover:text-text-secondary'}`}
               >
                 <Plus className="h-4 w-4" />
               </button>
 
               {/* Tools dropdown */}
               {showTools && (
-                <div className="absolute bottom-full left-0 mb-2 w-52 rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl z-50">
+                <div className="absolute bottom-full left-0 mb-2 w-52 rounded-xl border border-border-default bg-surface-2 py-1.5 shadow-dark-lg backdrop-blur-glass z-50 animate-scale-in">
                   <button
                     type="button"
                     onClick={() => { onResearchToggle?.(); setShowTools(false); }}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-gray-50 transition-colors ${researchMode ? 'text-brand-600 font-medium' : 'text-gray-700'}`}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-surface-3 transition-colors ${researchMode ? 'text-accent font-medium' : 'text-text-secondary'}`}
                   >
                     <Search className="h-4 w-4" />
                     Research
-                    {researchMode && <span className="ml-auto text-brand-500">✓</span>}
+                    {researchMode && <span className="ml-auto text-accent">&#10003;</span>}
                   </button>
                   <button
                     type="button"
                     onClick={() => { onWebSearchToggle?.(); setShowTools(false); }}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-gray-50 transition-colors ${webSearchMode ? 'text-brand-600 font-medium' : 'text-gray-700'}`}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-surface-3 transition-colors ${webSearchMode ? 'text-accent font-medium' : 'text-text-secondary'}`}
                   >
                     <Globe className="h-4 w-4" />
                     Web search
-                    {webSearchMode && <span className="ml-auto text-brand-500">✓</span>}
+                    {webSearchMode && <span className="ml-auto text-accent">&#10003;</span>}
                   </button>
                   <button
                     type="button"
                     onClick={() => { onImageModeToggle?.(); setShowTools(false); }}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-gray-50 transition-colors ${imageMode ? 'text-brand-600 font-medium' : 'text-gray-700'}`}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-surface-3 transition-colors ${imageMode ? 'text-accent font-medium' : 'text-text-secondary'}`}
                   >
                     <ImageIcon className="h-4 w-4" />
                     Generate image
-                    {imageMode && <span className="ml-auto text-brand-500">✓</span>}
+                    {imageMode && <span className="ml-auto text-accent">&#10003;</span>}
                   </button>
                 </div>
               )}
@@ -150,11 +156,11 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={disabled || !input.trim()}
-                className={`rounded-xl p-2 transition-all ${
-                  input.trim()
-                    ? 'bg-brand-600 text-white hover:bg-brand-700'
-                    : 'bg-gray-100 text-gray-300'
+                disabled={disabled || !hasContent}
+                className={`rounded-xl p-2 transition-all duration-200 ${
+                  hasContent
+                    ? 'bg-accent text-text-inverse hover:bg-accent-hover animate-glow-pulse'
+                    : 'bg-surface-3 text-text-tertiary'
                 } disabled:opacity-30`}
               >
                 <Send className="h-4 w-4" />
@@ -163,8 +169,8 @@ export function ChatInput({
           </div>
         </div>
 
-        <p className="mt-1.5 text-center text-[10px] text-gray-300">
-          Enter to send · Shift+Enter for newline
+        <p className="mt-1.5 text-center text-[10px] text-text-tertiary">
+          Enter to send &middot; Shift+Enter for newline
         </p>
       </div>
     </div>

@@ -47,7 +47,7 @@ export function SkillCreatorPage() {
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('generate');
-  const [icon, setIcon] = useState('✨');
+  const [icon, setIcon] = useState('\u2728');
   const [inputs, setInputs] = useState<SkillInput[]>([]);
   const [promptTemplate, setPromptTemplate] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
@@ -70,7 +70,7 @@ export function SkillCreatorPage() {
         setSlug(skill.slug);
         setDescription(skill.description);
         setCategory(skill.category);
-        setIcon(skill.icon ?? '✨');
+        setIcon(skill.icon ?? '\u2728');
         setInputs(cfg.inputs ?? []);
         setPromptTemplate(cfg.promptTemplate ?? '');
         setSystemPrompt(cfg.systemPrompt ?? '');
@@ -187,7 +187,7 @@ export function SkillCreatorPage() {
   if (isLoadingSkill) {
     return (
       <div className="flex justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
       </div>
     );
   }
@@ -197,12 +197,12 @@ export function SkillCreatorPage() {
       {/* Main content */}
       <div className="min-w-0 flex-1 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">{isEditMode ? `Edit Skill: ${name || '...'}` : 'Create Skill'}</h3>
+          <h3 className="text-lg font-semibold text-text-primary">{isEditMode ? `Edit Skill: ${name || '...'}` : 'Create Skill'}</h3>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setGuideOpen(!guideOpen)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+              className="rounded-lg border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-3"
             >
               {guideOpen ? 'Hide Guide' : 'Show Guide'}
             </button>
@@ -218,10 +218,10 @@ export function SkillCreatorPage() {
               onClick={() => setCurrentStep(i)}
               className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 i === currentStep
-                  ? 'bg-brand-100 text-brand-700'
+                  ? 'bg-accent-dim text-accent'
                   : i < currentStep
-                    ? 'bg-green-50 text-green-700'
-                    : 'bg-gray-100 text-gray-500'
+                    ? 'bg-green-500/10 text-green-400'
+                    : 'bg-surface-3 text-text-secondary'
               }`}
             >
               {s.label}
@@ -230,7 +230,7 @@ export function SkillCreatorPage() {
         </div>
 
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</div>
         )}
 
         {/* Step content */}
@@ -240,18 +240,18 @@ export function SkillCreatorPage() {
               <Input label="Skill Name" value={name} onChange={(e) => autoSlug(e.target.value)} placeholder="e.g., Blog Post to LinkedIn" />
               <Input label="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="blog-post-to-linkedin" disabled={isEditMode} />
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+                <label className="mb-1 block text-sm font-medium text-text-secondary">Description</label>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe what this skill does and when to use it..." rows={3}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2" />
+                  className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2" />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Category</label>
+                <label className="mb-1 block text-sm font-medium text-text-secondary">Category</label>
                 <div className="flex flex-wrap gap-2">
                   {CATEGORIES.map((cat) => {
                     const CatIcon = getCategoryIcon(cat.value);
                     return (
                       <button key={cat.value} type="button" onClick={() => { setCategory(cat.value); setIcon(cat.value); }}
-                        className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${category === cat.value ? 'bg-brand-100 text-brand-700 ring-2 ring-brand-500' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                        className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${category === cat.value ? 'bg-accent-dim text-accent ring-2 ring-accent' : 'bg-surface-3 text-text-secondary hover:bg-surface-4'}`}>
                         <CatIcon className="h-4 w-4" />
                         {cat.label}
                       </button>
@@ -265,26 +265,26 @@ export function SkillCreatorPage() {
           {step.id === 'inputs' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-500">Define what information your skill needs.</p>
+                <p className="text-sm text-text-secondary">Define what information your skill needs.</p>
                 <Button size="sm" onClick={addInput}>+ Add Input</Button>
               </div>
               {inputs.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-gray-300 py-6 text-center text-sm text-gray-400">
+                <div className="rounded-lg border border-dashed border-border-default py-6 text-center text-sm text-text-tertiary">
                   {'No inputs yet. Add one to create a {{variable}} for your prompt.'}
                 </div>
               ) : inputs.map((inp, i) => (
-                <div key={inp.id} className="rounded-lg border border-gray-200 p-3 space-y-2">
+                <div key={inp.id} className="rounded-lg border border-border-default p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Input {i + 1}</span>
-                    <button type="button" onClick={() => removeInput(i)} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
+                    <span className="text-xs text-text-tertiary">Input {i + 1}</span>
+                    <button type="button" onClick={() => removeInput(i)} className="text-red-400 hover:text-red-300 text-xs">Remove</button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <Input label="Key" value={inp.key} onChange={(e) => updateInput(i, { key: e.target.value.replace(/[^a-z0-9_]/g, '') })} placeholder="variable_name" />
                     <Input label="Label" value={inp.label} onChange={(e) => updateInput(i, { label: e.target.value })} placeholder="Display label" />
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">Type</label>
+                      <label className="mb-1 block text-sm font-medium text-text-secondary">Type</label>
                       <select value={inp.type} onChange={(e) => updateInput(i, { type: e.target.value as SkillInput['type'] })}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none">
+                        className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none">
                         {INPUT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
@@ -297,7 +297,7 @@ export function SkillCreatorPage() {
                   )}
                   <div className="flex items-center gap-4">
                     <label className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={inp.required} onChange={(e) => updateInput(i, { required: e.target.checked })} className="rounded border-gray-300" />
+                      <input type="checkbox" checked={inp.required} onChange={(e) => updateInput(i, { required: e.target.checked })} className="rounded border-border-default" />
                       Required
                     </label>
                     {inp.defaultValue !== undefined && (
@@ -311,12 +311,12 @@ export function SkillCreatorPage() {
 
           {step.id === 'prompt' && (
             <div className="space-y-3">
-              <p className="text-sm text-gray-500">Write the instructions sent to the AI. Use variables from your inputs.</p>
+              <p className="text-sm text-text-secondary">Write the instructions sent to the AI. Use variables from your inputs.</p>
               {inputs.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {inputs.filter((i) => i.key).map((inp) => (
                     <button key={inp.key} type="button" onClick={() => insertVariable(inp.key)}
-                      className="rounded-full bg-brand-50 px-2 py-1 text-xs font-mono text-brand-700 hover:bg-brand-100 transition-colors">
+                      className="rounded-full bg-accent-dim px-2 py-1 text-xs font-mono text-accent hover:bg-accent-dim/80 transition-colors">
                       {'{{' + inp.key + '}}'}
                     </button>
                   ))}
@@ -325,17 +325,17 @@ export function SkillCreatorPage() {
               <textarea ref={promptRef} value={promptTemplate} onChange={(e) => setPromptTemplate(e.target.value)}
                 placeholder="Write your prompt template here. Use {{variable_name}} for dynamic content..."
                 rows={14}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2" />
+                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 font-mono text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2" />
             </div>
           )}
 
           {step.id === 'system' && (
             <div className="space-y-3">
-              <p className="text-sm text-gray-500">Set the AI's role and personality (optional but recommended).</p>
+              <p className="text-sm text-text-secondary">Set the AI's role and personality (optional but recommended).</p>
               <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)}
                 placeholder='e.g., "You are a social media strategist specializing in content repurposing. You create engaging posts that drive conversation."'
                 rows={4}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2" />
+                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2" />
             </div>
           )}
 
@@ -346,20 +346,20 @@ export function SkillCreatorPage() {
           {step.id === 'config' && (
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
                   Temperature: {temperature}
                 </label>
                 <input type="range" min="0" max="2" step="0.1" value={temperature}
                   onChange={(e) => setTemperature(parseFloat(e.target.value))}
                   className="w-full" />
-                <div className="flex justify-between text-xs text-gray-400">
+                <div className="flex justify-between text-xs text-text-tertiary">
                   <span>Precise (0)</span><span>Balanced (0.7)</span><span>Creative (2)</span>
                 </div>
               </div>
               <Input label="Max Tokens" type="number" value={String(maxTokens)}
                 onChange={(e) => setMaxTokens(parseInt(e.target.value) || 4000)} />
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Default Model</label>
+                <label className="mb-1 block text-sm font-medium text-text-secondary">Default Model</label>
                 <ModelSelector value={defaultModel} onChange={setDefaultModel} allowAuto />
               </div>
             </div>
@@ -368,29 +368,29 @@ export function SkillCreatorPage() {
           {step.id === 'review' && (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
-                <div><span className="text-gray-500">Name:</span> <span className="font-medium">{name || '—'}</span></div>
-                <div><span className="text-gray-500">Slug:</span> <span className="font-mono">{slug || '—'}</span></div>
-                <div><span className="text-gray-500">Category:</span> <span className="font-medium">{icon} {category}</span></div>
-                <div><span className="text-gray-500">Inputs:</span> <span className="font-medium">{inputs.length}</span></div>
-                <div><span className="text-gray-500">Outputs:</span> <span className="font-medium">{outputs.length}</span></div>
-                <div><span className="text-gray-500">Temperature:</span> <span className="font-medium">{temperature}</span></div>
+                <div><span className="text-text-secondary">Name:</span> <span className="font-medium">{name || '\u2014'}</span></div>
+                <div><span className="text-text-secondary">Slug:</span> <span className="font-mono">{slug || '\u2014'}</span></div>
+                <div><span className="text-text-secondary">Category:</span> <span className="font-medium">{icon} {category}</span></div>
+                <div><span className="text-text-secondary">Inputs:</span> <span className="font-medium">{inputs.length}</span></div>
+                <div><span className="text-text-secondary">Outputs:</span> <span className="font-medium">{outputs.length}</span></div>
+                <div><span className="text-text-secondary">Temperature:</span> <span className="font-medium">{temperature}</span></div>
               </div>
-              {description && <div><span className="text-gray-500">Description:</span><p className="mt-1">{description}</p></div>}
+              {description && <div><span className="text-text-secondary">Description:</span><p className="mt-1">{description}</p></div>}
               {promptTemplate && (
                 <div>
-                  <span className="text-gray-500">Prompt Template:</span>
-                  <pre className="mt-1 max-h-32 overflow-auto rounded-lg bg-gray-50 p-2 text-xs whitespace-pre-wrap">{promptTemplate}</pre>
+                  <span className="text-text-secondary">Prompt Template:</span>
+                  <pre className="mt-1 max-h-32 overflow-auto rounded-lg bg-surface-3 p-2 text-xs whitespace-pre-wrap">{promptTemplate}</pre>
                 </div>
               )}
               {isEditMode && (
-                <div className="mt-4 border-t border-gray-200 pt-4">
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Changelog (optional)</label>
+                <div className="mt-4 border-t border-border-default pt-4">
+                  <label className="mb-1 block text-sm font-medium text-text-secondary">Changelog (optional)</label>
                   <input
                     type="text"
                     value={changelog}
                     onChange={(e) => setChangelog(e.target.value)}
                     placeholder="What changed in this version?"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                    className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
                   />
                 </div>
               )}
@@ -420,10 +420,10 @@ export function SkillCreatorPage() {
         <aside className="w-72 shrink-0">
           <Card padding="lg">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="font-medium text-gray-900">Guide</h4>
-              <button type="button" onClick={() => setGuideOpen(false)} className="text-gray-400 hover:text-gray-600 text-xs">Close</button>
+              <h4 className="font-medium text-text-primary">Guide</h4>
+              <button type="button" onClick={() => setGuideOpen(false)} className="text-text-tertiary hover:text-text-secondary text-xs">Close</button>
             </div>
-            <div className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">
+            <div className="text-sm text-text-secondary whitespace-pre-line leading-relaxed">
               {step.guide}
             </div>
           </Card>
@@ -444,18 +444,18 @@ function OutputsStep({ outputs, addOutput, updateOutput, removeOutput }: {
   if (!showAdvanced) {
     return (
       <div className="space-y-4">
-        <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3">
-          <p className="text-sm text-green-800">
+        <div className="rounded-lg bg-green-500/10 border border-green-500/20 px-4 py-3">
+          <p className="text-sm text-green-400">
             Your skill will output a single result as markdown. This works for most skills.
           </p>
-          <p className="mt-1 text-xs text-green-600">
+          <p className="mt-1 text-xs text-green-400/70">
             The output will be displayed in the execution results and saved to your Content Library.
           </p>
         </div>
         <button
           type="button"
           onClick={() => setShowAdvanced(true)}
-          className="text-xs text-brand-600 hover:text-brand-500 font-medium"
+          className="text-xs text-accent hover:text-accent-hover font-medium"
         >
           Advanced: multiple outputs, visibility controls
         </button>
@@ -466,27 +466,27 @@ function OutputsStep({ outputs, addOutput, updateOutput, removeOutput }: {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">Define what your skill produces.</p>
+        <p className="text-sm text-text-secondary">Define what your skill produces.</p>
         <div className="flex gap-2">
-          <button type="button" onClick={() => setShowAdvanced(false)} className="text-xs text-gray-500 hover:text-gray-700">Simple mode</button>
+          <button type="button" onClick={() => setShowAdvanced(false)} className="text-xs text-text-secondary hover:text-text-primary">Simple mode</button>
           <Button size="sm" onClick={addOutput}>+ Add Output</Button>
         </div>
       </div>
       {outputs.map((out, i) => (
-        <div key={i} className="rounded-lg border border-gray-200 p-3 space-y-2">
+        <div key={i} className="rounded-lg border border-border-default p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-400">Output {i + 1}</span>
+            <span className="text-xs text-text-tertiary">Output {i + 1}</span>
             {outputs.length > 1 && (
-              <button type="button" onClick={() => removeOutput(i)} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
+              <button type="button" onClick={() => removeOutput(i)} className="text-red-400 hover:text-red-300 text-xs">Remove</button>
             )}
           </div>
           <div className="grid grid-cols-3 gap-2">
             <Input label="Key" value={out.key} onChange={(e) => updateOutput(i, { key: e.target.value.replace(/[^a-z0-9_]/g, '') })} placeholder="output_key" />
             <Input label="Label" value={out.label} onChange={(e) => updateOutput(i, { label: e.target.value })} placeholder="Display label" />
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Type</label>
+              <label className="mb-1 block text-sm font-medium text-text-secondary">Type</label>
               <select value={out.type} onChange={(e) => updateOutput(i, { type: e.target.value as SkillOutput['type'] })}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none">
+                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none">
                 {OUTPUT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
@@ -496,7 +496,7 @@ function OutputsStep({ outputs, addOutput, updateOutput, removeOutput }: {
               type="checkbox"
               checked={out.visible !== false}
               onChange={(e) => updateOutput(i, { visible: e.target.checked })}
-              className="rounded border-gray-300"
+              className="rounded border-border-default"
             />
             Show in results
           </label>

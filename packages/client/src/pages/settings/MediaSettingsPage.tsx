@@ -87,15 +87,15 @@ export function MediaSettingsPage() {
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
       </div>
     );
   }
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-900">Media Storage</h3>
-      <p className="mt-1 text-sm text-gray-500 mb-6">
+      <h3 className="text-lg font-semibold text-text-primary">Media Storage</h3>
+      <p className="mt-1 text-sm text-text-secondary mb-6">
         Configure Cloudinary for image uploads, avatar photos, and generated media.
       </p>
 
@@ -104,11 +104,11 @@ export function MediaSettingsPage() {
           <div className="flex items-center gap-3 mb-4">
             <span className="text-2xl">☁</span>
             <div>
-              <h4 className="font-medium text-gray-900">Cloudinary</h4>
-              <p className="text-xs text-gray-400">Cloud-based image and video management</p>
+              <h4 className="font-medium text-text-primary">Cloudinary</h4>
+              <p className="text-xs text-text-tertiary">Cloud-based image and video management</p>
             </div>
             {maskedSecret && (
-              <span className="ml-auto rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+              <span className="ml-auto rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
                 Connected
               </span>
             )}
@@ -142,15 +142,15 @@ export function MediaSettingsPage() {
             onChange={(e) => setConfig({ ...config, uploadFolder: e.target.value })}
             placeholder="draftpunk"
           />
-          <p className="text-xs text-gray-400 -mt-2">
+          <p className="text-xs text-text-tertiary -mt-2">
             All uploads will be stored under this folder in Cloudinary (e.g., draftpunk/avatars/).
           </p>
 
           {testResult && (
             <div className={`rounded-lg border px-3 py-2 text-sm ${
               testResult.success
-                ? 'border-green-200 bg-green-50 text-green-700'
-                : 'border-red-200 bg-red-50 text-red-700'
+                ? 'border-green-500/20 bg-green-500/10 text-green-400'
+                : 'border-red-500/20 bg-red-500/10 text-red-400'
             }`}>
               {testResult.message}
             </div>
@@ -163,7 +163,7 @@ export function MediaSettingsPage() {
             <Button variant="secondary" onClick={handleTest} disabled={testing || !config.cloudName}>
               {testing ? 'Testing...' : 'Test Connection'}
             </Button>
-            {saved && <span className="text-sm text-green-600">Saved</span>}
+            {saved && <span className="text-sm text-status-success">Saved</span>}
           </div>
         </div>
       </Card>

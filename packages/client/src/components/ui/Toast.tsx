@@ -44,9 +44,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   };
 
   const styles: Record<ToastVariant, string> = {
-    success: 'border-green-200 bg-green-50 text-green-800',
-    error: 'border-red-200 bg-red-50 text-red-800',
-    info: 'border-brand-200 bg-brand-50 text-brand-800',
+    success: 'border-status-success/20 bg-status-success-dim text-status-success',
+    error: 'border-status-error/20 bg-status-error-dim text-status-error',
+    info: 'border-accent/20 bg-accent-dim text-accent',
   };
 
   return (
@@ -60,14 +60,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           return (
             <div
               key={t.id}
-              className={`flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg transition-all animate-in slide-in-from-right ${styles[t.variant]}`}
+              className={`flex items-center gap-3 rounded-lg border px-4 py-3 shadow-dark-lg backdrop-blur-glass transition-all animate-slide-in-right ${styles[t.variant]}`}
             >
               <Icon className="h-4 w-4 shrink-0" />
               <p className="text-sm font-medium">{t.message}</p>
               <button
                 type="button"
                 onClick={() => removeToast(t.id)}
-                className="ml-2 shrink-0 opacity-60 hover:opacity-100"
+                className="ml-2 shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                 aria-label="Dismiss"
               >
                 <X className="h-3.5 w-3.5" />

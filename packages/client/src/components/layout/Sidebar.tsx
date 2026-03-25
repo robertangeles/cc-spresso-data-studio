@@ -77,11 +77,13 @@ export function Sidebar() {
   const isOnChat = location.pathname.startsWith('/chat');
 
   return (
-    <aside className="flex w-56 flex-col border-r border-gray-100 bg-white">
+    <aside className="flex w-56 flex-col border-r border-border-subtle bg-surface-1">
       {/* Brand */}
-      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100">
-        <Coffee className="h-7 w-7 text-brand-600" />
-        <span className="text-lg font-bold tracking-tight text-brand-700">Spresso</span>
+      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-border-subtle">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-dim">
+          <Coffee className="h-5 w-5 text-accent" />
+        </div>
+        <span className="text-lg font-bold tracking-tight text-text-primary">Spresso</span>
       </div>
 
       {/* Chat zone */}
@@ -90,7 +92,7 @@ export function Sidebar() {
           <button
             type="button"
             onClick={() => setChatExpanded(!chatExpanded)}
-            className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600"
+            className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
           >
             {chatExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             Chat
@@ -98,7 +100,7 @@ export function Sidebar() {
           <button
             type="button"
             onClick={() => navigate('/chat')}
-            className="flex items-center gap-1 rounded-md bg-brand-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-brand-700 transition-colors"
+            className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-[10px] font-medium text-text-inverse hover:bg-accent-hover transition-all duration-200 ease-spring hover:shadow-glow-accent"
           >
             <Plus className="h-3 w-3" />
             New
@@ -108,15 +110,15 @@ export function Sidebar() {
         {chatExpanded && (
           <div className="max-h-48 overflow-y-auto space-y-0.5 mb-2">
             {chatHistory.length === 0 ? (
-              <p className="px-2 py-2 text-[11px] text-gray-300">No chats yet. Start one.</p>
+              <p className="px-2 py-2 text-[11px] text-text-tertiary">No chats yet. Start one.</p>
             ) : (
               chatHistory.slice(0, 15).map((c) => (
                 <div
                   key={c.id}
-                  className={`group flex items-center rounded-md px-2 py-1.5 text-[12px] cursor-pointer transition-colors ${
+                  className={`group flex items-center rounded-md px-2 py-1.5 text-[12px] cursor-pointer transition-all duration-200 ease-spring ${
                     isOnChat && location.search.includes(c.id)
-                      ? 'bg-brand-50 text-brand-700'
-                      : 'text-gray-600 hover:bg-gray-50'
+                      ? 'bg-accent-dim text-accent border-l-2 border-accent'
+                      : 'text-text-secondary hover:bg-surface-3 border-l-2 border-transparent'
                   }`}
                 >
                   <button
@@ -134,7 +136,7 @@ export function Sidebar() {
                       await api.delete(`/chat/conversations/${c.id}`);
                       fetchHistory();
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-300 hover:text-red-500 transition-all"
+                    className="opacity-0 group-hover:opacity-100 p-0.5 text-text-tertiary hover:text-status-error transition-all"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -145,22 +147,22 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Divider */}
+      {/* Section label */}
       <div className="px-4 py-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-300">Content Ops</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Content Ops</p>
       </div>
 
-      {/* Content ops zone */}
+      {/* Nav links */}
       <nav className="flex-1 space-y-0.5 px-3">
         {contentOpsItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+              `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200 ease-spring ${
                 isActive
-                  ? 'bg-brand-50 text-brand-700'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                  ? 'bg-accent-dim text-accent border-l-2 border-accent'
+                  : 'text-text-secondary hover:bg-surface-3 hover:text-text-primary border-l-2 border-transparent'
               }`
             }
           >
@@ -172,31 +174,31 @@ export function Sidebar() {
 
       {/* User profile */}
       {user && (
-        <div ref={menuRef} className="relative border-t border-gray-100 p-3">
+        <div ref={menuRef} className="relative border-t border-border-subtle p-3">
           <button
             type="button"
             onClick={() => setShowMenu(!showMenu)}
-            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-gray-50 transition-colors"
+            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-surface-3 transition-all duration-200"
           >
             {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+              <img src={avatarUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-border-subtle" />
             ) : (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-dim text-xs font-semibold text-accent">
                 {initials}
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[12px] font-medium text-gray-900">{user.name}</p>
-              <p className="truncate text-[10px] text-gray-400">{user.email}</p>
+              <p className="truncate text-[12px] font-medium text-text-primary">{user.name}</p>
+              <p className="truncate text-[10px] text-text-tertiary">{user.email}</p>
             </div>
           </button>
 
           {showMenu && (
-            <div className="absolute bottom-full left-3 right-3 mb-1 rounded-lg border border-gray-200 bg-white py-1 shadow-lg z-50">
+            <div className="absolute bottom-full left-3 right-3 mb-1 rounded-lg border border-border-default bg-surface-2 py-1 shadow-dark-lg backdrop-blur-glass z-50 animate-scale-in">
               <NavLink
                 to="/profile"
                 onClick={() => setShowMenu(false)}
-                className="flex items-center gap-2 px-3 py-1.5 text-[12px] text-gray-700 hover:bg-gray-50"
+                className="flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-3 transition-colors"
               >
                 <User className="h-3.5 w-3.5" />
                 Profile
@@ -204,7 +206,7 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-red-600 hover:bg-red-50"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-status-error hover:bg-status-error-dim transition-colors"
               >
                 <LogOut className="h-3.5 w-3.5" />
                 Logout

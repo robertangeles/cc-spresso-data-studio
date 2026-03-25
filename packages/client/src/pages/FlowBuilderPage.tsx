@@ -27,7 +27,7 @@ export function FlowBuilderPage() {
   if (isLoading || !flow) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
       </div>
     );
   }
@@ -50,7 +50,7 @@ export function FlowBuilderPage() {
   return (
     <div className="flex h-full flex-col -m-6">
       {/* Top bar */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
+      <div className="flex items-center justify-between border-b border-border-default bg-surface-2 px-6 py-3">
         <div className="flex items-center gap-3">
           <Link to="/dashboard">
             <Button variant="ghost" size="sm">
@@ -60,7 +60,7 @@ export function FlowBuilderPage() {
 
           {isEditing ? (
             <input
-              className="rounded border border-gray-300 px-2 py-1 text-lg font-semibold focus:border-brand-500 focus:outline-none"
+              className="rounded border border-border-default bg-surface-3 px-2 py-1 text-lg font-semibold text-text-primary focus:border-accent focus:outline-none"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               onBlur={handleRename}
@@ -69,7 +69,7 @@ export function FlowBuilderPage() {
             />
           ) : (
             <h2
-              className="cursor-pointer text-lg font-semibold text-gray-900 hover:text-brand-600"
+              className="cursor-pointer text-lg font-semibold text-text-primary hover:text-accent"
               onClick={() => {
                 setEditName(flow.name);
                 setIsEditing(true);
@@ -81,7 +81,7 @@ export function FlowBuilderPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
+          <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-400">
             {flow.status}
           </span>
         </div>

@@ -37,7 +37,7 @@ export function ModelSelector({ value, onChange, allowAuto = false, compact = fa
   };
 
   if (models.length === 0) {
-    return <p className="text-xs text-amber-600">No models. Add keys in Settings.</p>;
+    return <p className="text-xs text-amber-400">No models. Add keys in Settings.</p>;
   }
 
   return (
@@ -46,27 +46,27 @@ export function ModelSelector({ value, onChange, allowAuto = false, compact = fa
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={compact
-          ? 'inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors'
-          : 'flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-left hover:border-gray-400 focus:border-brand-500 focus:outline-none'
+          ? 'inline-flex items-center gap-1.5 rounded-full border border-border-default bg-surface-2 px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-3 hover:border-border-default transition-colors'
+          : 'flex w-full items-center justify-between rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-left text-text-primary hover:border-border-default focus:border-accent focus:outline-none'
         }
       >
         <span>{compact ? displayName : `${selected?.icon ?? ''} ${displayName}`}</span>
-        <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-3.5 w-3.5 text-text-tertiary transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className={`absolute z-50 ${compact ? 'bottom-full mb-2 left-0' : 'mt-1 w-full'} min-w-[280px] max-h-[400px] overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-xl`}>
+        <div className={`absolute z-50 ${compact ? 'bottom-full mb-2 left-0' : 'mt-1 w-full'} min-w-[280px] max-h-[400px] overflow-y-auto rounded-xl border border-border-default bg-surface-2 py-1 shadow-dark-lg backdrop-blur-glass`}>
           {allowAuto && (
             <button
               type="button"
               onClick={() => { onChange(''); setIsOpen(false); }}
-              className={`flex w-full items-center justify-between px-3 py-2 text-left hover:bg-gray-50 ${!value ? 'bg-brand-50' : ''}`}
+              className={`flex w-full items-center justify-between px-3 py-2 text-left hover:bg-surface-3 ${!value ? 'bg-accent-dim' : ''}`}
             >
               <div>
-                <p className="text-sm font-medium text-gray-900">Auto</p>
-                <p className="text-[11px] text-gray-400">Best available model</p>
+                <p className="text-sm font-medium text-text-primary">Auto</p>
+                <p className="text-[11px] text-text-tertiary">Best available model</p>
               </div>
-              {!value && <Check className="h-4 w-4 text-brand-600" />}
+              {!value && <Check className="h-4 w-4 text-accent" />}
             </button>
           )}
 
@@ -76,16 +76,16 @@ export function ModelSelector({ value, onChange, allowAuto = false, compact = fa
               <button
                 type="button"
                 onClick={() => toggleProvider(provider)}
-                className="flex w-full items-center gap-1.5 px-3 pt-2.5 pb-1 text-left hover:bg-gray-50"
+                className="flex w-full items-center gap-1.5 px-3 pt-2.5 pb-1 text-left hover:bg-surface-3"
               >
                 {collapsed[provider]
-                  ? <ChevronRight className="h-3 w-3 text-gray-400" />
-                  : <ChevronDown className="h-3 w-3 text-gray-400" />
+                  ? <ChevronRight className="h-3 w-3 text-text-tertiary" />
+                  : <ChevronDown className="h-3 w-3 text-text-tertiary" />
                 }
-                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
                   {provider}
                 </span>
-                <span className="text-[10px] text-gray-300 ml-1">{providerModels.length}</span>
+                <span className="text-[10px] text-text-tertiary ml-1">{providerModels.length}</span>
               </button>
 
               {/* Models — collapsible */}
@@ -94,15 +94,15 @@ export function ModelSelector({ value, onChange, allowAuto = false, compact = fa
                   key={m.model}
                   type="button"
                   onClick={() => { onChange(m.model); setIsOpen(false); }}
-                  className={`flex w-full items-center justify-between px-3 pl-7 py-1.5 text-left hover:bg-gray-50 transition-colors ${value === m.model ? 'bg-brand-50' : ''}`}
+                  className={`flex w-full items-center justify-between px-3 pl-7 py-1.5 text-left hover:bg-surface-3 transition-colors ${value === m.model ? 'bg-accent-dim' : ''}`}
                 >
                   <div>
-                    <p className="text-[13px] font-medium text-gray-900">{m.displayName}</p>
+                    <p className="text-[13px] font-medium text-text-primary">{m.displayName}</p>
                     {m.description && (
-                      <p className="text-[10px] text-gray-400">{m.description}</p>
+                      <p className="text-[10px] text-text-tertiary">{m.description}</p>
                     )}
                   </div>
-                  {value === m.model && <Check className="h-3.5 w-3.5 text-brand-600" />}
+                  {value === m.model && <Check className="h-3.5 w-3.5 text-accent" />}
                 </button>
               ))}
             </div>

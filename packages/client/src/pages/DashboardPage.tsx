@@ -37,7 +37,7 @@ export function DashboardPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
       </div>
     );
   }
@@ -46,8 +46,8 @@ export function DashboardPage() {
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-gray-900">Orchestrations</h1>
-          <p className="mt-0.5 text-sm text-gray-400">One idea in. Twelve assets out.</p>
+          <h1 className="text-xl font-bold tracking-tight text-text-primary">Orchestrations</h1>
+          <p className="mt-0.5 text-sm text-text-tertiary">One idea in. Twelve assets out.</p>
         </div>
         <Button onClick={() => setShowCreate(true)}>+ New Orchestration</Button>
       </div>
@@ -80,8 +80,10 @@ export function DashboardPage() {
         />
       ) : (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {flows.map((flow) => (
-            <FlowCard key={flow.id} flow={flow} onDelete={handleDelete} />
+          {flows.map((flow, i) => (
+            <div key={flow.id} className="animate-slide-up" style={{ animationDelay: `${i * 75}ms` }}>
+              <FlowCard flow={flow} onDelete={handleDelete} />
+            </div>
           ))}
         </div>
       )}

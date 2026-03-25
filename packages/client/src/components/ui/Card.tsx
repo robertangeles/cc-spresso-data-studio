@@ -2,6 +2,7 @@ import type { HTMLAttributes } from 'react';
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   padding?: 'sm' | 'md' | 'lg';
+  glow?: boolean;
 }
 
 const paddings = {
@@ -10,10 +11,10 @@ const paddings = {
   lg: 'p-8',
 };
 
-export function Card({ padding = 'md', className = '', children, ...props }: CardProps) {
+export function Card({ padding = 'md', glow = false, className = '', children, ...props }: CardProps) {
   return (
     <div
-      className={`rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md ${paddings[padding]} ${className}`}
+      className={`rounded-xl border border-border-subtle bg-surface-2 transition-all duration-300 ease-spring hover:border-border-hover hover:shadow-glow ${glow ? 'shadow-glow-accent border-border-hover' : ''} ${paddings[padding]} ${className}`}
       {...props}
     >
       {children}
