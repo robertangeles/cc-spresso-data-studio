@@ -85,3 +85,14 @@ curl -X POST http://localhost:3003/api/chat/conversations -H "Authorization: Bea
 2. Delete orphaned data from related tables
 3. Never leave test data in the DB after a session
 4. Use a consistent test email pattern (e.g., `test*@test.com`) so cleanup is easy
+
+## 9. Render deployment: pnpm not available by default
+
+**Problem:** Render's Node runtime doesn't have pnpm installed. `corepack enable` fails because the filesystem is read-only (`EROFS: read-only file system`). Using `pnpm --filter` to build individual packages fails because TypeScript project references between workspace packages don't resolve when built in isolation.
+
+**Fix:**
+- Install pnpm via npm: `npm install -g pnpm`
+- Use `pnpm -r build` (recursive) instead of `--filter` — it respects workspace dependency order and builds shared types before dependent packages
+- Final build command: `npm install -g pnpm && pnpm install && pnpm -r build`
+
+**Rule:** For pnpm monorepos on Render: always use `npm install -g pnpm` (not corepack), and always use `pnpm -r build` (not `--filter`) to ensure workspace dependencies resolve in the correct order.
