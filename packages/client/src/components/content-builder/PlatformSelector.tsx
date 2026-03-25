@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 
 interface PlatformSelectorProps {
@@ -35,62 +35,62 @@ function getPlatformColor(slug: string) {
 }
 
 export function PlatformSelector({ channels, selectedIds, onToggle }: PlatformSelectorProps) {
-  const [isExpanded, setIsExpanded] = useState(selectedIds.length === 0);
-  const prevCountRef = useRef(selectedIds.length);
-
-  // Auto-collapse when user makes their first selection (0 -> 1+)
-  useEffect(() => {
-    const prevCount = prevCountRef.current;
-    prevCountRef.current = selectedIds.length;
-
-    if (prevCount === 0 && selectedIds.length > 0) {
-      const timer = setTimeout(() => setIsExpanded(false), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [selectedIds.length]);
-
-  // Auto-expand when all platforms are deselected
-  useEffect(() => {
-    if (selectedIds.length === 0) {
-      setIsExpanded(true);
-    }
-  }, [selectedIds.length]);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const selectedChannels = channels.filter((ch) => selectedIds.includes(ch.id));
 
   return (
     <div>
-      {/* Collapsed summary bar */}
-      {selectedIds.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setIsExpanded((prev) => !prev)}
-          className="w-full flex items-center justify-between bg-surface-1/80 backdrop-blur-sm rounded-xl border border-border-subtle px-4 py-2.5 transition-all duration-200 hover:border-border-default hover:bg-surface-1 cursor-pointer group"
-        >
-          <div className="flex items-center gap-2 text-sm">
-            {selectedChannels.slice(0, 3).map((ch) => {
-              const color = getPlatformColor(ch.slug);
-              return (
-                <span key={ch.id} className={`inline-flex items-center gap-1.5 ${color.text}`}>
-                  <span className="text-base leading-none">{ch.icon}</span>
-                  <span className="font-medium">{ch.name}</span>
+      {/* Summary bar — always visible */}
+      <button
+        type="button"
+        onClick={() => setIsExpanded((prev) => !prev)}
+        className={`w-full flex items-center justify-between backdrop-blur-sm rounded-xl border px-4 py-2.5 transition-all duration-200 cursor-pointer group ${
+          selectedIds.length > 0
+            ? 'bg-surface-1/80 border-border-subtle hover:border-border-default hover:bg-surface-1'
+            : 'bg-gradient-to-r from-accent/5 to-surface-1/80 border-accent/20 hover:border-accent/40 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)]'
+        }`}
+      >
+        <div className="flex items-center gap-2 text-sm">
+          {selectedIds.length === 0 ? (
+            <span className="text-text-secondary font-medium">Select platforms to publish to...</span>
+          ) : (
+            <>
+              {selectedChannels.slice(0, 4).map((ch) => {
+                const color = getPlatformColor(ch.slug);
+                return (
+                  <span key={ch.id} className={`inline-flex items-center gap-1.5 ${color.text}`}>
+                    <span className="text-base leading-none">{ch.icon}</span>
+                    <span className="font-medium">{ch.name}</span>
+                  </span>
+                );
+              })}
+              {selectedChannels.length > 4 && (
+                <span className="text-text-tertiary text-xs font-medium">
+                  +{selectedChannels.length - 4} more
                 </span>
-              );
-            })}
-            {selectedChannels.length > 3 && (
-              <span className="text-text-tertiary text-xs font-medium">
-                +{selectedChannels.length - 3} more
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 text-text-secondary group-hover:text-text-primary transition-colors">
-            <span className="text-xs font-medium">Select Platforms</span>
-            <ChevronDown
-              className={`h-4 w-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
-            />
-          </div>
-        </button>
-      )}
+              )}
+            </>
+          )}
+        </div>
+        <div className={`flex items-center gap-1.5 transition-colors ${
+          selectedIds.length > 0
+            ? 'text-text-secondary group-hover:text-text-primary'
+            : 'text-accent group-hover:text-accent-hover'
+        }`}>
+          {selectedIds.length > 0 && (
+            <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full font-medium">
+              {selectedIds.length}
+            </span>
+          )}
+          <span className="text-xs font-medium">
+            {selectedIds.length > 0 ? 'Change' : 'Select Platforms'}
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+          />
+        </div>
+      </button>
 
       {/* Expandable chip grid */}
       <div
@@ -98,7 +98,7 @@ export function PlatformSelector({ channels, selectedIds, onToggle }: PlatformSe
         style={{
           maxHeight: isExpanded ? '500px' : '0px',
           opacity: isExpanded ? 1 : 0,
-          marginTop: isExpanded && selectedIds.length > 0 ? '8px' : '0px',
+          marginTop: isExpanded ? '8px' : '0px',
         }}
       >
         <div className="flex flex-wrap gap-2">
