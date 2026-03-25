@@ -10,6 +10,9 @@ import roleRoutes from './role.routes.js';
 import profileRoutes from './profile.routes.js';
 import { chatRoutes } from './chat.routes.js';
 import usageRoutes from './usage.routes.js';
+import { promptRoutes } from './prompt.routes.js';
+import { schedulerRoutes } from './scheduler.routes.js';
+import { systemPromptRoutes } from './system-prompt.routes.js';
 
 const router = Router();
 
@@ -32,5 +35,8 @@ router.use('/roles', roleRoutes);
 router.use('/profile', profileRoutes);
 router.use('/chat', chatRoutes);
 router.use('/admin/usage', usageRoutes);
+router.use('/prompts', promptRoutes);
+router.use('/schedule', schedulerRoutes);
+router.use('/system-prompts', systemPromptRoutes);
 
 export { router };

@@ -56,6 +56,10 @@ const MODEL_PRICING: ModelPricing[] = [
   // OpenAI
   { modelId: 'openai/gpt-4o', provider: 'openrouter', displayName: 'GPT-4o', inputCostPerM: 2.50, outputCostPerM: 10 },
   { modelId: 'openai/gpt-4o-mini', provider: 'openrouter', displayName: 'GPT-4o Mini', inputCostPerM: 0.15, outputCostPerM: 0.60 },
+  { modelId: 'openai/gpt-5', provider: 'openrouter', displayName: 'GPT-5', inputCostPerM: 1.25, outputCostPerM: 10 },
+  { modelId: 'openai/gpt-5-mini', provider: 'openrouter', displayName: 'GPT-5 Mini', inputCostPerM: 0.25, outputCostPerM: 2 },
+  { modelId: 'openai/gpt-5.2', provider: 'openrouter', displayName: 'GPT-5.2', inputCostPerM: 1.25, outputCostPerM: 10 },
+  { modelId: 'openai/gpt-5.4', provider: 'openrouter', displayName: 'GPT-5.4', inputCostPerM: 2.50, outputCostPerM: 15 },
 ];
 
 async function seed() {

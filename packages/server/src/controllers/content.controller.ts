@@ -49,6 +49,32 @@ export async function deleteContent(req: Request, res: Response<ApiResponse<unkn
   }
 }
 
+export async function createBatch(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const items = await contentService.createMultiPlatformContent({
+      ...req.body,
+      userId: req.user.userId,
+    });
+    res.status(201).json({ success: true, data: items });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function generateMulti(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const result = await contentService.generateMultiPlatformContent({
+      ...req.body,
+      userId: req.user.userId,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function listChannels(_req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
   try {
     const channels = await contentService.listChannels();

@@ -316,6 +316,8 @@ export const contentItems = pgTable('content_items', {
   body: text('body').notNull(),
   contentType: varchar('content_type', { length: 50 }).notNull().default('markdown'),
   status: varchar('status', { length: 50 }).notNull().default('draft'),
+  imageUrl: varchar('image_url', { length: 500 }),
+  sourceContentId: uuid('source_content_id'),
   tags: jsonb('tags').notNull().default('[]'),
   metadata: jsonb('metadata').notNull().default('{}'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -325,6 +327,8 @@ export const contentItems = pgTable('content_items', {
   index('idx_content_items_user_id').on(t.userId),
   index('idx_content_items_flow_id').on(t.flowId),
   index('idx_content_items_channel_id').on(t.channelId),
+  // Index: find repurposed posts linked to a parent content item
+  index('idx_content_items_source_content_id').on(t.sourceContentId),
 ]);
 
 // ============================================================
@@ -508,6 +512,101 @@ export const messages = pgTable('messages', {
   // Index: list messages by conversation
   index('idx_messages_conversation_id').on(t.conversationId),
 ]);
+
+// ============================================================
+// PROMPTS (user prompt library)
+// Normal form: 2NF
+// ============================================================
+
+export const prompts = pgTable('prompts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  body: text('body').notNull(),
+  defaultModel: varchar('default_model', { length: 100 }),
+  category: varchar('category', { length: 50 }).notNull().default('custom'),
+  isActive: boolean('is_active').notNull().default(true),
+  currentVersion: integer('current_version').notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // Index: list prompts by user
+  index('idx_prompts_user_id').on(t.userId),
+]);
+
+// ============================================================
+// PROMPT VERSIONS (version history for prompts — append-only)
+// Normal form: 2NF
+// ============================================================
+
+export const promptVersions = pgTable('prompt_versions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  promptId: uuid('prompt_id')
+    .notNull()
+    .references(() => prompts.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  body: text('body').notNull(),
+  defaultModel: varchar('default_model', { length: 100 }),
+  changelog: text('changelog'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // Index: list versions for a prompt
+  index('idx_prompt_versions_prompt_id').on(t.promptId),
+  // Unique: one version number per prompt
+  uniqueIndex('idx_prompt_versions_prompt_version').on(t.promptId, t.version),
+]);
+
+// ============================================================
+// SCHEDULED POSTS (content scheduling for publishing)
+// Normal form: 2NF
+// ============================================================
+
+export const scheduledPosts = pgTable('scheduled_posts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  contentItemId: uuid('content_item_id')
+    .notNull()
+    .references(() => contentItems.id, { onDelete: 'cascade' }),
+  channelId: uuid('channel_id')
+    .references(() => channels.id, { onDelete: 'set null' }),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // Index: list scheduled posts by user
+  index('idx_scheduled_posts_user_id').on(t.userId),
+  // Index: lookup by content item
+  index('idx_scheduled_posts_content_item_id').on(t.contentItemId),
+  // Index: lookup by channel
+  index('idx_scheduled_posts_channel_id').on(t.channelId),
+  // Composite: cron job polls for due posts (WHERE status='pending' AND scheduled_at <= now)
+  index('idx_scheduled_posts_status_scheduled_at').on(t.status, t.scheduledAt),
+]);
+
+// ============================================================
+// SYSTEM PROMPTS (platform-level prompts used by AI features)
+// Normal form: 2NF
+// ============================================================
+
+export const systemPrompts = pgTable('system_prompts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  slug: varchar('slug', { length: 100 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  body: text('body').notNull(),
+  category: varchar('category', { length: 50 }).notNull().default('general'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ============================================================
 // OLAP: DIMENSION — MODEL PRICING

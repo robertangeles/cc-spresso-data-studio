@@ -1,0 +1,208 @@
+import { useState, useCallback } from 'react';
+import { api } from '../lib/api';
+
+interface ContentBuilderState {
+  title: string;
+  mainBody: string;
+  platformBodies: Record<string, string>;
+  imageUrl: string | null;
+  selectedChannels: string[];
+  activePromptId: string | null;
+  activeTab: string | null;
+  isDirty: boolean;
+  isSaving: boolean;
+  isAdapting: boolean;
+}
+
+const initialState: ContentBuilderState = {
+  title: '',
+  mainBody: '',
+  platformBodies: {},
+  imageUrl: null,
+  selectedChannels: [],
+  activePromptId: null,
+  activeTab: null,
+  isDirty: false,
+  isSaving: false,
+  isAdapting: false,
+};
+
+export function useContentBuilder() {
+  const [state, setState] = useState<ContentBuilderState>(initialState);
+
+  const markDirty = useCallback(() => {
+    setState((prev) => (prev.isDirty ? prev : { ...prev, isDirty: true }));
+  }, []);
+
+  const setTitle = useCallback(
+    (title: string) => {
+      setState((prev) => ({ ...prev, title }));
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const setMainBody = useCallback(
+    (mainBody: string) => {
+      setState((prev) => ({ ...prev, mainBody }));
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const setPlatformBody = useCallback(
+    (channelId: string, body: string) => {
+      setState((prev) => ({
+        ...prev,
+        platformBodies: { ...prev.platformBodies, [channelId]: body },
+      }));
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const setImageUrl = useCallback(
+    (url: string | null) => {
+      setState((prev) => ({ ...prev, imageUrl: url }));
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const toggleChannel = useCallback(
+    (channelId: string) => {
+      setState((prev) => {
+        const isSelected = prev.selectedChannels.includes(channelId);
+        const selectedChannels = isSelected
+          ? prev.selectedChannels.filter((id) => id !== channelId)
+          : [...prev.selectedChannels, channelId];
+
+        // If we removed the active tab, fall back to the first selected channel
+        let activeTab = prev.activeTab;
+        if (isSelected && prev.activeTab === channelId) {
+          activeTab = selectedChannels.length > 0 ? selectedChannels[0] : null;
+        }
+        // If we added the first channel, make it active
+        if (!isSelected && selectedChannels.length === 1) {
+          activeTab = channelId;
+        }
+
+        return { ...prev, selectedChannels, activeTab };
+      });
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const setActiveTab = useCallback((channelId: string | null) => {
+    setState((prev) => ({ ...prev, activeTab: channelId }));
+  }, []);
+
+  const loadPrompt = useCallback((promptId: string) => {
+    setState((prev) => ({ ...prev, activePromptId: promptId }));
+  }, []);
+
+  const insertFromChat = useCallback(
+    (text: string) => {
+      setState((prev) => {
+        // If a platform tab is active and it has a custom body, append there
+        if (prev.activeTab && prev.platformBodies[prev.activeTab] !== undefined) {
+          return {
+            ...prev,
+            platformBodies: {
+              ...prev.platformBodies,
+              [prev.activeTab]: prev.platformBodies[prev.activeTab] + '\n' + text,
+            },
+          };
+        }
+        // Otherwise append to main body
+        return {
+          ...prev,
+          mainBody: prev.mainBody ? prev.mainBody + '\n' + text : text,
+        };
+      });
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const saveAsDraft = useCallback(async () => {
+    setState((prev) => ({ ...prev, isSaving: true }));
+    try {
+      const current = state;
+      const items = current.selectedChannels.map((channelId) => ({
+        title: current.title,
+        body: current.platformBodies[channelId] || current.mainBody,
+        channelId,
+        status: 'draft' as const,
+        imageUrl: current.imageUrl,
+      }));
+
+      // If no channels selected, save a single generic draft
+      if (items.length === 0) {
+        items.push({
+          title: current.title,
+          body: current.mainBody,
+          channelId: null as unknown as string,
+          status: 'draft' as const,
+          imageUrl: current.imageUrl,
+        });
+      }
+
+      await api.post('/content/batch', { items });
+      setState((prev) => ({ ...prev, isDirty: false, isSaving: false }));
+    } catch {
+      setState((prev) => ({ ...prev, isSaving: false }));
+    }
+  }, [state]);
+
+  const adaptAll = useCallback(async () => {
+    setState((prev) => ({ ...prev, isAdapting: true }));
+    try {
+      const current = state;
+      const res = await api.post<{ success: boolean; data: Record<string, string> }>(
+        '/content/generate-multi',
+        {
+          mainBody: current.mainBody,
+          channelIds: current.selectedChannels,
+          model: 'claude-sonnet-4-6',
+        },
+      );
+
+      const bodies = res.data.data;
+      setState((prev) => ({
+        ...prev,
+        platformBodies: { ...prev.platformBodies, ...bodies },
+        activeTab: prev.selectedChannels.length > 0 ? prev.selectedChannels[0] : prev.activeTab,
+        isAdapting: false,
+      }));
+    } catch (err) {
+      console.error('Failed to adapt content for platforms:', err);
+      setState((prev) => ({ ...prev, isAdapting: false }));
+    }
+  }, [state]);
+
+  const reset = useCallback(() => {
+    setState(initialState);
+  }, []);
+
+  return {
+    // State
+    ...state,
+
+    // Setters
+    setTitle,
+    setMainBody,
+    setPlatformBody,
+    setImageUrl,
+
+    // Actions
+    toggleChannel,
+    setActiveTab,
+    loadPrompt,
+    insertFromChat,
+    saveAsDraft,
+    adaptAll,
+    reset,
+  };
+}

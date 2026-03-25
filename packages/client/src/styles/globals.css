@@ -132,6 +132,19 @@
     background-size: 200% 100%;
     animation: shimmer 2s linear infinite;
   }
+
+  /* Content shimmer — subtle accent glow for adapting state */
+  .animate-shimmer {
+    background: linear-gradient(90deg, transparent 25%, rgba(255,214,10,0.05) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  /* Stagger animation helper */
+  .stagger-1 { animation-delay: 50ms; animation-fill-mode: both; }
+  .stagger-2 { animation-delay: 100ms; animation-fill-mode: both; }
+  .stagger-3 { animation-delay: 150ms; animation-fill-mode: both; }
+  .stagger-4 { animation-delay: 200ms; animation-fill-mode: both; }
 }
 
 /* Keyframes (also defined in tailwind config for JIT, kept here for @apply) */

@@ -17,8 +17,11 @@ import { ProfilePage } from './pages/settings/ProfilePage';
 import { MediaSettingsPage } from './pages/settings/MediaSettingsPage';
 import { SiteSettingsPage } from './pages/settings/SiteSettingsPage';
 import UsageDashboardPage from './pages/settings/UsageDashboardPage';
+import { SystemPromptsPage } from './pages/settings/SystemPromptsPage';
 import { ContentLibraryPage } from './pages/ContentLibraryPage';
+import { ContentBuilderPage } from './pages/ContentBuilderPage';
 import { ChatPage } from './pages/ChatPage';
+import { ContentCalendarPage } from './pages/ContentCalendarPage';
 
 export function App() {
   return (
@@ -39,7 +42,9 @@ export function App() {
               <Route path="/skills" element={<SkillsCatalogPage />} />
               <Route path="/skills/create" element={<SkillCreatorPage />} />
               <Route path="/skills/:id/edit" element={<SkillCreatorPage />} />
-              <Route path="/content" element={<ContentLibraryPage />} />
+              <Route path="/content" element={<ContentBuilderPage />} />
+              <Route path="/content/library" element={<ContentLibraryPage />} />
+              <Route path="/content/calendar" element={<ContentCalendarPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/settings" element={<SettingsLayout />}>
                 <Route index element={<Navigate to="integrations/database" replace />} />
@@ -49,6 +54,7 @@ export function App() {
                 <Route path="admin/roles" element={<RoleManagementPage />} />
                 <Route path="admin/site" element={<SiteSettingsPage />} />
                 <Route path="admin/usage" element={<UsageDashboardPage />} />
+                <Route path="admin/system-prompts" element={<SystemPromptsPage />} />
               </Route>
             </Route>
           </Route>
