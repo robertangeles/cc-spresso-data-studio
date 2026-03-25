@@ -96,3 +96,68 @@ curl -X POST http://localhost:3003/api/chat/conversations -H "Authorization: Bea
 - Final build command: `npm install -g pnpm && pnpm install && pnpm -r build`
 
 **Rule:** For pnpm monorepos on Render: always use `npm install -g pnpm` (not corepack), and always use `pnpm -r build` (not `--filter`) to ensure workspace dependencies resolve in the correct order.
+
+## 10. Render deployment: devDependencies not installed in production
+
+**Problem:** Render sets `NODE_ENV=production` which tells pnpm to skip `devDependencies`. But `@types/*` packages (express, node, etc.) are devDependencies needed for the `tsc` build step. Build fails with "Could not find a declaration file" errors for every import.
+
+**Fix:** Prefix the install step with `NODE_ENV=development` to force all dependencies to install during build:
+```
+NODE_ENV=development pnpm install
+```
+
+**Rule:** Always use `NODE_ENV=development pnpm install` in Render build commands. The production NODE_ENV is only needed at runtime (start command), not during build. Build needs all deps including @types.
+
+## 11. Render deployment: stale tsconfig.tsbuildinfo breaks declaration generation
+
+**Problem:** `tsconfig.tsbuildinfo` is committed to git with absolute local machine paths. On Render, TypeScript sees the stale buildinfo and may skip regenerating `.d.ts` declaration files. Server then can't find type declarations for `@cc/shared`.
+
+**Fix:** Delete the buildinfo before building:
+```
+rm -f packages/shared/tsconfig.tsbuildinfo
+```
+
+**Rule:** Either add `tsconfig.tsbuildinfo` to `.gitignore`, or delete it in the Render build command before compiling. Stale buildinfo from a different machine will cause silent type resolution failures.
+
+## 12. Render deployment: static file path must resolve from compiled output, not source
+
+**Problem:** `path.resolve(__dirname, '../../../client/dist')` resolved to the wrong directory because `__dirname` in production points to `packages/server/dist/` (compiled), not `packages/server/src/` (source). Off by one directory level, serving from `<root>/client/dist` instead of `<root>/packages/client/dist`.
+
+**Fix:** Use `process.cwd()` for production paths instead of `__dirname` with relative traversal:
+```typescript
+const clientDist = path.join(process.cwd(), 'packages/client/dist');
+```
+
+**Rule:** Never use `__dirname` with relative paths for cross-package references in production. Use `process.cwd()` (always the project root) or environment variables. Always count directory levels from the **compiled output** location, not the source file.
+
+## 13. Render deployment: DATABASE_URL needs sslmode=require
+
+**Problem:** Render PostgreSQL requires SSL connections. The server's `pg.Pool` connects without SSL by default, causing "SSL/TLS required" fatal errors on startup.
+
+**Fix:** Append `?sslmode=require` to the `DATABASE_URL` environment variable on Render.
+
+**Rule:** Always add `?sslmode=require` to any cloud-hosted PostgreSQL connection string. The server code already handles SSL when this flag is present — it's the env var that needs it.
+
+## 14. Render deployment: complete working build command for pnpm monorepo
+
+**Problem:** Multiple failed deploys due to cascading issues: no pnpm, no devDeps, stale buildinfo, wrong paths.
+
+**Final working build command:**
+```
+npm install -g pnpm@9 && NODE_ENV=development pnpm install && rm -f packages/shared/tsconfig.tsbuildinfo && pnpm -C packages/shared build && pnpm -C packages/server build && cd packages/client && npx vite build
+```
+
+**Rule:** Record the exact working build command. When deploying a new monorepo to Render, start from this template and adjust package names. Don't iterate on Render's slow build cycle — test the build command locally first with `NODE_ENV=production` to catch issues before pushing.
+
+## 15. Render deployment: custom domain setup (GoDaddy + Render)
+
+**Steps:**
+1. Render → Service → Settings → Custom Domains → Add domain
+2. GoDaddy DNS:
+   - Root domain: Two A records → `216.24.57.1` and `216.24.57.253`
+   - www subdomain: CNAME → `<service-name>.onrender.com`
+3. Set `CLIENT_URL=https://yourdomain.com` in Render env vars
+4. Render auto-provisions SSL certificate (Let's Encrypt)
+5. DNS propagation takes 5-10 minutes
+
+**Rule:** Always set both root (A records) and www (CNAME) so both URLs work. Use the root domain (no www) as the canonical `CLIENT_URL`.
