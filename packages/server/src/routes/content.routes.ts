@@ -9,6 +9,8 @@ router.get('/channels', contentController.listChannels);
 router.use(authenticate);
 
 router.get('/', contentController.listContent);
+router.post('/batch', contentController.createBatch);
+router.post('/generate-multi', contentController.generateMulti);
 router.get('/:id', contentController.getContent);
 router.put('/:id', contentController.updateContent);
 router.delete('/:id', contentController.deleteContent);

@@ -427,6 +427,33 @@ Structure:
 
 ------------------------------------------------------------------------
 
+# MANDATORY: Infection Virus Design Standard
+
+Every UI element must make the user want to touch it. This is not optional polish — it is a core design requirement for every page, component, and interaction in the application.
+
+## Principles
+
+-   **Glass morphism**: Use `backdrop-blur`, semi-transparent backgrounds (`bg-surface-2/50`), and `border-white/5` to create depth layers
+-   **Subtle amber glows**: Selected, active, and focused elements get soft glow shadows (`shadow-[0_0_12px_rgba(255,214,10,0.15)]`)
+-   **Gradient accents**: Buttons, borders, and highlights use gradients (`bg-gradient-to-r from-accent to-amber-600`) instead of flat colors
+-   **Depth that pulls you in**: Radial gradient backgrounds, inner shadows on inputs, cards that lift on hover (`hover:-translate-y-1 hover:shadow-dark-lg`)
+-   **Micro-animations that respond**: Spring easing (`ease-spring`), scale-in on selection, slide-up on mount, shimmer during loading, pulse on idle CTAs
+-   **Per-platform identity**: Each social platform gets its own accent color for chips, tabs, and preview cards — never generic gray
+-   **No flat surfaces**: Every card, panel, and section should have visible depth through gradients, borders, or shadows
+-   **Keyboard-first power user flow**: Every major action has a keyboard shortcut with visible hints
+
+## When Building New UI
+
+1. Apply glass morphism to cards and panels
+2. Add hover lift effects to interactive cards
+3. Use platform-specific colors where applicable
+4. Add stagger animations on list/grid mounts
+5. Ensure focus states have accent glow rings
+6. Progress bars and counters use color gradients (green → amber → red)
+7. Empty states must be inspiring, not clinical — use hero icons with glow, gradient text, and quick-start cards
+
+------------------------------------------------------------------------
+
 # When Generating Code
 
 Claude must:

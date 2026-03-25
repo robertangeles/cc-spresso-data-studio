@@ -15,6 +15,7 @@ const settingsNav = [
       { to: '/settings/admin/roles', label: 'Users & Roles' },
       { to: '/settings/admin/site', label: 'Site Settings' },
       { to: '/settings/admin/usage', label: 'Usage & Costs' },
+      { to: '/settings/admin/system-prompts', label: 'System Prompts' },
     ],
   },
 ];

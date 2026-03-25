@@ -720,20 +720,23 @@ function LiveStepCard({ step, flowId, onApprove, onOutputEdit, onRefresh, isRefr
     <div className={`rounded-lg border p-4 transition-all ${stateStyles[step.state]}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {step.state === 'running' && (
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
           )}
-          <span className="font-medium text-gray-900">Step {step.index + 1}: {step.skillName}</span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-dim text-xs font-bold text-accent">
+            {step.index + 1}
+          </span>
+          <span className="text-base font-semibold text-text-primary">{step.skillName}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">{step.model}</span>
+          <span className="text-xs text-text-tertiary">{step.model}</span>
           {(step.state === 'done' || step.state === 'error') && onRefresh && (
             <button
               type="button"
               onClick={() => onRefresh(step.index)}
               disabled={isRefreshing}
-              className="rounded px-2 py-0.5 text-[10px] font-medium text-brand-600 hover:bg-brand-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded px-2 py-0.5 text-[10px] font-medium text-accent hover:bg-accent-dim disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isRefreshing ? 'Refreshing...' : 'Regenerate'}
             </button>

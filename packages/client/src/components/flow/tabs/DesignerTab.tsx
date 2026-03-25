@@ -88,7 +88,7 @@ export function DesignerTab({ steps, fields, onStepsChange }: DesignerTabProps) 
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-medium text-gray-900">Select a Skill</h3>
+          <h3 className="font-medium text-text-primary">Select a Skill</h3>
           <Button variant="ghost" size="sm" onClick={() => setShowPicker(false)}>Cancel</Button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -98,8 +98,8 @@ export function DesignerTab({ steps, fields, onStepsChange }: DesignerTabProps) 
                 <div className="flex items-center gap-2">
                   <span className="text-xl">{skill.icon || '⚡'}</span>
                   <div>
-                    <p className="font-medium text-gray-900">{skill.name}</p>
-                    <p className="text-xs text-gray-500 line-clamp-1">{skill.description}</p>
+                    <p className="font-medium text-text-primary">{skill.name}</p>
+                    <p className="text-xs text-text-tertiary line-clamp-1">{skill.description}</p>
                   </div>
                 </div>
               </button>
@@ -114,15 +114,15 @@ export function DesignerTab({ steps, fields, onStepsChange }: DesignerTabProps) 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-medium text-gray-900">Pipeline Steps</h3>
-          <p className="text-sm text-gray-500">Chain skills together to process content.</p>
+          <h3 className="font-medium text-text-primary">Pipeline Steps</h3>
+          <p className="text-sm text-text-secondary">Chain skills together to process content.</p>
         </div>
         <Button size="sm" onClick={() => setShowPicker(true)}>+ Add Step</Button>
       </div>
 
       {localSteps.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center">
-          <p className="text-gray-500">No steps yet. Click "Add Step" to pick a skill.</p>
+        <div className="rounded-lg border border-dashed border-border-default py-8 text-center">
+          <p className="text-text-secondary">No steps yet. Click "Add Step" to pick a skill.</p>
         </div>
       ) : (
         localSteps.map((step, index) => {
@@ -134,26 +134,28 @@ export function DesignerTab({ steps, fields, onStepsChange }: DesignerTabProps) 
             <Card key={step.id} padding="md">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-dim text-xs font-bold text-accent">
+                      {index + 1}
+                    </span>
                     <span className="text-lg">{skill?.icon || '⚡'}</span>
-                    <span className="font-medium text-gray-900">
+                    <span className="text-base font-semibold text-text-primary">
                       {skill?.name || 'Unknown Skill'}
                     </span>
-                    <span className="text-xs text-gray-400">Step {index + 1}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={() => moveStep(index, -1)} disabled={index === 0}
-                      className="rounded p-1 text-gray-400 hover:bg-gray-100 disabled:opacity-30">↑</button>
+                      className="rounded p-1 text-text-tertiary hover:bg-surface-3 disabled:opacity-30">↑</button>
                     <button type="button" onClick={() => moveStep(index, 1)} disabled={index === localSteps.length - 1}
-                      className="rounded p-1 text-gray-400 hover:bg-gray-100 disabled:opacity-30">↓</button>
+                      className="rounded p-1 text-text-tertiary hover:bg-surface-3 disabled:opacity-30">↓</button>
                     <button type="button" onClick={() => removeStep(index)}
-                      className="rounded p-1 text-red-400 hover:bg-red-50">✕</button>
+                      className="rounded p-1 text-red-400 hover:bg-red-400/10">✕</button>
                   </div>
                 </div>
 
                 {/* Model selector */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-500">Model</label>
+                  <label className="mb-1 block text-xs font-medium text-text-secondary">Model</label>
                   <ModelSelector
                     value={step.model}
                     onChange={(model) => updateStep(index, { model })}
@@ -163,12 +165,12 @@ export function DesignerTab({ steps, fields, onStepsChange }: DesignerTabProps) 
                 {/* Input mappings */}
                 {config?.inputs && config.inputs.length > 0 && (
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-500">Input Mappings</label>
+                    <label className="mb-1 block text-xs font-medium text-text-secondary">Input Mappings</label>
                     <div className="space-y-1">
                       {config.inputs.map((input) => (
                         <div key={input.key} className="flex items-center gap-2 text-sm">
-                          <span className="w-24 shrink-0 truncate text-xs font-mono text-gray-600">{input.key}</span>
-                          <span className="text-gray-400">←</span>
+                          <span className="w-24 shrink-0 truncate text-xs font-mono text-text-secondary">{input.key}</span>
+                          <span className="text-text-tertiary">←</span>
                           <select
                             value={step.inputMappings?.[input.key] ?? ''}
                             onChange={(e) =>
@@ -176,7 +178,7 @@ export function DesignerTab({ steps, fields, onStepsChange }: DesignerTabProps) 
                                 inputMappings: { ...step.inputMappings, [input.key]: e.target.value },
                               })
                             }
-                            className="flex-1 rounded border border-gray-200 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                            className="flex-1 rounded border border-border-default bg-surface-2 px-2 py-1 text-xs text-text-primary focus:border-accent focus:outline-none"
                           >
                             <option value="">Auto / Default</option>
                             {sources.map((s) => (
@@ -190,8 +192,8 @@ export function DesignerTab({ steps, fields, onStepsChange }: DesignerTabProps) 
                 )}
 
                 {/* Editor config */}
-                <div className="border-t border-gray-100 pt-3">
-                  <label className="flex items-center gap-2 text-xs font-medium text-gray-500">
+                <div className="border-t border-border-default pt-3">
+                  <label className="flex items-center gap-2 text-xs font-medium text-text-secondary">
                     <input
                       type="checkbox"
                       checked={step.editor?.enabled ?? false}
@@ -205,33 +207,33 @@ export function DesignerTab({ steps, fields, onStepsChange }: DesignerTabProps) 
                         };
                         updateStep(index, { editor: { ...editor, enabled: e.target.checked } });
                       }}
-                      className="rounded border-gray-300"
+                      className="rounded border-border-default"
                     />
                     Enable Editor (AI critique loop)
                   </label>
 
                   {step.editor?.enabled && (
-                    <div className="mt-2 space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                    <div className="mt-2 space-y-2 rounded-lg border border-border-default bg-surface-2 p-3">
                       <div>
-                        <label className="mb-1 block text-xs font-medium text-gray-500">Editor Model</label>
+                        <label className="mb-1 block text-xs font-medium text-text-secondary">Editor Model</label>
                         <ModelSelector
                           value={step.editor.model}
                           onChange={(model) => updateStep(index, { editor: { ...step.editor!, model } })}
                         />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs font-medium text-gray-500">Editor Persona</label>
+                        <label className="mb-1 block text-xs font-medium text-text-secondary">Editor Persona</label>
                         <textarea
                           value={step.editor.systemPrompt}
                           onChange={(e) => updateStep(index, { editor: { ...step.editor!, systemPrompt: e.target.value } })}
                           placeholder="Describe the editor's role and criteria..."
                           rows={6}
-                          className="w-full rounded-lg border border-gray-200 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                          className="w-full rounded-lg border border-border-default bg-surface-3 px-2 py-1 text-xs text-text-primary focus:border-accent focus:outline-none"
                         />
                       </div>
                       <div className="flex gap-3">
                         <div className="flex-1">
-                          <label className="mb-1 block text-xs font-medium text-gray-500">Max Rounds</label>
+                          <label className="mb-1 block text-xs font-medium text-text-secondary">Max Rounds</label>
                           <input
                             type="range"
                             min={1}
@@ -240,16 +242,16 @@ export function DesignerTab({ steps, fields, onStepsChange }: DesignerTabProps) 
                             onChange={(e) => updateStep(index, { editor: { ...step.editor!, maxRounds: parseInt(e.target.value) } })}
                             className="w-full"
                           />
-                          <div className="flex justify-between text-[10px] text-gray-400">
+                          <div className="flex justify-between text-[10px] text-text-tertiary">
                             <span>1</span><span>{step.editor.maxRounds}</span><span>10</span>
                           </div>
                         </div>
                         <div className="flex-1">
-                          <label className="mb-1 block text-xs font-medium text-gray-500">Approval</label>
+                          <label className="mb-1 block text-xs font-medium text-text-secondary">Approval</label>
                           <select
                             value={step.editor.approvalMode}
                             onChange={(e) => updateStep(index, { editor: { ...step.editor!, approvalMode: e.target.value as 'auto' | 'manual' } })}
-                            className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                            className="w-full rounded border border-border-default bg-surface-3 px-2 py-1 text-xs text-text-primary focus:border-accent focus:outline-none"
                           >
                             <option value="auto">Auto (editor decides)</option>
                             <option value="manual">Manual (you approve)</option>
@@ -265,7 +267,7 @@ export function DesignerTab({ steps, fields, onStepsChange }: DesignerTabProps) 
         })
       )}
 
-      <p className="text-xs text-gray-400">{localSteps.length} step{localSteps.length !== 1 ? 's' : ''}</p>
+      <p className="text-xs text-text-tertiary">{localSteps.length} step{localSteps.length !== 1 ? 's' : ''}</p>
     </div>
   );
 }

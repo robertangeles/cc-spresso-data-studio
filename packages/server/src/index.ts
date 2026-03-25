@@ -6,6 +6,7 @@ import { seedBuiltinSkills } from './services/skills/seed.js';
 import { seedAIProviders, seedRoles } from './services/admin.service.js';
 import { providerRegistry } from './services/ai/provider.registry.js';
 import { seedChannels } from './services/content.service.js';
+import { seedDefaultPrompts } from './services/system-prompt.service.js';
 
 async function start() {
   await verifyConnection();
@@ -13,6 +14,7 @@ async function start() {
   await seedRoles();
   await seedAIProviders();
   await seedChannels();
+  await seedDefaultPrompts();
   await providerRegistry.loadFromDatabase();
 
   app.listen(config.port, () => {

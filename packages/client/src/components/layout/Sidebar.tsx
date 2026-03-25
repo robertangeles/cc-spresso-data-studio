@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Coffee, Plus, MessageSquare, LayoutDashboard, Workflow, Zap, FileText, Settings, User, LogOut, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Coffee, Plus, MessageSquare, LayoutDashboard, Workflow, Zap, PenTool, Library, CalendarDays, Settings, User, LogOut, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
@@ -15,7 +15,9 @@ const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/flows', label: 'Orchestrations', icon: Workflow },
   { to: '/skills', label: 'Skills', icon: Zap },
-  { to: '/content', label: 'Content', icon: FileText },
+  { to: '/content', label: 'Content Builder', icon: PenTool },
+  { to: '/content/library', label: 'Content Library', icon: Library },
+  { to: '/content/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 

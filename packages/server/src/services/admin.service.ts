@@ -27,7 +27,11 @@ const DEFAULT_PROVIDERS: ProviderDef[] = [
     models: [
       { id: 'openrouter/auto', name: 'Auto (best available)', description: 'OpenRouter picks the best model' },
       { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', description: 'Via OpenRouter' },
-      { id: 'openai/gpt-4o', name: 'GPT-4o', description: 'Via OpenRouter' },
+      { id: 'openai/gpt-5.4', name: 'GPT-5.4', description: 'Latest frontier — 1M context ($2.50/$15)' },
+      { id: 'openai/gpt-5.2', name: 'GPT-5.2', description: 'Strong agentic + long context' },
+      { id: 'openai/gpt-5', name: 'GPT-5', description: 'Flagship GPT-5 ($1.25/$10)' },
+      { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini', description: 'Fast + cheap ($0.25/$2)' },
+      { id: 'openai/gpt-4o', name: 'GPT-4o', description: 'Previous gen flagship' },
       { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'Via OpenRouter' },
       { id: 'meta-llama/llama-3.1-405b', name: 'Llama 3.1 405B', description: 'Via OpenRouter' },
       { id: 'perplexity/sonar-pro', name: 'Perplexity Sonar Pro', description: 'Web search built-in — best for research' },

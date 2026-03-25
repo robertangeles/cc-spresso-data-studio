@@ -1,16 +1,23 @@
 import { eq, and, ilike, or, desc } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
+import { providerRegistry } from './ai/index.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
 
 // --- Channel seed ---
 
 const DEFAULT_CHANNELS = [
-  { name: 'Twitter / X', slug: 'twitter', type: 'twitter', icon: '🐦', config: { charLimit: 280, format: 'short-form' } },
-  { name: 'LinkedIn', slug: 'linkedin', type: 'linkedin', icon: '💼', config: { charLimit: 3000, format: 'professional' } },
-  { name: 'Email', slug: 'email', type: 'email', icon: '📧', config: { charLimit: 0, format: 'html' } },
+  { name: 'Twitter / X', slug: 'twitter', type: 'twitter', icon: '🐦', config: { charLimit: 25000, optimalCharLimit: 280, format: 'short-form', imageWidth: 1200, imageHeight: 675, aspectRatio: '1.91:1' } },
+  { name: 'LinkedIn', slug: 'linkedin', type: 'linkedin', icon: '💼', config: { charLimit: 3000, optimalCharLimit: 1500, format: 'professional', imageWidth: 1200, imageHeight: 627, aspectRatio: '1.91:1' } },
+  { name: 'Email', slug: 'email', type: 'email', icon: '📧', config: { charLimit: 0, format: 'html', imageWidth: 600 } },
   { name: 'Blog', slug: 'blog', type: 'blog', icon: '📝', config: { charLimit: 0, format: 'long-form' } },
-  { name: 'Instagram', slug: 'instagram', type: 'instagram', icon: '📸', config: { charLimit: 2200, format: 'visual' } },
+  { name: 'Instagram', slug: 'instagram', type: 'instagram', icon: '📸', config: { charLimit: 2200, optimalCharLimit: 125, format: 'visual', imageWidth: 1080, imageHeight: 1080, aspectRatio: '1:1' } },
+  { name: 'Facebook', slug: 'facebook', type: 'facebook', icon: '📘', config: { charLimit: 63000, optimalCharLimit: 80, format: 'social', imageWidth: 1200, imageHeight: 630, aspectRatio: '1.91:1' } },
+  { name: 'Pinterest', slug: 'pinterest', type: 'pinterest', icon: '📌', config: { charLimit: 500, format: 'visual', imageWidth: 1000, imageHeight: 1500, aspectRatio: '2:3' } },
+  { name: 'TikTok', slug: 'tiktok', type: 'tiktok', icon: '🎵', config: { charLimit: 4000, format: 'video-caption', imageWidth: 1080, imageHeight: 1920, aspectRatio: '9:16' } },
+  { name: 'Threads', slug: 'threads', type: 'threads', icon: '🧵', config: { charLimit: 500, format: 'short-form', imageWidth: 1200, imageHeight: 600, aspectRatio: '2:1' } },
+  { name: 'Bluesky', slug: 'bluesky', type: 'bluesky', icon: '🦋', config: { charLimit: 300, format: 'short-form', maxImages: 4, maxImageSizeMb: 1 } },
+  { name: 'YouTube', slug: 'youtube', type: 'youtube', icon: '▶️', config: { charLimit: 5000, titleCharLimit: 100, format: 'video-description', imageWidth: 1280, imageHeight: 720, aspectRatio: '16:9' } },
 ];
 
 export async function seedChannels(): Promise<void> {
@@ -44,6 +51,8 @@ interface CreateContentData {
   body: string;
   contentType?: string;
   status?: string;
+  imageUrl?: string;
+  sourceContentId?: string;
   tags?: string[];
   metadata?: Record<string, unknown>;
 }
@@ -59,12 +68,64 @@ export async function createContentItem(data: CreateContentData) {
       body: data.body,
       contentType: data.contentType ?? 'markdown',
       status: data.status ?? 'draft',
+      imageUrl: data.imageUrl ?? null,
+      sourceContentId: data.sourceContentId ?? null,
       tags: data.tags ?? [],
       metadata: data.metadata ?? {},
     })
     .returning();
 
   return item;
+}
+
+/**
+ * Create content items for multiple platforms at once.
+ * Returns all created items with the first as the canonical "source".
+ */
+export async function createMultiPlatformContent(data: {
+  userId: string;
+  title: string;
+  mainBody: string;
+  platformBodies: Record<string, string>; // channelId -> adapted body
+  imageUrl?: string;
+  status?: string;
+}) {
+  const channelIds = Object.keys(data.platformBodies);
+  if (channelIds.length === 0) return [];
+
+  // Create the canonical (first) item
+  const [canonical] = await db
+    .insert(schema.contentItems)
+    .values({
+      userId: data.userId,
+      channelId: channelIds[0],
+      title: data.title,
+      body: data.platformBodies[channelIds[0]],
+      imageUrl: data.imageUrl ?? null,
+      status: data.status ?? 'draft',
+    })
+    .returning();
+
+  const results = [canonical];
+
+  // Create derived items linked to canonical
+  for (let i = 1; i < channelIds.length; i++) {
+    const [item] = await db
+      .insert(schema.contentItems)
+      .values({
+        userId: data.userId,
+        channelId: channelIds[i],
+        title: data.title,
+        body: data.platformBodies[channelIds[i]],
+        imageUrl: data.imageUrl ?? null,
+        sourceContentId: canonical.id,
+        status: data.status ?? 'draft',
+      })
+      .returning();
+    results.push(item);
+  }
+
+  return results;
 }
 
 interface ListContentOptions {
@@ -139,4 +200,133 @@ export async function updateContentItem(id: string, data: UpdateContentData, use
 export async function deleteContentItem(id: string, userId: string) {
   await getContentItem(id, userId);
   await db.delete(schema.contentItems).where(eq(schema.contentItems.id, id));
+}
+
+/**
+ * Generate platform-adapted content using AI.
+ * Takes a main body and adapts it for multiple channels via the AI provider registry.
+ */
+export async function generateMultiPlatformContent(data: {
+  mainBody: string;
+  channelIds: string[];
+  model?: string;
+  userId: string;
+}): Promise<Record<string, string>> {
+  // 1. Load all channel configs for the given channelIds
+  const channels: Array<{ id: string; name: string; config: Record<string, unknown> }> = [];
+
+  for (const channelId of data.channelIds) {
+    const channel = await db.query.channels.findFirst({
+      where: eq(schema.channels.id, channelId),
+    });
+
+    if (!channel) {
+      logger.warn({ channelId }, 'Channel not found during multi-platform generation');
+      continue;
+    }
+
+    channels.push({
+      id: channel.id,
+      name: channel.name,
+      config: channel.config as Record<string, unknown>,
+    });
+  }
+
+  // If no valid channels found, return mainBody for all requested IDs
+  if (channels.length === 0) {
+    const fallback: Record<string, string> = {};
+    for (const channelId of data.channelIds) {
+      fallback[channelId] = data.mainBody;
+    }
+    return fallback;
+  }
+
+  // 2. Build system prompt
+  const systemPrompt =
+    'You are a content adaptation expert. Adapt the following content for multiple social media platforms. ' +
+    'Return ONLY a valid JSON object where each key is the channel ID and the value is the adapted content. ' +
+    'Do not include any other text, markdown formatting, or code fences.';
+
+  // 3. Build user message with channel details
+  const channelDescriptions = channels.map((ch) => {
+    const cfg = ch.config;
+    const charLimit = typeof cfg.charLimit === 'number' ? cfg.charLimit : 'unlimited';
+    const optimalCharLimit = typeof cfg.optimalCharLimit === 'number' ? cfg.optimalCharLimit : null;
+    const format = typeof cfg.format === 'string' ? cfg.format : 'general';
+
+    let desc = `Channel ${ch.id} (${ch.name}): Max ${charLimit} chars`;
+    if (optimalCharLimit) desc += `, optimal ${optimalCharLimit}`;
+    desc += `, format: ${format}`;
+
+    // Platform-specific hints
+    if (ch.name.toLowerCase().includes('twitter') || ch.name.toLowerCase().includes('x')) {
+      desc += '. Use hashtags, be punchy.';
+    } else if (ch.name.toLowerCase().includes('linkedin')) {
+      desc += '. Professional tone, use line breaks for readability.';
+    } else if (ch.name.toLowerCase().includes('instagram')) {
+      desc += '. Use emojis, hashtags at the end, engaging caption style.';
+    } else if (ch.name.toLowerCase().includes('email')) {
+      desc += '. Clear subject-worthy opening, conversational but professional.';
+    } else if (ch.name.toLowerCase().includes('blog')) {
+      desc += '. Long-form, well-structured with headers if appropriate.';
+    } else if (ch.name.toLowerCase().includes('tiktok')) {
+      desc += '. Casual, hook-driven, Gen-Z friendly tone.';
+    } else if (ch.name.toLowerCase().includes('facebook')) {
+      desc += '. Conversational, encourage engagement.';
+    } else if (ch.name.toLowerCase().includes('threads')) {
+      desc += '. Concise, conversational, thread-friendly.';
+    } else if (ch.name.toLowerCase().includes('bluesky')) {
+      desc += '. Short and conversational, no hashtags.';
+    } else if (ch.name.toLowerCase().includes('pinterest')) {
+      desc += '. Descriptive, keyword-rich for search.';
+    } else if (ch.name.toLowerCase().includes('youtube')) {
+      desc += '. SEO-friendly description with keywords.';
+    }
+
+    return desc;
+  }).join('\n');
+
+  const userMessage =
+    `Original content:\n\n${data.mainBody}\n\n` +
+    `Adapt this content for the following platforms:\n\n${channelDescriptions}`;
+
+  // 4. Call AI provider registry
+  try {
+    const response = await providerRegistry.complete({
+      model: data.model || 'claude-sonnet-4-6',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      temperature: 0.7,
+      maxTokens: 4000,
+    });
+
+    // 5. Parse the JSON response
+    const content = response.content.trim();
+    // Strip potential markdown code fences
+    const jsonStr = content.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+    const parsed = JSON.parse(jsonStr) as Record<string, string>;
+
+    // Build result ensuring all requested channelIds have a value
+    const result: Record<string, string> = {};
+    for (const channelId of data.channelIds) {
+      result[channelId] = typeof parsed[channelId] === 'string' ? parsed[channelId] : data.mainBody;
+    }
+
+    logger.info(
+      { channelCount: data.channelIds.length, model: data.model || 'claude-sonnet-4-6' },
+      'Multi-platform content generated via AI',
+    );
+
+    return result;
+  } catch (err) {
+    // 6. Fallback: if AI call or JSON parse fails, return original mainBody for each channel
+    logger.error({ err }, 'AI multi-platform generation failed, falling back to original content');
+    const fallback: Record<string, string> = {};
+    for (const channelId of data.channelIds) {
+      fallback[channelId] = data.mainBody;
+    }
+    return fallback;
+  }
 }
