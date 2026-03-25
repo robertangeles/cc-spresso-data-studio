@@ -66,33 +66,33 @@ export function SiteSettingsPage() {
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
       </div>
     );
   }
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-900">Site Settings</h3>
-      <p className="mt-1 text-sm text-gray-500 mb-6">
+      <h3 className="text-lg font-semibold text-text-primary">Site Settings</h3>
+      <p className="mt-1 text-sm text-text-secondary mb-6">
         System-wide configuration for Spresso.
       </p>
 
       <Card padding="lg">
-        <h4 className="mb-4 font-medium text-gray-900">Security</h4>
+        <h4 className="mb-4 font-medium text-text-primary">Security</h4>
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Session Duration</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">Session Duration</label>
             <select
               value={settings.sessionDuration}
               onChange={(e) => setSettings({ ...settings, sessionDuration: e.target.value })}
-              className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full max-w-xs rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
             >
               {SESSION_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-text-tertiary">
               How long before users need to re-authenticate. Longer sessions are more convenient but less secure.
               Changes take effect on next login.
             </p>
@@ -102,26 +102,26 @@ export function SiteSettingsPage() {
             <Button onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : 'Save'}
             </Button>
-            {saved && <span className="text-sm text-green-600">Saved</span>}
+            {saved && <span className="text-sm text-status-success">Saved</span>}
           </div>
         </div>
       </Card>
 
       <Card padding="lg">
-        <h4 className="mb-4 font-medium text-gray-900">AI Execution</h4>
+        <h4 className="mb-4 font-medium text-text-primary">AI Execution</h4>
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">AI Provider Timeout</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">AI Provider Timeout</label>
             <select
               value={settings.aiTimeoutSeconds}
               onChange={(e) => setSettings({ ...settings, aiTimeoutSeconds: parseInt(e.target.value) })}
-              className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full max-w-xs rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
             >
               {TIMEOUT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-text-tertiary">
               Maximum time to wait for an AI model response per step. Increase for slower models (Qwen, Opus) or long-form content.
               If a step times out, it retries once before failing.
             </p>
@@ -131,7 +131,7 @@ export function SiteSettingsPage() {
             <Button onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : 'Save'}
             </Button>
-            {saved && <span className="text-sm text-green-600">Saved</span>}
+            {saved && <span className="text-sm text-status-success">Saved</span>}
           </div>
         </div>
       </Card>

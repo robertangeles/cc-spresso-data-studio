@@ -34,23 +34,23 @@ export function Modal({ isOpen, onClose, title, children, confirmLabel, onConfir
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-opacity"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md transition-opacity animate-fade-in"
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
+      <div className="w-full max-w-md rounded-2xl border border-border-subtle bg-surface-2 p-6 shadow-dark-lg animate-scale-in">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <h3 className="text-lg font-semibold text-text-primary">{title}</h3>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            className="rounded-lg p-1 text-text-tertiary hover:bg-surface-3 hover:text-text-secondary transition-colors"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="text-sm text-gray-600 mb-6">{children}</div>
+        <div className="text-sm text-text-secondary mb-6">{children}</div>
 
         <div className="flex justify-end gap-3">
           <Button variant="ghost" onClick={onClose} disabled={isLoading}>

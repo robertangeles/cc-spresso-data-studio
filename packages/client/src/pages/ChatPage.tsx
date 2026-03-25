@@ -90,11 +90,11 @@ export function ChatPage() {
 
             {isSending && (
               <div className="flex justify-start mb-4">
-                <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3">
+                <div className="rounded-2xl border border-border-subtle bg-surface-2 px-4 py-3">
                   <div className="flex items-center gap-1.5">
-                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500" style={{ animationDelay: '0ms' }} />
-                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500" style={{ animationDelay: '150ms' }} />
-                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500" style={{ animationDelay: '300ms' }} />
+                    <div className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce-dots" style={{ animationDelay: '0ms' }} />
+                    <div className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce-dots" style={{ animationDelay: '200ms' }} />
+                    <div className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce-dots" style={{ animationDelay: '400ms' }} />
                   </div>
                 </div>
               </div>

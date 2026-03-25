@@ -6,10 +6,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500',
-  secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-brand-500',
-  danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
-  ghost: 'text-gray-600 hover:bg-gray-100 focus:ring-gray-500',
+  primary: 'bg-accent text-text-inverse hover:bg-accent-hover hover:shadow-glow-accent focus:ring-border-focus',
+  secondary: 'bg-surface-2 text-text-primary border border-border-default hover:bg-surface-3 hover:border-border-hover focus:ring-border-focus',
+  danger: 'bg-status-error text-white hover:brightness-110 focus:ring-status-error/40',
+  ghost: 'text-text-secondary hover:bg-surface-3 hover:text-text-primary focus:ring-border-focus',
 };
 
 const sizes = {
@@ -28,7 +28,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center rounded-lg font-medium transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 ease-spring hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-1 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 ${variants[variant]} ${sizes[size]} ${className}`}
       disabled={disabled}
       {...props}
     >

@@ -60,8 +60,8 @@ export function SkillsCatalogPage() {
     <div>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Skills</h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <h2 className="text-2xl font-bold text-text-primary">Skills</h2>
+          <p className="mt-1 text-sm text-text-secondary">
             Browse and use AI-powered skills to build your content workflows.
           </p>
         </div>
@@ -81,7 +81,7 @@ export function SkillsCatalogPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search skills..."
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+          className="rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2 focus:ring-offset-surface-0"
         />
         <div className="flex flex-wrap gap-1">
           {categories.map((cat) => (
@@ -91,8 +91,8 @@ export function SkillsCatalogPage() {
               onClick={() => setCategory(cat.value)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                 category === cat.value
-                  ? 'bg-brand-100 text-brand-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-accent-dim text-accent'
+                  : 'bg-surface-3 text-text-secondary hover:bg-surface-4'
               }`}
             >
               {cat.label}
@@ -103,18 +103,19 @@ export function SkillsCatalogPage() {
 
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
         </div>
       ) : skills.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {skills.map((skill) => (
-            <SkillCard
-              key={skill.id}
-              skill={skill}
-              onClick={() => setSelectedSkill(skill)}
-              canEdit={canEditSkill(skill)}
-              onEdit={() => navigate(`/skills/${skill.id}/edit`)}
-            />
+          {skills.map((skill, i) => (
+            <div key={skill.id} className="animate-slide-up" style={{ animationDelay: `${i * 75}ms` }}>
+              <SkillCard
+                skill={skill}
+                onClick={() => setSelectedSkill(skill)}
+                canEdit={canEditSkill(skill)}
+                onEdit={() => navigate(`/skills/${skill.id}/edit`)}
+              />
+            </div>
           ))}
         </div>
       ) : (
