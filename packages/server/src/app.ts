@@ -38,7 +38,7 @@ app.use('/api', router);
 
 // Production: serve Vite-built client static files
 if (!config.isDev) {
-  const clientDist = path.resolve(__dirname, '../../../client/dist');
+  const clientDist = path.resolve(__dirname, '../../client/dist');
   app.use(express.static(clientDist));
 
   // SPA fallback — all non-API routes serve index.html
