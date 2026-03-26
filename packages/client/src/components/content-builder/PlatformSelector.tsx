@@ -154,7 +154,10 @@ export function PlatformSelector({
   });
 
   return (
-    <div>
+    <div className="relative">
+      {/* Click-outside dismiss */}
+      {isExpanded && <div className="fixed inset-0 z-30" onClick={() => setIsExpanded(false)} />}
+
       {/* Summary bar */}
       <button
         type="button"
@@ -210,78 +213,73 @@ export function PlatformSelector({
         </div>
       </button>
 
-      {/* Expandable card grid */}
-      <div
-        className="transition-all duration-300 ease-in-out overflow-hidden"
-        style={{
-          maxHeight: isExpanded ? '600px' : '0px',
-          opacity: isExpanded ? 1 : 0,
-          marginTop: isExpanded ? '8px' : '0px',
-        }}
-      >
-        <div className="grid grid-cols-4 gap-2 p-3 bg-surface-1/40 rounded-xl border border-border-subtle">
-          {sortedChannels.map((ch) => {
-            const isSelected = selectedIds.includes(ch.id);
-            const isConnected = connectedPlatforms.includes(ch.slug);
-            const color = getColor(ch.slug);
-            const limit = formatCharLimit(ch.config?.charLimit as number | undefined | null);
+      {/* Floating card grid overlay */}
+      {isExpanded && (
+        <div className="absolute left-0 right-0 top-full mt-2 z-40 animate-scale-in">
+          <div className="grid grid-cols-4 gap-2 p-3 bg-surface-1 rounded-xl border border-border-subtle shadow-dark-lg backdrop-blur-glass">
+            {sortedChannels.map((ch) => {
+              const isSelected = selectedIds.includes(ch.id);
+              const isConnected = connectedPlatforms.includes(ch.slug);
+              const color = getColor(ch.slug);
+              const limit = formatCharLimit(ch.config?.charLimit as number | undefined | null);
 
-            return (
-              <button
-                key={ch.id}
-                type="button"
-                onClick={() => {
-                  onToggle(ch.id);
-                  // Show connect hint when selecting an unconnected social platform
-                  if (
-                    !isSelected &&
-                    !connectedPlatforms.includes(ch.slug) &&
-                    !ALWAYS_CONNECTED.includes(ch.slug)
-                  ) {
-                    setShowConnectHint(true);
-                  }
-                }}
-                className={`relative flex flex-col items-center gap-1.5 rounded-xl p-3 transition-all duration-200 ease-spring cursor-pointer group ${
-                  isSelected
-                    ? `bg-gradient-to-b ${color.cardBg} ${color.border} border ${color.glow} scale-[1.02]`
-                    : 'bg-surface-2/30 border border-transparent hover:bg-surface-2/60 hover:border-border-subtle hover:scale-[1.01]'
-                }`}
-              >
-                {/* Selected checkmark */}
-                {isSelected && (
+              return (
+                <button
+                  key={ch.id}
+                  type="button"
+                  onClick={() => {
+                    onToggle(ch.id);
+                    // Show connect hint when selecting an unconnected social platform
+                    if (
+                      !isSelected &&
+                      !connectedPlatforms.includes(ch.slug) &&
+                      !ALWAYS_CONNECTED.includes(ch.slug)
+                    ) {
+                      setShowConnectHint(true);
+                    }
+                  }}
+                  className={`relative flex flex-col items-center gap-1.5 rounded-xl p-3 transition-all duration-200 ease-spring cursor-pointer group ${
+                    isSelected
+                      ? `bg-gradient-to-b ${color.cardBg} ${color.border} border ${color.glow} scale-[1.02]`
+                      : 'bg-surface-2/30 border border-transparent hover:bg-surface-2/60 hover:border-border-subtle hover:scale-[1.01]'
+                  }`}
+                >
+                  {/* Selected checkmark */}
+                  {isSelected && (
+                    <span
+                      className={`absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full ${color.bg} shadow-md`}
+                    >
+                      <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
+                    </span>
+                  )}
+
+                  {/* Platform icon — large */}
                   <span
-                    className={`absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full ${color.bg} shadow-md`}
+                    className={`text-2xl leading-none transition-transform duration-200 ${isSelected ? 'scale-110' : 'group-hover:scale-105'}`}
                   >
-                    <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
+                    {ch.icon}
                   </span>
-                )}
 
-                {/* Platform icon — large */}
-                <span
-                  className={`text-2xl leading-none transition-transform duration-200 ${isSelected ? 'scale-110' : 'group-hover:scale-105'}`}
-                >
-                  {ch.icon}
-                </span>
-
-                {/* Platform name */}
-                <span
-                  className={`text-xs font-medium transition-colors ${isSelected ? color.text : 'text-text-secondary group-hover:text-text-primary'}`}
-                >
-                  {ch.name}
-                </span>
-
-                {/* Connection status + char limit */}
-                <div className="flex items-center gap-1.5">
+                  {/* Platform name */}
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-text-tertiary/30'}`}
-                  />
-                  <span className="text-[9px] text-text-tertiary">{limit}</span>
-                </div>
-              </button>
-            );
-          })}
+                    className={`text-xs font-medium transition-colors ${isSelected ? color.text : 'text-text-secondary group-hover:text-text-primary'}`}
+                  >
+                    {ch.name}
+                  </span>
+
+                  {/* Connection status + char limit */}
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-text-tertiary/30'}`}
+                    />
+                    <span className="text-[9px] text-text-tertiary">{limit}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Connection hint — shown once when selecting unconnected platform */}
       {showConnectHint && (
