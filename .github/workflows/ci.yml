@@ -33,17 +33,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Shared must build first — composite project references require
-      # .d.ts declarations to exist before dependents (server/client)
-      # can typecheck or lint. This is by design, not a workaround.
-      - name: Build shared package (declarations for server/client)
-        run: pnpm -C packages/shared build
-
-      - name: Lint
-        run: pnpm lint
-
+      # Build first: server uses tsc -b which builds shared via project
+      # references. Client uses tsc + vite. Order handled by pnpm workspace.
       - name: Build all packages
         run: pnpm build
+
+      # Lint after build: @typescript-eslint needs @cc/shared declarations
+      # which are generated during the build step above.
+      - name: Lint
+        run: pnpm lint
 
       - name: Unit tests
         run: pnpm test

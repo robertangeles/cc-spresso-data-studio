@@ -4,6 +4,13 @@ node_modules/
 # Build outputs
 dist/
 build/
+*.tsbuildinfo
+
+# TypeScript build artifacts (never commit .js/.d.ts next to .ts source)
+packages/shared/src/**/*.js
+packages/shared/src/**/*.js.map
+packages/shared/src/**/*.d.ts
+packages/shared/src/**/*.d.ts.map
 
 # Environment
 .env
