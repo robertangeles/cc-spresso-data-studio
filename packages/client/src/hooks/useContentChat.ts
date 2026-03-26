@@ -51,11 +51,13 @@ export function useContentChat(systemPrompt?: string | null) {
           metadata: { source: 'content-builder' },
         });
 
+        // Server returns { message: { id, content, ... }, usage: { ... } }
+        const msg = data.data.message ?? data.data;
         const assistantMsg: ChatMessage = {
-          id: data.data.id,
+          id: msg.id,
           role: 'assistant',
-          content: data.data.content,
-          createdAt: data.data.createdAt,
+          content: msg.content,
+          createdAt: msg.createdAt ?? msg.created_at ?? new Date().toISOString(),
         };
 
         // Replace temp user message with server version and add assistant reply
@@ -65,7 +67,7 @@ export function useContentChat(systemPrompt?: string | null) {
             ...withoutTemp,
             {
               ...tempUserMsg,
-              id: data.data.userMessageId || tempUserMsg.id,
+              id: msg.userMessageId || tempUserMsg.id,
             },
             assistantMsg,
           ];
