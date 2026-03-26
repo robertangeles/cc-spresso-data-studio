@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, ArrowUp, Check, ChevronDown, ChevronUp, Loader2, Wand2 } from 'lucide-react';
+import { useConfiguredModels } from '../../hooks/useConfiguredModels';
 
 interface MiniChatProps {
   messages: Array<{ id: string; role: 'user' | 'assistant'; content: string; createdAt: string }>;
@@ -18,12 +19,11 @@ export function MiniChat({
   onInsert,
   isSending,
   model,
-  onModelChange: _onModelChange,
+  onModelChange,
   activePromptName,
   onClearPrompt,
 }: MiniChatProps) {
-  // onModelChange available via _onModelChange for future model switcher integration
-  void _onModelChange;
+  const { models: configuredModels } = useConfiguredModels();
   const [collapsed, setCollapsed] = useState(false);
   const [input, setInput] = useState('');
   const [insertedId, setInsertedId] = useState<string | null>(null);
@@ -221,9 +221,23 @@ export function MiniChat({
                 className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[28px]"
               />
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[10px] text-text-tertiary font-medium px-1.5 py-0.5 rounded bg-surface-2">
-                  {model}
-                </span>
+                <select
+                  value={model}
+                  onChange={(e) => onModelChange(e.target.value)}
+                  className="text-[10px] text-text-tertiary font-medium px-1.5 py-0.5 rounded bg-surface-2 border border-border-subtle hover:border-border-default focus:border-accent/40 focus:outline-none cursor-pointer appearance-none pr-4 transition-colors"
+                  style={{
+                    backgroundImage:
+                      "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 4px center',
+                  }}
+                >
+                  {configuredModels.map((m) => (
+                    <option key={m.model} value={m.model}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={handleSend}

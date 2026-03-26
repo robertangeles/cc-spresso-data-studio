@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useConfiguredModels } from '../../hooks/useConfiguredModels';
 import {
   X,
   Sparkles,
@@ -54,21 +55,8 @@ const CATEGORIES = [
   { value: 'custom', label: 'Custom' },
 ];
 
-const MODELS = [
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-  { value: 'openai/gpt-4.1', label: 'GPT-4.1' },
-  { value: 'openai/gpt-4.1-mini', label: 'GPT-4.1 Mini' },
-  { value: 'openai/gpt-5-mini', label: 'GPT-5 Mini' },
-  { value: 'mistralai/mistral-small-2603', label: 'Mistral Small' },
-];
-
-const APEX_MODELS = [
-  { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
-  { value: 'openai/gpt-5-mini', label: 'GPT-5 Mini' },
-  { value: 'mistralai/mistral-small-2603', label: 'Mistral Small' },
-];
+// APEX-suitable models: cheap + fast (for prompt generation)
+const APEX_MODEL_IDS = ['claude-haiku-4-5', 'openai/gpt-5-mini', 'mistralai/mistral-small-2603'];
 
 const CONSTRAINT_OPTIONS = [
   'Time/Deadline',
@@ -115,12 +103,23 @@ const selectCls = `${inputCls} appearance-none cursor-pointer`;
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function PromptEditorModal({
-  isOpen,
-  onClose,
-  onSave,
-  editPrompt,
-}: PromptEditorModalProps) {
+export function PromptEditorModal({ isOpen, onClose, onSave, editPrompt }: PromptEditorModalProps) {
+  const { models: configuredModels } = useConfiguredModels();
+
+  // All configured models for the Manual tab model selector
+  const allModels = useMemo(
+    () => configuredModels.map((m) => ({ value: m.model, label: m.displayName })),
+    [configuredModels],
+  );
+
+  // Cheap/fast models for APEX generation
+  const apexModels = useMemo(() => {
+    const filtered = configuredModels.filter((m) => APEX_MODEL_IDS.includes(m.model));
+    return filtered.length > 0
+      ? filtered.map((m) => ({ value: m.model, label: m.displayName }))
+      : [{ value: 'claude-haiku-4-5', label: 'Haiku 4.5' }]; // fallback
+  }, [configuredModels]);
+
   /* ---- tabs & apex lifecycle ---- */
   const [activeTab, setActiveTab] = useState<'manual' | 'apex'>('manual');
   const [apexState, setApexState] = useState<'form' | 'loading' | 'review'>('form');
@@ -212,7 +211,13 @@ export function PromptEditorModal({
   /* ---- save handlers ---- */
   const handleManualSave = () => {
     if (!name.trim() || !body.trim()) return;
-    onSave({ name: name.trim(), description: description.trim(), body: body.trim(), category, defaultModel });
+    onSave({
+      name: name.trim(),
+      description: description.trim(),
+      body: body.trim(),
+      category,
+      defaultModel,
+    });
   };
 
   const handleApexSave = () => {
@@ -289,9 +294,7 @@ export function PromptEditorModal({
             type="button"
             onClick={() => setActiveTab('apex')}
             className={`relative px-4 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'apex'
-                ? 'text-accent'
-                : 'text-text-tertiary hover:text-text-secondary'
+              activeTab === 'apex' ? 'text-accent' : 'text-text-tertiary hover:text-text-secondary'
             }`}
           >
             <span className="flex items-center gap-1.5">
@@ -317,9 +320,7 @@ export function PromptEditorModal({
             <div className="space-y-4">
               {/* Name */}
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Name
-                </label>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">Name</label>
                 <input
                   type="text"
                   value={name}
@@ -376,7 +377,7 @@ export function PromptEditorModal({
                       onChange={(e) => setDefaultModel(e.target.value)}
                       className={selectCls}
                     >
-                      {MODELS.map((m) => (
+                      {allModels.map((m) => (
                         <option key={m.value} value={m.value}>
                           {m.label}
                         </option>
@@ -469,9 +470,7 @@ export function PromptEditorModal({
                             : 'bg-surface-3 border-border-subtle group-hover:border-text-tertiary'
                         }`}
                       >
-                        {constraints.includes(c) && (
-                          <Check className="h-3 w-3 text-white" />
-                        )}
+                        {constraints.includes(c) && <Check className="h-3 w-3 text-white" />}
                       </span>
                       <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
                         {c}
@@ -540,7 +539,7 @@ export function PromptEditorModal({
                     onChange={(e) => setApexModel(e.target.value)}
                     className={selectCls}
                   >
-                    {APEX_MODELS.map((m) => (
+                    {apexModels.map((m) => (
                       <option key={m.value} value={m.value}>
                         {m.label}
                       </option>
@@ -571,38 +570,28 @@ export function PromptEditorModal({
                 <span className="flex items-center justify-center h-6 w-6 rounded-full bg-green-500/20 text-green-400">
                   <Check className="h-4 w-4" />
                 </span>
-                <h3 className="text-base font-semibold text-text-primary">
-                  Prompt Generated!
-                </h3>
+                <h3 className="text-base font-semibold text-text-primary">Prompt Generated!</h3>
               </div>
 
               {/* Meta pills */}
               <div className="flex gap-3">
                 <span className="text-xs bg-surface-3 rounded-full px-3 py-1 text-text-secondary border border-border-subtle">
                   Framework:{' '}
-                  <span className="text-text-primary font-medium">
-                    {apexResult.framework}
-                  </span>
+                  <span className="text-text-primary font-medium">{apexResult.framework}</span>
                 </span>
                 <span className="text-xs bg-surface-3 rounded-full px-3 py-1 text-text-secondary border border-border-subtle">
                   Complexity:{' '}
-                  <span className="text-text-primary font-medium">
-                    {apexResult.complexity}
-                  </span>
+                  <span className="text-text-primary font-medium">{apexResult.complexity}</span>
                 </span>
               </div>
 
               {/* Editable name */}
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Name
-                </label>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">Name</label>
                 <input
                   type="text"
                   value={apexResult.suggestedName}
-                  onChange={(e) =>
-                    setApexResult({ ...apexResult, suggestedName: e.target.value })
-                  }
+                  onChange={(e) => setApexResult({ ...apexResult, suggestedName: e.target.value })}
                   className={inputCls}
                 />
               </div>
