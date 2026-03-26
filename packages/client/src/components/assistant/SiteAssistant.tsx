@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Sparkles, Minus, Send, Loader2 } from 'lucide-react';
+import { Bot, Minus, Send, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 
 interface Message {
@@ -13,9 +13,7 @@ const GREETING =
 
 export function SiteAssistant() {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: GREETING },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([{ role: 'assistant', content: GREETING }]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
@@ -88,7 +86,7 @@ export function SiteAssistant() {
         style={{ animation: 'fab-breathe 3s ease-in-out infinite' }}
         aria-label="Open site assistant"
       >
-        <Sparkles className="h-6 w-6 text-white" />
+        <Bot className="h-6 w-6 text-white" />
         {hasUnread && (
           <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-surface-0 bg-red-500" />
         )}
@@ -108,7 +106,7 @@ export function SiteAssistant() {
       {/* Header */}
       <div className="flex items-center justify-between bg-gradient-to-r from-accent to-amber-600 px-4 py-3">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-white" />
+          <Bot className="h-4 w-4 text-white" />
           <span className="text-sm font-semibold text-white">Spresso Assistant</span>
         </div>
         <button
@@ -123,10 +121,7 @@ export function SiteAssistant() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
+          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
               className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
                 msg.role === 'user'
@@ -171,9 +166,7 @@ export function SiteAssistant() {
             <Send className="h-3.5 w-3.5" />
           </button>
         </div>
-        <p className="mt-1.5 text-center text-[10px] text-text-muted">
-          Powered by Spresso AI
-        </p>
+        <p className="mt-1.5 text-center text-[10px] text-text-muted">Powered by Spresso AI</p>
       </div>
     </div>
   );

@@ -132,6 +132,9 @@ const PLATFORM_ORDER = [
   'youtube',
 ];
 
+// Platforms that don't need OAuth (always "connected")
+const ALWAYS_CONNECTED = ['blog', 'email'];
+
 export function PlatformSelector({
   channels,
   selectedIds,
@@ -139,6 +142,7 @@ export function PlatformSelector({
   connectedPlatforms = [],
 }: PlatformSelectorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showConnectHint, setShowConnectHint] = useState(false);
 
   const selectedChannels = channels.filter((ch) => selectedIds.includes(ch.id));
 
@@ -226,7 +230,17 @@ export function PlatformSelector({
               <button
                 key={ch.id}
                 type="button"
-                onClick={() => onToggle(ch.id)}
+                onClick={() => {
+                  onToggle(ch.id);
+                  // Show connect hint when selecting an unconnected social platform
+                  if (
+                    !isSelected &&
+                    !connectedPlatforms.includes(ch.slug) &&
+                    !ALWAYS_CONNECTED.includes(ch.slug)
+                  ) {
+                    setShowConnectHint(true);
+                  }
+                }}
                 className={`relative flex flex-col items-center gap-1.5 rounded-xl p-3 transition-all duration-200 ease-spring cursor-pointer group ${
                   isSelected
                     ? `bg-gradient-to-b ${color.cardBg} ${color.border} border ${color.glow} scale-[1.02]`
@@ -268,6 +282,26 @@ export function PlatformSelector({
           })}
         </div>
       </div>
+
+      {/* Connection hint — shown once when selecting unconnected platform */}
+      {showConnectHint && (
+        <div className="mt-2 flex items-center justify-between rounded-lg bg-accent/[0.06] border border-accent/15 px-3 py-2 animate-slide-up">
+          <p className="text-xs text-text-secondary">
+            <span className="text-accent font-medium">Tip:</span> Connect your social accounts in{' '}
+            <a href="/profile" className="text-accent underline hover:text-accent-hover">
+              Profile → Social Accounts
+            </a>{' '}
+            for auto-publishing. For now, content will be ready for manual posting.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowConnectHint(false)}
+            className="ml-3 text-text-tertiary hover:text-text-secondary text-xs shrink-0"
+          >
+            Got it
+          </button>
+        </div>
+      )}
     </div>
   );
 }
