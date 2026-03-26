@@ -25,6 +25,7 @@ import { useContentChat } from '../hooks/useContentChat';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/Button';
+import { useToast } from '../components/ui/Toast';
 
 interface Channel {
   id: string;
@@ -52,6 +53,7 @@ export function ContentBuilderPage() {
   const promptsHook = usePrompts();
   const chat = useContentChat(builder.activePromptBody);
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const userName = user?.name ?? 'User';
 
@@ -163,10 +165,16 @@ export function ContentBuilderPage() {
     category: string;
     defaultModel: string;
   }) => {
-    if (editingPrompt) {
-      await promptsHook.updatePrompt(editingPrompt.id, data);
-    } else {
-      await promptsHook.createPrompt(data);
+    try {
+      if (editingPrompt) {
+        await promptsHook.updatePrompt(editingPrompt.id, data);
+        toast('Prompt updated successfully', 'success');
+      } else {
+        await promptsHook.createPrompt(data);
+        toast('Prompt created successfully', 'success');
+      }
+    } catch {
+      toast('Failed to save prompt', 'error');
     }
     setPromptModalOpen(false);
     setEditingPrompt(null);
@@ -224,10 +232,10 @@ export function ContentBuilderPage() {
           scheduledAt: date,
         });
       }
-      alert(`Scheduled ${items.length} post(s) for ${new Date(date).toLocaleString()}`);
+      toast(`Scheduled ${items.length} post(s) for ${new Date(date).toLocaleString()}`, 'success');
     } catch (err) {
       console.error('Schedule failed:', err);
-      alert('Failed to schedule. Please try again.');
+      toast('Failed to schedule. Please try again.', 'error');
     }
   };
 

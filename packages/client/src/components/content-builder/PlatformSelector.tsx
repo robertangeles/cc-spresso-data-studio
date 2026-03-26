@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 
+interface Channel {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string;
+  config: Record<string, unknown>;
+}
+
 interface PlatformSelectorProps {
-  channels: Array<{
-    id: string;
-    name: string;
-    slug: string;
-    icon: string;
-    config: Record<string, unknown>;
-  }>;
+  channels: Channel[];
   selectedIds: string[];
   onToggle: (channelId: string) => void;
 }
@@ -160,10 +162,64 @@ function getPlatformColor(slug: string) {
   return PLATFORM_COLORS[slug] ?? DEFAULT_COLOR;
 }
 
+/** Grouped platform ordering — Social first, then Long-form */
+const PLATFORM_GROUPS = [
+  {
+    label: 'Social',
+    slugs: [
+      'twitter',
+      'linkedin',
+      'instagram',
+      'facebook',
+      'threads',
+      'bluesky',
+      'tiktok',
+      'pinterest',
+    ],
+  },
+  { label: 'Long-form', slugs: ['blog', 'email', 'youtube'] },
+];
+
+const KNOWN_SLUGS = PLATFORM_GROUPS.flatMap((g) => g.slugs);
+
 export function PlatformSelector({ channels, selectedIds, onToggle }: PlatformSelectorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const selectedChannels = channels.filter((ch) => selectedIds.includes(ch.id));
+
+  function renderChip(ch: Channel) {
+    const isSelected = selectedIds.includes(ch.id);
+    const limitLabel = formatCharLimit(ch.config?.charLimit as number | undefined | null);
+    const color = getPlatformColor(ch.slug);
+
+    return (
+      <button
+        key={ch.id}
+        type="button"
+        onClick={() => onToggle(ch.id)}
+        className={`relative inline-flex items-center gap-2 rounded-lg border-l-[3px] border px-3 py-2 text-sm font-medium transition-all duration-200 ease-spring hover:scale-[1.02] focus:outline-none focus:ring-1 focus:ring-border-focus ${
+          isSelected
+            ? `${color.gradientBg} ${color.border} ${color.text} ${color.glow} ${color.ring} ${color.leftBorder} animate-scale-in`
+            : `border-border-subtle bg-surface-2/50 text-text-secondary ${color.leftBorder} hover:border-border-default hover:text-text-primary hover:shadow-dark-sm`
+        }`}
+      >
+        {isSelected && (
+          <span
+            className={`absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full ${color.checkBg} shadow-md`}
+          >
+            <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
+          </span>
+        )}
+        <span
+          className={`leading-none transition-all duration-200 ${isSelected ? 'text-xl' : 'text-lg'}`}
+        >
+          {ch.icon}
+        </span>
+        <span>{ch.name}</span>
+        <span className="text-[10px] opacity-60 font-normal">{limitLabel}</span>
+      </button>
+    );
+  }
 
   return (
     <div>
@@ -222,7 +278,7 @@ export function PlatformSelector({ channels, selectedIds, onToggle }: PlatformSe
         </div>
       </button>
 
-      {/* Expandable chip grid */}
+      {/* Expandable chip grid — grouped by type */}
       <div
         className="transition-all duration-300 ease-in-out overflow-hidden"
         style={{
@@ -231,47 +287,37 @@ export function PlatformSelector({ channels, selectedIds, onToggle }: PlatformSe
           marginTop: isExpanded ? '8px' : '0px',
         }}
       >
-        <div className="flex flex-wrap gap-2">
-          {channels.map((ch) => {
-            const isSelected = selectedIds.includes(ch.id);
-            const limitLabel = formatCharLimit(ch.config?.charLimit as number | undefined | null);
-            const color = getPlatformColor(ch.slug);
-
+        <div className="bg-surface-1/40 rounded-xl border border-border-subtle p-4">
+          {PLATFORM_GROUPS.map((group) => {
+            const groupChannels = group.slugs
+              .map((slug) => channels.find((ch) => ch.slug === slug))
+              .filter((ch): ch is Channel => ch != null);
+            if (groupChannels.length === 0) return null;
             return (
-              <button
-                key={ch.id}
-                type="button"
-                onClick={() => onToggle(ch.id)}
-                className={`relative inline-flex items-center gap-2 rounded-lg border-l-[3px] border px-3 py-2 text-sm font-medium transition-all duration-200 ease-spring hover:scale-[1.02] focus:outline-none focus:ring-1 focus:ring-border-focus ${
-                  isSelected
-                    ? `${color.gradientBg} ${color.border} ${color.text} ${color.glow} ${color.ring} ${color.leftBorder} animate-scale-in`
-                    : `border-border-subtle bg-surface-2/50 text-text-secondary ${color.leftBorder} hover:border-border-default hover:text-text-primary hover:shadow-dark-sm`
-                }`}
-              >
-                {/* Checkmark badge — top-right overlay */}
-                {isSelected && (
-                  <span
-                    className={`absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full ${color.checkBg} shadow-md`}
-                  >
-                    <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
-                  </span>
-                )}
-
-                {/* Platform icon — bigger when selected */}
-                <span
-                  className={`leading-none transition-all duration-200 ${isSelected ? 'text-xl' : 'text-lg'}`}
-                >
-                  {ch.icon}
-                </span>
-
-                {/* Platform name */}
-                <span>{ch.name}</span>
-
-                {/* Char limit badge */}
-                <span className="text-[10px] opacity-60 font-normal">{limitLabel}</span>
-              </button>
+              <div key={group.label} className="mb-3 last:mb-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5 px-0.5">
+                  {group.label}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {groupChannels.map((ch) => renderChip(ch))}
+                </div>
+              </div>
             );
           })}
+
+          {/* Ungrouped channels (future-proofing) */}
+          {channels.filter((ch) => !KNOWN_SLUGS.includes(ch.slug)).length > 0 && (
+            <div className="mb-3 last:mb-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5 px-0.5">
+                Other
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {channels
+                  .filter((ch) => !KNOWN_SLUGS.includes(ch.slug))
+                  .map((ch) => renderChip(ch))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
