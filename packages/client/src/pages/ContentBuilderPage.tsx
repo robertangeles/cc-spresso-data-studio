@@ -39,7 +39,14 @@ export function ContentBuilderPage() {
   const [rightOpen, setRightOpen] = useState(true);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [promptModalOpen, setPromptModalOpen] = useState(false);
-  const [editingPrompt, setEditingPrompt] = useState<Record<string, unknown> | null>(null);
+  const [editingPrompt, setEditingPrompt] = useState<{
+    id: string;
+    name: string;
+    description: string | null;
+    body: string;
+    category: string;
+    defaultModel: string | null;
+  } | null>(null);
 
   const builder = useContentBuilder();
   const promptsHook = usePrompts();
