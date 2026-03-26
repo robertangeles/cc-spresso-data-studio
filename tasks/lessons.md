@@ -7,6 +7,7 @@
 **Problem:** Axios response interceptor redirects to `/login` via `window.location.href` on refresh token failure. On the login page, `AuthProvider` calls `/auth/refresh` on mount, which fails, triggering the interceptor redirect again — infinite loop.
 
 **Fix:**
+
 - Guard redirect: `if (window.location.pathname !== '/login')` before `window.location.href = '/login'`
 - Mark initial session restore call with `_retry: true` so interceptor skips re-triggering
 
@@ -33,6 +34,7 @@
 **Problem:** Multiple features shipped with bugs that the user discovered during testing — duplicate SSE events, 404 on approval endpoints, stale auth tokens, missing route guards. Each fix required another round trip instead of catching it before handoff.
 
 **Fix:** After every feature or fix, before telling the user to test:
+
 1. `pnpm tsc` — both client and server must pass
 2. `drizzle-kit push` — if schema changed
 3. Trace every new UI interaction to its API endpoint — verify the route exists, the handler is correct, and the response is consumed properly
@@ -62,11 +64,13 @@
 **Problem:** Multiple features shipped with endpoints that returned 404, 401, or wrong data — only discovered when the user tested in the browser, burning API credits.
 
 **Fix:** After every new or updated API endpoint, test it with curl before touching the frontend:
+
 ```
 curl -X POST http://localhost:3003/api/chat/conversations -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"model":"claude-sonnet-4-6"}'
 ```
 
 **Rule:** MANDATORY for every new/updated feature:
+
 1. List every API route the feature touches
 2. Test each with curl (or ctx_execute fetch) — verify status 200 and correct response shape
 3. Test auth: verify 401 without token, 403 for wrong role
@@ -81,6 +85,7 @@ curl -X POST http://localhost:3003/api/chat/conversations -H "Authorization: Bea
 **Fix:** Deleted all test accounts: `DELETE FROM users WHERE email != 'trebor.selegna@outlook.com'`
 
 **Rule:** After any testing that creates test accounts, records, or data:
+
 1. Delete test users: `DELETE FROM users WHERE email LIKE '%test.com'`
 2. Delete orphaned data from related tables
 3. Never leave test data in the DB after a session
@@ -91,6 +96,7 @@ curl -X POST http://localhost:3003/api/chat/conversations -H "Authorization: Bea
 **Problem:** Render's Node runtime doesn't have pnpm installed. `corepack enable` fails because the filesystem is read-only (`EROFS: read-only file system`). Using `pnpm --filter` to build individual packages fails because TypeScript project references between workspace packages don't resolve when built in isolation.
 
 **Fix:**
+
 - Install pnpm via npm: `npm install -g pnpm`
 - Use `pnpm -r build` (recursive) instead of `--filter` — it respects workspace dependency order and builds shared types before dependent packages
 - Final build command: `npm install -g pnpm && pnpm install && pnpm -r build`
@@ -102,6 +108,7 @@ curl -X POST http://localhost:3003/api/chat/conversations -H "Authorization: Bea
 **Problem:** Render sets `NODE_ENV=production` which tells pnpm to skip `devDependencies`. But `@types/*` packages (express, node, etc.) are devDependencies needed for the `tsc` build step. Build fails with "Could not find a declaration file" errors for every import.
 
 **Fix:** Prefix the install step with `NODE_ENV=development` to force all dependencies to install during build:
+
 ```
 NODE_ENV=development pnpm install
 ```
@@ -113,6 +120,7 @@ NODE_ENV=development pnpm install
 **Problem:** `tsconfig.tsbuildinfo` is committed to git with absolute local machine paths. On Render, TypeScript sees the stale buildinfo and may skip regenerating `.d.ts` declaration files. Server then can't find type declarations for `@cc/shared`.
 
 **Fix:** Delete the buildinfo before building:
+
 ```
 rm -f packages/shared/tsconfig.tsbuildinfo
 ```
@@ -124,6 +132,7 @@ rm -f packages/shared/tsconfig.tsbuildinfo
 **Problem:** `path.resolve(__dirname, '../../../client/dist')` resolved to the wrong directory because `__dirname` in production points to `packages/server/dist/` (compiled), not `packages/server/src/` (source). Off by one directory level, serving from `<root>/client/dist` instead of `<root>/packages/client/dist`.
 
 **Fix:** Use `process.cwd()` for production paths instead of `__dirname` with relative traversal:
+
 ```typescript
 const clientDist = path.join(process.cwd(), 'packages/client/dist');
 ```
@@ -143,6 +152,7 @@ const clientDist = path.join(process.cwd(), 'packages/client/dist');
 **Problem:** Multiple failed deploys due to cascading issues: no pnpm, no devDeps, stale buildinfo, wrong paths.
 
 **Final working build command:**
+
 ```
 npm install -g pnpm@9 && NODE_ENV=development pnpm install && rm -f packages/shared/tsconfig.tsbuildinfo && pnpm -C packages/shared build && pnpm -C packages/server build && cd packages/client && npx vite build
 ```
@@ -152,6 +162,7 @@ npm install -g pnpm@9 && NODE_ENV=development pnpm install && rm -f packages/sha
 ## 15. Render deployment: custom domain setup (GoDaddy + Render)
 
 **Steps:**
+
 1. Render → Service → Settings → Custom Domains → Add domain
 2. GoDaddy DNS:
    - Root domain: Two A records → `216.24.57.1` and `216.24.57.253`
@@ -161,3 +172,53 @@ npm install -g pnpm@9 && NODE_ENV=development pnpm install && rm -f packages/sha
 5. DNS propagation takes 5-10 minutes
 
 **Rule:** Always set both root (A records) and www (CNAME) so both URLs work. Use the root domain (no www) as the canonical `CLIENT_URL`.
+
+## 16. CI/CD: pnpm monorepo with composite TypeScript requires build-before-lint
+
+**Problem:** GitHub Actions CI failed repeatedly because eslint with `@typescript-eslint` needs `@cc/shared` declaration files (`.d.ts`) to exist before linting server code. On a clean CI checkout, `dist/` doesn't exist. Tried 6 approaches: separate typecheck steps, paths mapping, removing composite, reordering steps — each revealed a deeper issue.
+
+**Root cause chain:**
+
+1. `@cc/shared` uses `composite: true` in tsconfig — requires built output
+2. pnpm's strict isolation created hardlinked copies (not symlinks) — server couldn't see shared's dist
+3. Stale `tsconfig.tsbuildinfo` caused tsc to skip rebuild even when dist was deleted
+4. Build artifacts accidentally committed into `src/` were linted and contained `any` types
+
+**Fix:**
+
+1. `.npmrc`: `link-workspace-packages=true` — forces pnpm to use symlinks
+2. Build script: `rm -f packages/shared/tsconfig.tsbuildinfo && pnpm -C packages/shared build && pnpm -C packages/server build && pnpm -C packages/client build`
+3. CI order: install → build all → lint → test
+4. `.gitignore`: `*.tsbuildinfo` + `packages/shared/src/**/*.js` + `packages/shared/src/**/*.d.ts`
+
+**Rule:** In a pnpm monorepo with TypeScript composite project references:
+
+- Always build shared packages BEFORE lint (declarations are a build dependency, not a workaround)
+- Always use `link-workspace-packages=true` in `.npmrc`
+- Always clean `tsconfig.tsbuildinfo` before builds (prevents stale cache)
+- Never commit build artifacts — gitignore `*.tsbuildinfo` and `**/*.d.ts` in source dirs
+- Make build order explicit in scripts — don't rely on `pnpm -r` parallel execution
+
+## 17. Never take shortcuts in CI/CD configuration
+
+**Problem:** When CI kept failing, the tempting fix was "just move lint after build" or "just suppress the warning." Each shortcut masked the real issue and created a new failure mode.
+
+**Fix:** Traced the actual module resolution path: import statement → node_modules symlink → package.json exports → dist/index.d.ts → composite tsbuildinfo → build order. Fixed each layer properly.
+
+**Rule:** When a CI pipeline fails, trace the full resolution chain from the error message to the root cause. Don't reorder steps to avoid errors — fix why the error happens. Don't suppress lint rules — fix the code. Don't skip checks — fix the config. Every shortcut becomes technical debt.
+
+## 18. Infection Virus design standard — not optional polish
+
+**Problem:** Content Builder initially shipped with flat, clinical UI. Platform chips were all gray, empty states were boring, cards had no depth. It looked functional but uninspiring — not investor-demo ready.
+
+**Fix:** Established "Infection Virus" as a MANDATORY design standard in CLAUDE.md: glass morphism, amber glows, gradient accents, depth layers, micro-animations, per-platform colors, keyboard shortcuts.
+
+**Rule:** Every new UI component must pass the "would you want to touch it?" test before shipping. Glass morphism on cards, hover lift effects, platform-specific colors, stagger animations on mount, glow on focus states. This is not polish — it's a core design requirement. Added to CLAUDE.md as enforceable standard.
+
+## 19. Progressive disclosure > overwhelming users
+
+**Problem:** Content Builder showed everything at once — 11 platform chips, media studio, AI assistant, schedule panel — without guiding users through the natural workflow (write → platforms → adapt → media → schedule).
+
+**Fix:** Implemented a flow state machine (IDLE → WRITING → PLATFORMS_SELECTED → ADAPTED → READY) that controls what's visible and what glows. Media Studio starts collapsed. Schedule panel dims until content exists. Contextual placeholders guide the next action.
+
+**Rule:** For complex multi-step features, use progressive disclosure: show only what's relevant at each step. Add subtle glow/nudge to the next recommended action. Power users can always expand everything manually. Step indicators provide orientation without being patronizing.
