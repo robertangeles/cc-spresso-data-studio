@@ -240,8 +240,8 @@ export function PlatformSelector({
                   }}
                   className={`relative flex flex-col items-center gap-1.5 rounded-xl p-3 transition-all duration-200 ease-spring cursor-pointer group ${
                     isSelected
-                      ? `bg-gradient-to-b ${color.cardBg} ${color.border} border ${color.glow} scale-[1.02]`
-                      : 'bg-surface-2/30 border border-transparent hover:bg-surface-2/60 hover:border-border-subtle hover:scale-[1.01]'
+                      ? `bg-gradient-to-b ${color.cardBg} ${color.border} border ${color.glow} scale-[1.03]`
+                      : `bg-surface-2/30 border border-transparent hover:bg-gradient-to-b hover:${color.cardBg} hover:border-border-subtle hover:scale-[1.06] hover:-translate-y-1 hover:shadow-lg active:scale-95`
                   }`}
                 >
                   {/* Selected checkmark */}
@@ -253,16 +253,16 @@ export function PlatformSelector({
                     </span>
                   )}
 
-                  {/* Platform icon — large */}
+                  {/* Platform icon — large, bounces on hover */}
                   <span
-                    className={`text-2xl leading-none transition-transform duration-200 ${isSelected ? 'scale-110' : 'group-hover:scale-105'}`}
+                    className={`text-2xl leading-none transition-transform duration-200 ${isSelected ? 'scale-110' : 'group-hover:scale-125 group-hover:-translate-y-1'}`}
                   >
                     {ch.icon}
                   </span>
 
                   {/* Platform name */}
                   <span
-                    className={`text-xs font-medium transition-colors ${isSelected ? color.text : 'text-text-secondary group-hover:text-text-primary'}`}
+                    className={`text-xs font-medium transition-all duration-200 ${isSelected ? color.text : `text-text-secondary group-hover:${color.text}`}`}
                   >
                     {ch.name}
                   </span>
