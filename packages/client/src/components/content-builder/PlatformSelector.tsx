@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, ChevronDown } from 'lucide-react';
 
 interface Channel {
@@ -286,9 +287,9 @@ export function PlatformSelector({
         <div className="mt-2 flex items-center justify-between rounded-lg bg-accent/[0.06] border border-accent/15 px-3 py-2 animate-slide-up">
           <p className="text-xs text-text-secondary">
             <span className="text-accent font-medium">Tip:</span> Connect your social accounts in{' '}
-            <a href="/profile" className="text-accent underline hover:text-accent-hover">
+            <Link to="/profile" className="text-accent underline hover:text-accent-hover">
               Profile → Social Accounts
-            </a>{' '}
+            </Link>{' '}
             for auto-publishing. For now, content will be ready for manual posting.
           </p>
           <button
