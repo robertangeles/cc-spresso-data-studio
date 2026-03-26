@@ -132,6 +132,7 @@ export function ContentBuilderPage() {
     builder.loadPrompt(promptId, prompt?.name, body);
     // Clear chat when switching prompts so new context applies
     chat.clearChat();
+    toast(`Prompt loaded: ${prompt?.name ?? 'Custom'}`, 'success');
   };
 
   const handleCreateNewPrompt = () => {
@@ -320,6 +321,23 @@ export function ContentBuilderPage() {
           )}
         </div>
       </div>
+
+      {/* ── Contextual flow hint ── */}
+      {builder.flowState !== 'READY' && (
+        <div className="px-6 py-1.5 bg-accent/[0.03] border-b border-border-subtle">
+          <p className="text-xs text-text-tertiary text-center">
+            {builder.flowState === 'IDLE' &&
+              '✍️ Start writing your content below, or load a prompt from the library'}
+            {builder.flowState === 'WRITING' &&
+              '📱 Next: Select platforms above to target your content'}
+            {builder.flowState === 'PLATFORMS_SELECTED' &&
+              '✨ Looking good! Click "Adapt All" to generate versions for each platform'}
+            {builder.flowState === 'ADAPTED' && '🖼️ Optional: Add media, then schedule when ready'}
+            {builder.flowState === 'MEDIA_ADDED' &&
+              '📅 Ready to go! Schedule your posts or publish now'}
+          </p>
+        </div>
+      )}
 
       {/* ── Three-panel layout ── */}
       <div className="flex flex-1 overflow-hidden">
