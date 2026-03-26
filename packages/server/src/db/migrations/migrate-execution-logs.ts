@@ -32,7 +32,7 @@ async function migrate() {
 
   let updated = 0;
   let notFound = 0;
-  let errors: string[] = [];
+  const errors: string[] = [];
 
   for (const log of needsMigration) {
     const skillId = skillMap.get(log.skillName!.toLowerCase());
@@ -43,7 +43,8 @@ async function migrate() {
     }
 
     try {
-      await db.update(schema.executionLogs)
+      await db
+        .update(schema.executionLogs)
         .set({ skillId })
         .where(eq(schema.executionLogs.id, log.id));
       updated++;
@@ -69,7 +70,9 @@ async function migrate() {
   const afterLogs = await db.query.executionLogs.findMany();
   const withSkillId = afterLogs.filter((l) => l.skillId);
   const withSkillName = afterLogs.filter((l) => l.skillName);
-  console.log(`\nVerification: ${withSkillId.length}/${withSkillName.length} logs have skill_id set`);
+  console.log(
+    `\nVerification: ${withSkillId.length}/${withSkillName.length} logs have skill_id set`,
+  );
 
   console.log(errors.length > 0 ? '\nMIGRATION: COMPLETED WITH ERRORS' : '\nMIGRATION: SUCCESS');
 

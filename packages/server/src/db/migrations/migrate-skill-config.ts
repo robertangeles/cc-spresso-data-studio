@@ -55,7 +55,7 @@ async function migrate() {
   let totalInputsInserted = 0;
   let totalOutputsInserted = 0;
   let scalarUpdates = 0;
-  let errors: string[] = [];
+  const errors: string[] = [];
 
   for (const skill of skills) {
     console.log(`--- Skill: "${skill.name}" (${skill.id}) ---`);
@@ -128,7 +128,8 @@ async function migrate() {
 
     // Update scalar columns on skills table
     try {
-      await db.update(schema.skills)
+      await db
+        .update(schema.skills)
         .set({
           promptTemplate: config.promptTemplate ?? null,
           systemPrompt: config.systemPrompt ?? null,
@@ -140,7 +141,9 @@ async function migrate() {
         })
         .where(eq(schema.skills.id, skill.id));
       scalarUpdates++;
-      console.log(`  Scalars updated: promptTemplate=${config.promptTemplate ? `${config.promptTemplate.length} chars` : 'none'}, temperature=${config.temperature ?? 'default'}, maxTokens=${config.maxTokens ?? 'default'}`);
+      console.log(
+        `  Scalars updated: promptTemplate=${config.promptTemplate ? `${config.promptTemplate.length} chars` : 'none'}, temperature=${config.temperature ?? 'default'}, maxTokens=${config.maxTokens ?? 'default'}`,
+      );
     } catch (err) {
       const msg = `Skill ${skill.id}: failed to update scalar columns: ${err}`;
       errors.push(msg);
@@ -163,10 +166,18 @@ async function migrate() {
     const inputsMatch = inputRows.length === (config.inputs?.length ?? 0);
     const outputsMatch = outputRows.length === (config.outputs?.length ?? 0);
 
-    console.log(`Skill "${skill.name}": inputs ${inputRows.length}/${config.inputs?.length ?? 0} ${inputsMatch ? '✓' : '✗'} | outputs ${outputRows.length}/${config.outputs?.length ?? 0} ${outputsMatch ? '✓' : '✗'}`);
+    console.log(
+      `Skill "${skill.name}": inputs ${inputRows.length}/${config.inputs?.length ?? 0} ${inputsMatch ? '✓' : '✗'} | outputs ${outputRows.length}/${config.outputs?.length ?? 0} ${outputsMatch ? '✓' : '✗'}`,
+    );
 
-    if (!inputsMatch) errors.push(`Skill ${skill.id}: input count mismatch ${inputRows.length} vs ${config.inputs?.length}`);
-    if (!outputsMatch) errors.push(`Skill ${skill.id}: output count mismatch ${outputRows.length} vs ${config.outputs?.length}`);
+    if (!inputsMatch)
+      errors.push(
+        `Skill ${skill.id}: input count mismatch ${inputRows.length} vs ${config.inputs?.length}`,
+      );
+    if (!outputsMatch)
+      errors.push(
+        `Skill ${skill.id}: output count mismatch ${outputRows.length} vs ${config.outputs?.length}`,
+      );
   }
 
   // Summary

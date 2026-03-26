@@ -65,12 +65,14 @@ export function FormBuilderTab({ fields, onFieldsChange }: FormBuilderTabProps) 
           <h3 className="font-medium text-gray-900">Form Fields</h3>
           <p className="text-sm text-gray-500">Design the input form users will fill out.</p>
         </div>
-        <Button size="sm" onClick={addField}>+ Add Field</Button>
+        <Button size="sm" onClick={addField}>
+          + Add Field
+        </Button>
       </div>
 
       {localFields.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center">
-          <p className="text-gray-500">No fields yet. Click "Add Field" to start.</p>
+          <p className="text-gray-500">No fields yet. Click &quot;Add Field&quot; to start.</p>
         </div>
       ) : (
         localFields.map((field, index) => (
@@ -110,11 +112,15 @@ export function FormBuilderTab({ fields, onFieldsChange }: FormBuilderTabProps) 
                   <label className="mb-1 block text-sm font-medium text-gray-700">Type</label>
                   <select
                     value={field.type}
-                    onChange={(e) => updateField(index, { type: e.target.value as FlowField['type'] })}
+                    onChange={(e) =>
+                      updateField(index, { type: e.target.value as FlowField['type'] })
+                    }
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
                   >
                     {FIELD_TYPES.map((ft) => (
-                      <option key={ft.value} value={ft.value}>{ft.label}</option>
+                      <option key={ft.value} value={ft.value}>
+                        {ft.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -154,16 +160,27 @@ export function FormBuilderTab({ fields, onFieldsChange }: FormBuilderTabProps) 
         ))
       )}
 
-      <p className="text-xs text-gray-400">{localFields.length} field{localFields.length !== 1 ? 's' : ''}</p>
+      <p className="text-xs text-gray-400">
+        {localFields.length} field{localFields.length !== 1 ? 's' : ''}
+      </p>
     </div>
   );
 }
 
-function OptionsInput({ options, onChange }: { options: string[]; onChange: (options: string[]) => void }) {
+function OptionsInput({
+  options,
+  onChange,
+}: {
+  options: string[];
+  onChange: (options: string[]) => void;
+}) {
   const [raw, setRaw] = useState(options.join('; '));
 
   const handleBlur = () => {
-    const parsed = raw.split(';').map((o) => o.trim()).filter(Boolean);
+    const parsed = raw
+      .split(';')
+      .map((o) => o.trim())
+      .filter(Boolean);
     onChange(parsed);
   };
 

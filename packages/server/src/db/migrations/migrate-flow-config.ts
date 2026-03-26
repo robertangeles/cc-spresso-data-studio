@@ -51,7 +51,7 @@ async function migrate() {
 
   let totalFieldsInserted = 0;
   let totalStepsInserted = 0;
-  let errors: string[] = [];
+  const errors: string[] = [];
 
   for (const flow of flows) {
     console.log(`--- Flow: "${flow.name}" (${flow.id}) ---`);
@@ -122,7 +122,8 @@ async function migrate() {
 
     // Update flow.style if present
     if (config.style) {
-      await db.update(schema.flows)
+      await db
+        .update(schema.flows)
         .set({ style: config.style })
         .where(eq(schema.flows.id, flow.id));
     }
@@ -143,10 +144,18 @@ async function migrate() {
     const fieldsMatch = fieldCount.length === (config.fields?.length ?? 0);
     const stepsMatch = stepCount.length === (config.steps?.length ?? 0);
 
-    console.log(`Flow "${flow.name}": fields ${fieldCount.length}/${config.fields?.length ?? 0} ${fieldsMatch ? '✓' : '✗'} | steps ${stepCount.length}/${config.steps?.length ?? 0} ${stepsMatch ? '✓' : '✗'}`);
+    console.log(
+      `Flow "${flow.name}": fields ${fieldCount.length}/${config.fields?.length ?? 0} ${fieldsMatch ? '✓' : '✗'} | steps ${stepCount.length}/${config.steps?.length ?? 0} ${stepsMatch ? '✓' : '✗'}`,
+    );
 
-    if (!fieldsMatch) errors.push(`Flow ${flow.id}: field count mismatch ${fieldCount.length} vs ${config.fields?.length}`);
-    if (!stepsMatch) errors.push(`Flow ${flow.id}: step count mismatch ${stepCount.length} vs ${config.steps?.length}`);
+    if (!fieldsMatch)
+      errors.push(
+        `Flow ${flow.id}: field count mismatch ${fieldCount.length} vs ${config.fields?.length}`,
+      );
+    if (!stepsMatch)
+      errors.push(
+        `Flow ${flow.id}: step count mismatch ${stepCount.length} vs ${config.steps?.length}`,
+      );
   }
 
   // Summary

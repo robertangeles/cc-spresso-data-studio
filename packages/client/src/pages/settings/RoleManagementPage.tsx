@@ -10,7 +10,11 @@ export function RoleManagementPage() {
   const { roles, isLoading, error, createRole, updateRole, deleteRole } = useRoles();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<CreateRoleDTO>({ name: '', description: '', permissions: [] });
+  const [formData, setFormData] = useState<CreateRoleDTO>({
+    name: '',
+    description: '',
+    permissions: [],
+  });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -26,7 +30,7 @@ export function RoleManagementPage() {
     setFormError(null);
   };
 
-  const handleEdit = (role: typeof roles[0]) => {
+  const handleEdit = (role: (typeof roles)[0]) => {
     setEditingId(role.id);
     setFormData({
       name: role.name,
@@ -48,8 +52,9 @@ export function RoleManagementPage() {
       }
       resetForm();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? (err instanceof Error ? err.message : 'Failed to save role');
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err instanceof Error ? err.message : 'Failed to save role');
       setFormError(msg);
     } finally {
       setSaving(false);
@@ -63,8 +68,9 @@ export function RoleManagementPage() {
     try {
       await deleteRole(deleteRoleId);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? 'Failed to delete role';
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Failed to delete role';
       setFormError(msg);
     }
     setDeleteRoleId(null);
@@ -73,7 +79,9 @@ export function RoleManagementPage() {
   return (
     <div>
       <h2 className="text-xl font-semibold text-text-primary mb-1">User & Role Management</h2>
-      <p className="text-sm text-text-secondary mb-6">Manage roles and permissions for your team.</p>
+      <p className="text-sm text-text-secondary mb-6">
+        Manage roles and permissions for your team.
+      </p>
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border-default mb-6">
@@ -97,7 +105,10 @@ export function RoleManagementPage() {
           {/* Add Role button */}
           <div className="flex justify-end mb-4">
             <button
-              onClick={() => { resetForm(); setShowForm(true); }}
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
+              }}
               className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover"
             >
               + Add Role
@@ -106,7 +117,10 @@ export function RoleManagementPage() {
 
           {/* Inline form */}
           {showForm && (
-            <form onSubmit={handleSubmit} className="mb-6 rounded-lg border border-border-default bg-surface-3 p-4">
+            <form
+              onSubmit={handleSubmit}
+              className="mb-6 rounded-lg border border-border-default bg-surface-3 p-4"
+            >
               <h3 className="text-sm font-semibold text-text-primary mb-3">
                 {editingId ? 'Edit Role' : 'New Role'}
               </h3>
@@ -121,12 +135,16 @@ export function RoleManagementPage() {
                     pattern="[a-z_]+"
                     title="Lowercase letters and underscores only"
                     required
-                    disabled={editingId !== null && roles.find(r => r.id === editingId)?.isSystem === true}
+                    disabled={
+                      editingId !== null && roles.find((r) => r.id === editingId)?.isSystem === true
+                    }
                     className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary disabled:bg-surface-4"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1">Description</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">
+                    Description
+                  </label>
                   <input
                     type="text"
                     value={formData.description ?? ''}
@@ -136,9 +154,7 @@ export function RoleManagementPage() {
                   />
                 </div>
               </div>
-              {formError && (
-                <p className="text-sm text-red-400 mb-3">{formError}</p>
-              )}
+              {formError && <p className="text-sm text-red-400 mb-3">{formError}</p>}
               <div className="flex gap-2">
                 <button
                   type="submit"
@@ -177,9 +193,13 @@ export function RoleManagementPage() {
                 <thead className="bg-surface-3">
                   <tr>
                     <th className="px-4 py-3 text-left font-medium text-text-secondary">Name</th>
-                    <th className="px-4 py-3 text-left font-medium text-text-secondary">Description</th>
+                    <th className="px-4 py-3 text-left font-medium text-text-secondary">
+                      Description
+                    </th>
                     <th className="px-4 py-3 text-left font-medium text-text-secondary">Type</th>
-                    <th className="px-4 py-3 text-right font-medium text-text-secondary">Actions</th>
+                    <th className="px-4 py-3 text-right font-medium text-text-secondary">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-subtle">
@@ -235,7 +255,9 @@ export function RoleManagementPage() {
       {activeTab === 'users' && (
         <div className="rounded-lg border border-border-default bg-surface-3 p-8 text-center">
           <p className="text-sm text-text-secondary">User management is coming soon.</p>
-          <p className="text-xs text-text-tertiary mt-1">You'll be able to assign roles to users here.</p>
+          <p className="text-xs text-text-tertiary mt-1">
+            You&apos;ll be able to assign roles to users here.
+          </p>
         </div>
       )}
 

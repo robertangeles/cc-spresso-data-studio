@@ -23,7 +23,7 @@ async function fixScalars() {
 
   const skills = await db.query.skills.findMany();
   let updated = 0;
-  let errors: string[] = [];
+  const errors: string[] = [];
 
   for (const skill of skills) {
     const config = skill.config as SkillConfig;
@@ -36,7 +36,8 @@ async function fixScalars() {
     }
 
     try {
-      await db.update(schema.skills)
+      await db
+        .update(schema.skills)
         .set({
           promptTemplate: config.promptTemplate ?? null,
           systemPrompt: config.systemPrompt ?? null,
@@ -48,7 +49,9 @@ async function fixScalars() {
         })
         .where(eq(schema.skills.id, skill.id));
       updated++;
-      console.log(`  ✓ "${skill.name}": template=${config.promptTemplate?.length ?? 0} chars, temp=${config.temperature ?? 'default'}`);
+      console.log(
+        `  ✓ "${skill.name}": template=${config.promptTemplate?.length ?? 0} chars, temp=${config.temperature ?? 'default'}`,
+      );
     } catch (err) {
       errors.push(`${skill.id}: ${err}`);
       console.log(`  ✗ "${skill.name}": ${err}`);

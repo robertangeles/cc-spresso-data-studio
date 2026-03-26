@@ -9,13 +9,48 @@ import { ModelSelector } from '../../components/ui/ModelSelector';
 import { api } from '../../lib/api';
 
 const STEPS = [
-  { id: 'basics', label: '1. Basics', guide: 'Give your skill a name and describe what it does. The slug is auto-generated and used as a unique identifier. Choose a category that best describes the skill\'s purpose.\n\nTip: A good description helps users find and understand the skill. Be specific about what it does and when to use it.' },
-  { id: 'inputs', label: '2. Inputs', guide: 'Define the variables your skill needs from the user. Each input becomes a {{variable}} you can use in your prompt template.\n\nCommon inputs:\n- "content" (multiline) — the source text to process\n- "topic" (text) — the subject to focus on\n- "tone" (select) — the writing style\n- "audience" (text) — who the content is for\n\nMark inputs as "required" if the skill can\'t work without them.' },
-  { id: 'prompt', label: '3. Prompt', guide: 'This is the core of your skill — the instructions sent to the AI. Use {{variable_name}} to insert input values.\n\nBest practices:\n- Start with a clear role or context\n- Be specific about the output format you want\n- Include examples when possible\n- Use numbered steps for multi-part outputs\n- Set constraints (word count, tone, format)\n\nClick the variable chips below to insert them at your cursor position.' },
-  { id: 'system', label: '4. System Prompt', guide: 'The system prompt sets the AI\'s role and personality. It\'s sent before the main prompt and shapes how the AI responds.\n\nExamples:\n- "You are a social media strategist specializing in content repurposing."\n- "You are a technical writer who explains complex topics clearly."\n- "You are a copywriter focused on conversion and engagement."\n\nKeep it concise — 1-2 sentences is usually enough.' },
-  { id: 'outputs', label: '5. Outputs', guide: 'Define what your skill produces. Each output gets a key that other skills can reference when chaining in an orchestration.\n\nFor most skills, a single output named "result" with type "markdown" works well. Use multiple outputs when the skill produces distinct pieces (e.g., "subject_line" and "email_body").' },
-  { id: 'config', label: '6. Config', guide: 'Fine-tune the AI behavior:\n\nTemperature (0-2):\n- 0.3-0.5: Factual, consistent output\n- 0.7: Balanced creativity\n- 0.9-1.2: More creative, varied output\n\nMax Tokens: Maximum length of the response. 1000 tokens is roughly 750 words.\n\nDefault Model: Which AI model to use. Claude Sonnet 4.6 is a great default.' },
-  { id: 'review', label: '7. Review & Save', guide: 'Review your skill configuration. Once saved, it will appear in the Skills catalog and can be used in orchestrations.\n\nYou can always edit the skill later from the catalog.' },
+  {
+    id: 'basics',
+    label: '1. Basics',
+    guide:
+      "Give your skill a name and describe what it does. The slug is auto-generated and used as a unique identifier. Choose a category that best describes the skill's purpose.\n\nTip: A good description helps users find and understand the skill. Be specific about what it does and when to use it.",
+  },
+  {
+    id: 'inputs',
+    label: '2. Inputs',
+    guide:
+      'Define the variables your skill needs from the user. Each input becomes a {{variable}} you can use in your prompt template.\n\nCommon inputs:\n- "content" (multiline) — the source text to process\n- "topic" (text) — the subject to focus on\n- "tone" (select) — the writing style\n- "audience" (text) — who the content is for\n\nMark inputs as "required" if the skill can\'t work without them.',
+  },
+  {
+    id: 'prompt',
+    label: '3. Prompt',
+    guide:
+      'This is the core of your skill — the instructions sent to the AI. Use {{variable_name}} to insert input values.\n\nBest practices:\n- Start with a clear role or context\n- Be specific about the output format you want\n- Include examples when possible\n- Use numbered steps for multi-part outputs\n- Set constraints (word count, tone, format)\n\nClick the variable chips below to insert them at your cursor position.',
+  },
+  {
+    id: 'system',
+    label: '4. System Prompt',
+    guide:
+      'The system prompt sets the AI\'s role and personality. It\'s sent before the main prompt and shapes how the AI responds.\n\nExamples:\n- "You are a social media strategist specializing in content repurposing."\n- "You are a technical writer who explains complex topics clearly."\n- "You are a copywriter focused on conversion and engagement."\n\nKeep it concise — 1-2 sentences is usually enough.',
+  },
+  {
+    id: 'outputs',
+    label: '5. Outputs',
+    guide:
+      'Define what your skill produces. Each output gets a key that other skills can reference when chaining in an orchestration.\n\nFor most skills, a single output named "result" with type "markdown" works well. Use multiple outputs when the skill produces distinct pieces (e.g., "subject_line" and "email_body").',
+  },
+  {
+    id: 'config',
+    label: '6. Config',
+    guide:
+      'Fine-tune the AI behavior:\n\nTemperature (0-2):\n- 0.3-0.5: Factual, consistent output\n- 0.7: Balanced creativity\n- 0.9-1.2: More creative, varied output\n\nMax Tokens: Maximum length of the response. 1000 tokens is roughly 750 words.\n\nDefault Model: Which AI model to use. Claude Sonnet 4.6 is a great default.',
+  },
+  {
+    id: 'review',
+    label: '7. Review & Save',
+    guide:
+      'Review your skill configuration. Once saved, it will appear in the Skills catalog and can be used in orchestrations.\n\nYou can always edit the skill later from the catalog.',
+  },
 ];
 
 const CATEGORIES = [
@@ -62,7 +97,8 @@ export function SkillCreatorPage() {
   useEffect(() => {
     if (!id) return;
     setIsLoadingSkill(true);
-    api.get(`/skills/${id}`)
+    api
+      .get(`/skills/${id}`)
       .then(({ data }) => {
         const skill = data.data;
         const cfg = skill.config as SkillConfig;
@@ -85,7 +121,12 @@ export function SkillCreatorPage() {
 
   const autoSlug = (value: string) => {
     setName(value);
-    setSlug(value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+    setSlug(
+      value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, ''),
+    );
   };
 
   const insertVariable = (key: string) => {
@@ -103,17 +144,20 @@ export function SkillCreatorPage() {
   };
 
   const addInput = () => {
-    setInputs([...inputs, {
-      id: crypto.randomUUID(),
-      key: '',
-      type: 'text',
-      label: '',
-      required: false,
-    }]);
+    setInputs([
+      ...inputs,
+      {
+        id: crypto.randomUUID(),
+        key: '',
+        type: 'text',
+        label: '',
+        required: false,
+      },
+    ]);
   };
 
   const updateInput = (index: number, updates: Partial<SkillInput>) => {
-    setInputs(inputs.map((inp, i) => i === index ? { ...inp, ...updates } : inp));
+    setInputs(inputs.map((inp, i) => (i === index ? { ...inp, ...updates } : inp)));
   };
 
   const removeInput = (index: number) => {
@@ -125,7 +169,7 @@ export function SkillCreatorPage() {
   };
 
   const updateOutput = (index: number, updates: Partial<SkillOutput>) => {
-    setOutputs(outputs.map((out, i) => i === index ? { ...out, ...updates } : out));
+    setOutputs(outputs.map((out, i) => (i === index ? { ...out, ...updates } : out)));
   };
 
   const removeOutput = (index: number) => {
@@ -197,7 +241,9 @@ export function SkillCreatorPage() {
       {/* Main content */}
       <div className="min-w-0 flex-1 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-text-primary">{isEditMode ? `Edit Skill: ${name || '...'}` : 'Create Skill'}</h3>
+          <h3 className="text-lg font-semibold text-text-primary">
+            {isEditMode ? `Edit Skill: ${name || '...'}` : 'Create Skill'}
+          </h3>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -230,28 +276,57 @@ export function SkillCreatorPage() {
         </div>
 
         {error && (
-          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</div>
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            {error}
+          </div>
         )}
 
         {/* Step content */}
         <Card padding="lg">
           {step.id === 'basics' && (
             <div className="space-y-4">
-              <Input label="Skill Name" value={name} onChange={(e) => autoSlug(e.target.value)} placeholder="e.g., Blog Post to LinkedIn" />
-              <Input label="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="blog-post-to-linkedin" disabled={isEditMode} />
+              <Input
+                label="Skill Name"
+                value={name}
+                onChange={(e) => autoSlug(e.target.value)}
+                placeholder="e.g., Blog Post to LinkedIn"
+              />
+              <Input
+                label="Slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="blog-post-to-linkedin"
+                disabled={isEditMode}
+              />
               <div>
-                <label className="mb-1 block text-sm font-medium text-text-secondary">Description</label>
-                <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe what this skill does and when to use it..." rows={3}
-                  className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2" />
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
+                  Description
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Describe what this skill does and when to use it..."
+                  rows={3}
+                  className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2"
+                />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-text-secondary">Category</label>
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
+                  Category
+                </label>
                 <div className="flex flex-wrap gap-2">
                   {CATEGORIES.map((cat) => {
                     const CatIcon = getCategoryIcon(cat.value);
                     return (
-                      <button key={cat.value} type="button" onClick={() => { setCategory(cat.value); setIcon(cat.value); }}
-                        className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${category === cat.value ? 'bg-accent-dim text-accent ring-2 ring-accent' : 'bg-surface-3 text-text-secondary hover:bg-surface-4'}`}>
+                      <button
+                        key={cat.value}
+                        type="button"
+                        onClick={() => {
+                          setCategory(cat.value);
+                          setIcon(cat.value);
+                        }}
+                        className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${category === cat.value ? 'bg-accent-dim text-accent ring-2 ring-accent' : 'bg-surface-3 text-text-secondary hover:bg-surface-4'}`}
+                      >
                         <CatIcon className="h-4 w-4" />
                         {cat.label}
                       </button>
@@ -265,82 +340,152 @@ export function SkillCreatorPage() {
           {step.id === 'inputs' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-text-secondary">Define what information your skill needs.</p>
-                <Button size="sm" onClick={addInput}>+ Add Input</Button>
+                <p className="text-sm text-text-secondary">
+                  Define what information your skill needs.
+                </p>
+                <Button size="sm" onClick={addInput}>
+                  + Add Input
+                </Button>
               </div>
               {inputs.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border-default py-6 text-center text-sm text-text-tertiary">
                   {'No inputs yet. Add one to create a {{variable}} for your prompt.'}
                 </div>
-              ) : inputs.map((inp, i) => (
-                <div key={inp.id} className="rounded-lg border border-border-default p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-text-tertiary">Input {i + 1}</span>
-                    <button type="button" onClick={() => removeInput(i)} className="text-red-400 hover:text-red-300 text-xs">Remove</button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Input label="Key" value={inp.key} onChange={(e) => updateInput(i, { key: e.target.value.replace(/[^a-z0-9_]/g, '') })} placeholder="variable_name" />
-                    <Input label="Label" value={inp.label} onChange={(e) => updateInput(i, { label: e.target.value })} placeholder="Display label" />
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-secondary">Type</label>
-                      <select value={inp.type} onChange={(e) => updateInput(i, { type: e.target.value as SkillInput['type'] })}
-                        className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none">
-                        {INPUT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
+              ) : (
+                inputs.map((inp, i) => (
+                  <div
+                    key={inp.id}
+                    className="rounded-lg border border-border-default p-3 space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-text-tertiary">Input {i + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeInput(i)}
+                        className="text-red-400 hover:text-red-300 text-xs"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Input
+                        label="Key"
+                        value={inp.key}
+                        onChange={(e) =>
+                          updateInput(i, { key: e.target.value.replace(/[^a-z0-9_]/g, '') })
+                        }
+                        placeholder="variable_name"
+                      />
+                      <Input
+                        label="Label"
+                        value={inp.label}
+                        onChange={(e) => updateInput(i, { label: e.target.value })}
+                        placeholder="Display label"
+                      />
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-text-secondary">
+                          Type
+                        </label>
+                        <select
+                          value={inp.type}
+                          onChange={(e) =>
+                            updateInput(i, { type: e.target.value as SkillInput['type'] })
+                          }
+                          className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+                        >
+                          {INPUT_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    {inp.type === 'select' && (
+                      <SkillSelectOptions
+                        options={inp.options ?? []}
+                        onChange={(options) => updateInput(i, { options })}
+                      />
+                    )}
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={inp.required}
+                          onChange={(e) => updateInput(i, { required: e.target.checked })}
+                          className="rounded border-border-default"
+                        />
+                        Required
+                      </label>
+                      {inp.defaultValue !== undefined && (
+                        <Input
+                          label="Default"
+                          value={inp.defaultValue ?? ''}
+                          onChange={(e) => updateInput(i, { defaultValue: e.target.value })}
+                          placeholder="Default value"
+                        />
+                      )}
                     </div>
                   </div>
-                  {inp.type === 'select' && (
-                    <SkillSelectOptions
-                      options={inp.options ?? []}
-                      onChange={(options) => updateInput(i, { options })}
-                    />
-                  )}
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={inp.required} onChange={(e) => updateInput(i, { required: e.target.checked })} className="rounded border-border-default" />
-                      Required
-                    </label>
-                    {inp.defaultValue !== undefined && (
-                      <Input label="Default" value={inp.defaultValue ?? ''} onChange={(e) => updateInput(i, { defaultValue: e.target.value })} placeholder="Default value" />
-                    )}
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           )}
 
           {step.id === 'prompt' && (
             <div className="space-y-3">
-              <p className="text-sm text-text-secondary">Write the instructions sent to the AI. Use variables from your inputs.</p>
+              <p className="text-sm text-text-secondary">
+                Write the instructions sent to the AI. Use variables from your inputs.
+              </p>
               {inputs.length > 0 && (
                 <div className="flex flex-wrap gap-1">
-                  {inputs.filter((i) => i.key).map((inp) => (
-                    <button key={inp.key} type="button" onClick={() => insertVariable(inp.key)}
-                      className="rounded-full bg-accent-dim px-2 py-1 text-xs font-mono text-accent hover:bg-accent-dim/80 transition-colors">
-                      {'{{' + inp.key + '}}'}
-                    </button>
-                  ))}
+                  {inputs
+                    .filter((i) => i.key)
+                    .map((inp) => (
+                      <button
+                        key={inp.key}
+                        type="button"
+                        onClick={() => insertVariable(inp.key)}
+                        className="rounded-full bg-accent-dim px-2 py-1 text-xs font-mono text-accent hover:bg-accent-dim/80 transition-colors"
+                      >
+                        {'{{' + inp.key + '}}'}
+                      </button>
+                    ))}
                 </div>
               )}
-              <textarea ref={promptRef} value={promptTemplate} onChange={(e) => setPromptTemplate(e.target.value)}
+              <textarea
+                ref={promptRef}
+                value={promptTemplate}
+                onChange={(e) => setPromptTemplate(e.target.value)}
                 placeholder="Write your prompt template here. Use {{variable_name}} for dynamic content..."
                 rows={14}
-                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 font-mono text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2" />
+                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 font-mono text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2"
+              />
             </div>
           )}
 
           {step.id === 'system' && (
             <div className="space-y-3">
-              <p className="text-sm text-text-secondary">Set the AI's role and personality (optional but recommended).</p>
-              <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)}
+              <p className="text-sm text-text-secondary">
+                Set the AI&apos;s role and personality (optional but recommended).
+              </p>
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
                 placeholder='e.g., "You are a social media strategist specializing in content repurposing. You create engaging posts that drive conversation."'
                 rows={4}
-                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2" />
+                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2"
+              />
             </div>
           )}
 
           {step.id === 'outputs' && (
-            <OutputsStep outputs={outputs} addOutput={addOutput} updateOutput={updateOutput} removeOutput={removeOutput} />
+            <OutputsStep
+              outputs={outputs}
+              addOutput={addOutput}
+              updateOutput={updateOutput}
+              removeOutput={removeOutput}
+            />
           )}
 
           {step.id === 'config' && (
@@ -349,17 +494,31 @@ export function SkillCreatorPage() {
                 <label className="mb-1 block text-sm font-medium text-text-secondary">
                   Temperature: {temperature}
                 </label>
-                <input type="range" min="0" max="2" step="0.1" value={temperature}
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={temperature}
                   onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                  className="w-full" />
+                  className="w-full"
+                />
                 <div className="flex justify-between text-xs text-text-tertiary">
-                  <span>Precise (0)</span><span>Balanced (0.7)</span><span>Creative (2)</span>
+                  <span>Precise (0)</span>
+                  <span>Balanced (0.7)</span>
+                  <span>Creative (2)</span>
                 </div>
               </div>
-              <Input label="Max Tokens" type="number" value={String(maxTokens)}
-                onChange={(e) => setMaxTokens(parseInt(e.target.value) || 4000)} />
+              <Input
+                label="Max Tokens"
+                type="number"
+                value={String(maxTokens)}
+                onChange={(e) => setMaxTokens(parseInt(e.target.value) || 4000)}
+              />
               <div>
-                <label className="mb-1 block text-sm font-medium text-text-secondary">Default Model</label>
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
+                  Default Model
+                </label>
                 <ModelSelector value={defaultModel} onChange={setDefaultModel} allowAuto />
               </div>
             </div>
@@ -368,23 +527,52 @@ export function SkillCreatorPage() {
           {step.id === 'review' && (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
-                <div><span className="text-text-secondary">Name:</span> <span className="font-medium">{name || '\u2014'}</span></div>
-                <div><span className="text-text-secondary">Slug:</span> <span className="font-mono">{slug || '\u2014'}</span></div>
-                <div><span className="text-text-secondary">Category:</span> <span className="font-medium">{icon} {category}</span></div>
-                <div><span className="text-text-secondary">Inputs:</span> <span className="font-medium">{inputs.length}</span></div>
-                <div><span className="text-text-secondary">Outputs:</span> <span className="font-medium">{outputs.length}</span></div>
-                <div><span className="text-text-secondary">Temperature:</span> <span className="font-medium">{temperature}</span></div>
+                <div>
+                  <span className="text-text-secondary">Name:</span>{' '}
+                  <span className="font-medium">{name || '\u2014'}</span>
+                </div>
+                <div>
+                  <span className="text-text-secondary">Slug:</span>{' '}
+                  <span className="font-mono">{slug || '\u2014'}</span>
+                </div>
+                <div>
+                  <span className="text-text-secondary">Category:</span>{' '}
+                  <span className="font-medium">
+                    {icon} {category}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-text-secondary">Inputs:</span>{' '}
+                  <span className="font-medium">{inputs.length}</span>
+                </div>
+                <div>
+                  <span className="text-text-secondary">Outputs:</span>{' '}
+                  <span className="font-medium">{outputs.length}</span>
+                </div>
+                <div>
+                  <span className="text-text-secondary">Temperature:</span>{' '}
+                  <span className="font-medium">{temperature}</span>
+                </div>
               </div>
-              {description && <div><span className="text-text-secondary">Description:</span><p className="mt-1">{description}</p></div>}
+              {description && (
+                <div>
+                  <span className="text-text-secondary">Description:</span>
+                  <p className="mt-1">{description}</p>
+                </div>
+              )}
               {promptTemplate && (
                 <div>
                   <span className="text-text-secondary">Prompt Template:</span>
-                  <pre className="mt-1 max-h-32 overflow-auto rounded-lg bg-surface-3 p-2 text-xs whitespace-pre-wrap">{promptTemplate}</pre>
+                  <pre className="mt-1 max-h-32 overflow-auto rounded-lg bg-surface-3 p-2 text-xs whitespace-pre-wrap">
+                    {promptTemplate}
+                  </pre>
                 </div>
               )}
               {isEditMode && (
                 <div className="mt-4 border-t border-border-default pt-4">
-                  <label className="mb-1 block text-sm font-medium text-text-secondary">Changelog (optional)</label>
+                  <label className="mb-1 block text-sm font-medium text-text-secondary">
+                    Changelog (optional)
+                  </label>
                   <input
                     type="text"
                     value={changelog}
@@ -400,13 +588,15 @@ export function SkillCreatorPage() {
 
         {/* Navigation */}
         <div className="flex justify-between">
-          <Button variant="ghost" onClick={() => setCurrentStep(Math.max(0, currentStep - 1))} disabled={currentStep === 0}>
+          <Button
+            variant="ghost"
+            onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
+            disabled={currentStep === 0}
+          >
             Back
           </Button>
           {currentStep < STEPS.length - 1 ? (
-            <Button onClick={() => setCurrentStep(currentStep + 1)}>
-              Next
-            </Button>
+            <Button onClick={() => setCurrentStep(currentStep + 1)}>Next</Button>
           ) : (
             <Button onClick={handleSave} disabled={isSaving || !name || !slug || !promptTemplate}>
               {isSaving ? 'Saving...' : isEditMode ? 'Update Skill' : 'Save Skill'}
@@ -421,7 +611,13 @@ export function SkillCreatorPage() {
           <Card padding="lg">
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-medium text-text-primary">Guide</h4>
-              <button type="button" onClick={() => setGuideOpen(false)} className="text-text-tertiary hover:text-text-secondary text-xs">Close</button>
+              <button
+                type="button"
+                onClick={() => setGuideOpen(false)}
+                className="text-text-tertiary hover:text-text-secondary text-xs"
+              >
+                Close
+              </button>
             </div>
             <div className="text-sm text-text-secondary whitespace-pre-line leading-relaxed">
               {step.guide}
@@ -433,7 +629,12 @@ export function SkillCreatorPage() {
   );
 }
 
-function OutputsStep({ outputs, addOutput, updateOutput, removeOutput }: {
+function OutputsStep({
+  outputs,
+  addOutput,
+  updateOutput,
+  removeOutput,
+}: {
   outputs: SkillOutput[];
   addOutput: () => void;
   updateOutput: (i: number, u: Partial<SkillOutput>) => void;
@@ -468,8 +669,16 @@ function OutputsStep({ outputs, addOutput, updateOutput, removeOutput }: {
       <div className="flex items-center justify-between">
         <p className="text-sm text-text-secondary">Define what your skill produces.</p>
         <div className="flex gap-2">
-          <button type="button" onClick={() => setShowAdvanced(false)} className="text-xs text-text-secondary hover:text-text-primary">Simple mode</button>
-          <Button size="sm" onClick={addOutput}>+ Add Output</Button>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(false)}
+            className="text-xs text-text-secondary hover:text-text-primary"
+          >
+            Simple mode
+          </button>
+          <Button size="sm" onClick={addOutput}>
+            + Add Output
+          </Button>
         </div>
       </div>
       {outputs.map((out, i) => (
@@ -477,17 +686,40 @@ function OutputsStep({ outputs, addOutput, updateOutput, removeOutput }: {
           <div className="flex items-center justify-between">
             <span className="text-xs text-text-tertiary">Output {i + 1}</span>
             {outputs.length > 1 && (
-              <button type="button" onClick={() => removeOutput(i)} className="text-red-400 hover:text-red-300 text-xs">Remove</button>
+              <button
+                type="button"
+                onClick={() => removeOutput(i)}
+                className="text-red-400 hover:text-red-300 text-xs"
+              >
+                Remove
+              </button>
             )}
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <Input label="Key" value={out.key} onChange={(e) => updateOutput(i, { key: e.target.value.replace(/[^a-z0-9_]/g, '') })} placeholder="output_key" />
-            <Input label="Label" value={out.label} onChange={(e) => updateOutput(i, { label: e.target.value })} placeholder="Display label" />
+            <Input
+              label="Key"
+              value={out.key}
+              onChange={(e) => updateOutput(i, { key: e.target.value.replace(/[^a-z0-9_]/g, '') })}
+              placeholder="output_key"
+            />
+            <Input
+              label="Label"
+              value={out.label}
+              onChange={(e) => updateOutput(i, { label: e.target.value })}
+              placeholder="Display label"
+            />
             <div>
               <label className="mb-1 block text-sm font-medium text-text-secondary">Type</label>
-              <select value={out.type} onChange={(e) => updateOutput(i, { type: e.target.value as SkillOutput['type'] })}
-                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none">
-                {OUTPUT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              <select
+                value={out.type}
+                onChange={(e) => updateOutput(i, { type: e.target.value as SkillOutput['type'] })}
+                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+              >
+                {OUTPUT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -506,11 +738,22 @@ function OutputsStep({ outputs, addOutput, updateOutput, removeOutput }: {
   );
 }
 
-function SkillSelectOptions({ options, onChange }: { options: string[]; onChange: (options: string[]) => void }) {
+function SkillSelectOptions({
+  options,
+  onChange,
+}: {
+  options: string[];
+  onChange: (options: string[]) => void;
+}) {
   const [raw, setRaw] = useState(options.join('; '));
 
   const handleBlur = () => {
-    onChange(raw.split(';').map((o) => o.trim()).filter(Boolean));
+    onChange(
+      raw
+        .split(';')
+        .map((o) => o.trim())
+        .filter(Boolean),
+    );
   };
 
   return (
