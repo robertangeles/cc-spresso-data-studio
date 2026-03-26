@@ -140,8 +140,13 @@ export function MiniChat({
         </div>
       )}
 
-      {/* Input bar — single clean line */}
-      <div className="flex items-end gap-2 bg-surface-1/60 backdrop-blur-sm rounded-xl border border-border-subtle px-4 py-2.5">
+      {/* Input bar — visible and inviting */}
+      <div className="flex items-end gap-2 bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 px-4 py-2.5 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
+        {/* AI label */}
+        <span className="shrink-0 flex items-center gap-1.5 text-accent mr-1">
+          <Wand2 className="h-4 w-4" />
+          <span className="text-xs font-semibold hidden sm:inline">AI</span>
+        </span>
         {/* Prompt chip inside the input area */}
         {activePromptName && (
           <span className="inline-flex items-center gap-1 shrink-0 text-[10px] font-medium text-accent bg-accent/10 rounded-full px-2 py-0.5">
@@ -163,7 +168,7 @@ export function MiniChat({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask the AI..."
+          placeholder="Ask AI to write, refine, or brainstorm..."
           rows={1}
           disabled={isSending}
           className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[28px]"
