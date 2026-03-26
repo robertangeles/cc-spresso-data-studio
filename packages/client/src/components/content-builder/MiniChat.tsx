@@ -8,9 +8,20 @@ interface MiniChatProps {
   isSending: boolean;
   model: string;
   onModelChange: (model: string) => void;
+  activePromptName?: string | null;
+  onClearPrompt?: () => void;
 }
 
-export function MiniChat({ messages, onSendMessage, onInsert, isSending, model, onModelChange: _onModelChange }: MiniChatProps) {
+export function MiniChat({
+  messages,
+  onSendMessage,
+  onInsert,
+  isSending,
+  model,
+  onModelChange: _onModelChange,
+  activePromptName,
+  onClearPrompt,
+}: MiniChatProps) {
   // onModelChange available via _onModelChange for future model switcher integration
   void _onModelChange;
   const [collapsed, setCollapsed] = useState(false);
@@ -19,11 +30,14 @@ export function MiniChat({ messages, onSendMessage, onInsert, isSending, model, 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleInsert = useCallback((msgId: string, text: string) => {
-    setInsertedId(msgId);
-    onInsert(text);
-    setTimeout(() => setInsertedId(null), 1200);
-  }, [onInsert]);
+  const handleInsert = useCallback(
+    (msgId: string, text: string) => {
+      setInsertedId(msgId);
+      onInsert(text);
+      setTimeout(() => setInsertedId(null), 1200);
+    },
+    [onInsert],
+  );
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -100,10 +114,32 @@ export function MiniChat({ messages, onSendMessage, onInsert, isSending, model, 
       {/* Collapsible body */}
       {!collapsed && (
         <>
+          {/* Active prompt banner */}
+          {activePromptName && (
+            <div className="flex items-center justify-between px-4 py-2 bg-accent/10 border-b border-accent/20">
+              <span className="text-xs text-accent font-medium">
+                <Wand2 className="inline h-3 w-3 mr-1" />
+                Using prompt: {activePromptName}
+              </span>
+              {onClearPrompt && (
+                <button
+                  type="button"
+                  onClick={onClearPrompt}
+                  className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Message list with subtle radial gradient */}
           <div
             className="max-h-[300px] overflow-y-auto px-3 py-2 space-y-2 scrollbar-thin"
-            style={{ background: 'radial-gradient(ellipse at center, rgba(255,255,255,0.02) 0%, transparent 70%)' }}
+            style={{
+              background:
+                'radial-gradient(ellipse at center, rgba(255,255,255,0.02) 0%, transparent 70%)',
+            }}
           >
             {messages.length === 0 && (
               <p className="text-xs text-text-tertiary text-center py-6 italic">

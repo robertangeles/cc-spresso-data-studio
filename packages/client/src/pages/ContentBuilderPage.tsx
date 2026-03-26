@@ -50,7 +50,7 @@ export function ContentBuilderPage() {
 
   const builder = useContentBuilder();
   const promptsHook = usePrompts();
-  const chat = useContentChat();
+  const chat = useContentChat(builder.activePromptBody);
   const { user } = useAuth();
 
   const userName = user?.name ?? 'User';
@@ -124,8 +124,11 @@ export function ContentBuilderPage() {
   }));
 
   // PromptLibrary's onSelectPrompt expects (promptId, body)
-  const handleSelectPrompt = (promptId: string, _body: string) => {
-    builder.loadPrompt(promptId);
+  const handleSelectPrompt = (promptId: string, body: string) => {
+    const prompt = promptsHook.prompts.find((p) => p.id === promptId);
+    builder.loadPrompt(promptId, prompt?.name, body);
+    // Clear chat when switching prompts so new context applies
+    chat.clearChat();
   };
 
   const handleCreateNewPrompt = () => {
@@ -177,12 +180,39 @@ export function ContentBuilderPage() {
   };
 
   // Schedule handlers
-  const handleSchedule = (_date: string) => {
-    // TODO: implement scheduling via API
+  const handleSchedule = async (date: string) => {
+    if (builder.selectedChannels.length === 0 || !builder.mainBody.trim()) return;
+    try {
+      // Save content items first
+      const { data: batchData } = await api.post('/content/batch', {
+        userId: user?.id,
+        title: builder.title || 'Untitled Post',
+        mainBody: builder.mainBody,
+        platformBodies:
+          Object.keys(builder.platformBodies).length > 0
+            ? builder.platformBodies
+            : Object.fromEntries(builder.selectedChannels.map((id) => [id, builder.mainBody])),
+        imageUrl: builder.imageUrl,
+        status: 'draft',
+      });
+      const items = batchData.data ?? [];
+      // Schedule each item
+      for (const item of items) {
+        await api.post('/schedule', {
+          contentItemId: item.id,
+          channelId: item.channelId,
+          scheduledAt: date,
+        });
+      }
+      alert(`Scheduled ${items.length} post(s) for ${new Date(date).toLocaleString()}`);
+    } catch (err) {
+      console.error('Schedule failed:', err);
+      alert('Failed to schedule. Please try again.');
+    }
   };
 
-  const handlePublishNow = () => {
-    // TODO: implement publish via API
+  const handlePublishNow = async () => {
+    await handleSchedule(new Date().toISOString());
   };
 
   return (
@@ -403,6 +433,8 @@ export function ContentBuilderPage() {
               onInsert={builder.insertFromChat}
               model={chat.model}
               onModelChange={chat.setModel}
+              activePromptName={builder.activePromptName}
+              onClearPrompt={builder.clearPrompt}
             />
           </div>
         </div>

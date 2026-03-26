@@ -8,7 +8,7 @@ export interface ChatMessage {
   createdAt: string;
 }
 
-export function useContentChat() {
+export function useContentChat(systemPrompt?: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -47,6 +47,7 @@ export function useContentChat() {
         const { data } = await api.post(`/chat/conversations/${convId}/messages`, {
           content: text.trim(),
           model,
+          systemPrompt: systemPrompt || undefined,
           metadata: { source: 'content-builder' },
         });
 

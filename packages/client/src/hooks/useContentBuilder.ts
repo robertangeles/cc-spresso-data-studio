@@ -8,6 +8,8 @@ interface ContentBuilderState {
   imageUrl: string | null;
   selectedChannels: string[];
   activePromptId: string | null;
+  activePromptName: string | null;
+  activePromptBody: string | null;
   activeTab: string | null;
   isDirty: boolean;
   isSaving: boolean;
@@ -21,6 +23,8 @@ const initialState: ContentBuilderState = {
   imageUrl: null,
   selectedChannels: [],
   activePromptId: null,
+  activePromptName: null,
+  activePromptBody: null,
   activeTab: null,
   isDirty: false,
   isSaving: false,
@@ -98,8 +102,22 @@ export function useContentBuilder() {
     setState((prev) => ({ ...prev, activeTab: channelId }));
   }, []);
 
-  const loadPrompt = useCallback((promptId: string) => {
-    setState((prev) => ({ ...prev, activePromptId: promptId }));
+  const loadPrompt = useCallback((promptId: string, name?: string, body?: string) => {
+    setState((prev) => ({
+      ...prev,
+      activePromptId: promptId,
+      activePromptName: name ?? null,
+      activePromptBody: body ?? null,
+    }));
+  }, []);
+
+  const clearPrompt = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      activePromptId: null,
+      activePromptName: null,
+      activePromptBody: null,
+    }));
   }, []);
 
   const insertFromChat = useCallback(
@@ -213,6 +231,7 @@ export function useContentBuilder() {
     toggleChannel,
     setActiveTab,
     loadPrompt,
+    clearPrompt,
     insertFromChat,
     saveAsDraft,
     adaptAll,
@@ -221,4 +240,10 @@ export function useContentBuilder() {
   };
 }
 
-export type FlowState = 'IDLE' | 'WRITING' | 'PLATFORMS_SELECTED' | 'ADAPTED' | 'MEDIA_ADDED' | 'READY';
+export type FlowState =
+  | 'IDLE'
+  | 'WRITING'
+  | 'PLATFORMS_SELECTED'
+  | 'ADAPTED'
+  | 'MEDIA_ADDED'
+  | 'READY';
