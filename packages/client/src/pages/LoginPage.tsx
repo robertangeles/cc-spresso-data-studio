@@ -28,9 +28,9 @@ export function LoginPage() {
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'response' in err) {
         const axiosErr = err as { response?: { data?: { error?: string } } };
-        setError(axiosErr.response?.data?.error || 'That didn\'t work. Try again.');
+        setError(axiosErr.response?.data?.error || "That didn't work. Try again.");
       } else {
-        setError('That didn\'t work. Try again.');
+        setError("That didn't work. Try again.");
       }
     } finally {
       setIsSubmitting(false);
@@ -59,10 +59,20 @@ export function LoginPage() {
         {/* Brand */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-dim border border-accent/20 shadow-glow-accent">
-            <img src="/logo.svg" alt="Spresso" className="h-8 w-8 text-accent" style={{ filter: 'brightness(0) saturate(100%) invert(83%) sepia(60%) saturate(1000%) hue-rotate(5deg) brightness(104%) contrast(104%)' }} />
+            <img
+              src="/logo.svg"
+              alt="Spresso"
+              className="h-8 w-8 text-accent"
+              style={{
+                filter:
+                  'brightness(0) saturate(100%) invert(83%) sepia(60%) saturate(1000%) hue-rotate(5deg) brightness(104%) contrast(104%)',
+              }}
+            />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-text-primary">Spresso</h1>
-          <p className="mt-1 text-sm text-text-tertiary">Fast content. No waste. No fluff.</p>
+          <p className="mt-1 text-sm text-text-tertiary">
+            Write with evidence. Publish with confidence.
+          </p>
         </div>
 
         {/* Login card with animated border */}
@@ -71,7 +81,8 @@ export function LoginPage() {
           <div
             className="absolute inset-0 rounded-2xl"
             style={{
-              background: 'conic-gradient(from 0deg, transparent, rgba(255,214,10,0.15), transparent, rgba(255,214,10,0.08), transparent)',
+              background:
+                'conic-gradient(from 0deg, transparent, rgba(255,214,10,0.15), transparent, rgba(255,214,10,0.08), transparent)',
               animation: 'spin 8s linear infinite',
             }}
           />
@@ -112,7 +123,10 @@ export function LoginPage() {
 
             <p className="mt-5 text-center text-sm text-text-tertiary">
               No account?{' '}
-              <Link to="/register" className="font-medium text-accent hover:text-accent-hover transition-colors">
+              <Link
+                to="/register"
+                className="font-medium text-accent hover:text-accent-hover transition-colors"
+              >
                 Make one
               </Link>
             </p>
