@@ -70,8 +70,11 @@ export function LoginPage() {
             />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-text-primary">Spresso</h1>
-          <p className="mt-1 text-sm text-text-tertiary">
-            Write with evidence. Publish with confidence.
+          <p className="mt-1 text-sm text-text-secondary font-medium">
+            Create once. Reach everywhere.
+          </p>
+          <p className="mt-1 text-xs text-text-tertiary">
+            Great content goes nowhere without distribution. Spresso handles both.
           </p>
         </div>
 
