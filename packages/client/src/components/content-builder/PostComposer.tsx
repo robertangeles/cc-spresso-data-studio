@@ -188,7 +188,7 @@ export function PostComposer({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.max(el.scrollHeight, 200)}px`;
+    el.style.height = `${Math.max(el.scrollHeight, 300)}px`;
   }, []);
 
   useEffect(() => {
@@ -276,7 +276,7 @@ export function PostComposer({
           onInput={autoResize}
           placeholder={placeholder}
           className="w-full bg-transparent border-none text-text-primary placeholder:text-text-tertiary focus:outline-none resize-none relative z-[1] shadow-inner shadow-black/20 rounded-lg p-1"
-          style={{ minHeight: '200px' }}
+          style={{ minHeight: '300px' }}
         />
       </div>
 

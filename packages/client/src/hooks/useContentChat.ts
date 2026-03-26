@@ -18,7 +18,7 @@ export function useContentChat(systemPrompt?: string | null) {
     if (conversationId) return conversationId;
 
     const { data } = await api.post('/chat/conversations', {
-      title: 'Content Builder Chat',
+      title: '[CB] Content Builder Chat',
       metadata: { source: 'content-builder' },
     });
     const newId = data.data.id as string;

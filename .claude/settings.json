@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"try { \\(Invoke-WebRequest -Uri ''http://localhost:3003/api/health'' -TimeoutSec 5\\).StatusCode } catch { $_Exception.Message }\")",
+      "Bash(powershell -Command \"Invoke-RestMethod -Uri http://localhost:3003/api/health -Method GET -TimeoutSec 5\")",
+      "Bash(powershell -Command \"Invoke-RestMethod -Uri http://localhost:3003/api/health -Method GET\")",
+      "Bash(powershell -Command \"\\(Invoke-RestMethod -Uri http://localhost:3003/api/auth/login -Method POST -ContentType ''application/json'' -Body ''{\"\"email\"\":\"\"trebor.selegna@outlook.com\"\",\"\"password\"\":\"\"test1234\"\"}''\\).data.accessToken\")",
+      "Bash(powershell -Command \"Invoke-RestMethod -Uri http://localhost:3003/api/content/channels -Method GET\")",
+      "Bash(powershell -Command \"\\(Invoke-RestMethod -Uri http://localhost:3003/api/auth/login -Method POST -ContentType ''application/json'' -Body ''{\"\"email\"\":\"\"trebor.selegna@outlook.com\"\",\"\"password\"\":\"\"m3l4nMYL0V301!\"\"}''\\).data.accessToken.Substring\\(0,50\\)\")",
+      "Bash(\"d:/My AI Projects/cc-content-builder/tmp-login.json\")",
+      "Bash(powershell -Command \"\\(Invoke-RestMethod -Uri http://localhost:3003/api/auth/login -Method POST -ContentType ''application/json'' -InFile ''D:\\\\My AI Projects\\\\cc-content-builder\\\\tmp-login.json''\\).data.accessToken\")",
+      "Bash(printf '{\"\"email\"\":\"\"trebor.selegna@outlook.com\"\",\"\"password\"\":\"\"m3l4nMYL0V301!\"\"}')",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJmMWM0M2M0My1lNzU0LTQwODEtYjdmNi1mMDc3YTRjZWEwNDEiLCJlbWFpbCI6InRyZWJvci5zZWxlZ25hQG91dGxvb2suY29tIiwibmFtZSI6IlJvYiBBbmdlbGVzIiwicm9sZSI6IkFkbWluaXN0cmF0b3IiLCJpYXQiOjE3NzQ0OTYzNzAsImV4cCI6MTc3NDUxMDc3MH0.F2J7QsC8XNj9vShZ2tZyPfkfQ5qSR0WCF9v2NWGX2Oc\")",
+      "Bash(powershell -Command \":*)",
+      "Bash(powershell -Command \"Invoke-RestMethod -Uri http://localhost:3003/api/prompts/6c84e561-c9dc-4adc-9c3a-a72c395dfea8 -Method DELETE -Headers @{Authorization=''Bearer $TOKEN''}\")"
+    ],
+    "additionalDirectories": ["\\tmp"]
+  }
+}

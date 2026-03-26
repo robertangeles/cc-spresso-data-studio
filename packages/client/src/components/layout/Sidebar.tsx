@@ -1,6 +1,22 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Coffee, Plus, MessageSquare, LayoutDashboard, Workflow, Zap, PenTool, Library, CalendarDays, Settings, User, LogOut, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  Coffee,
+  Plus,
+  MessageSquare,
+  LayoutDashboard,
+  Workflow,
+  Zap,
+  PenTool,
+  Library,
+  CalendarDays,
+  Settings,
+  User,
+  LogOut,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
@@ -32,15 +48,23 @@ export function Sidebar() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const initials = user?.name
-    ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    ? user.name
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
     : '??';
 
   // Fetch avatar
   useEffect(() => {
     if (!user) return;
-    api.get('/profile').then(({ data }) => {
-      setAvatarUrl(data.data?.avatarUrl ?? null);
-    }).catch(() => {});
+    api
+      .get('/profile')
+      .then(({ data }) => {
+        setAvatarUrl(data.data?.avatarUrl ?? null);
+      })
+      .catch(() => {});
   }, [user]);
 
   const handleLogout = async () => {
@@ -53,11 +77,17 @@ export function Sidebar() {
   const fetchHistory = useCallback(async () => {
     try {
       const { data } = await api.get('/chat/conversations');
-      setChatHistory(data.data ?? []);
-    } catch { /* non-blocking */ }
+      // Filter out Content Builder conversations — they use [CB] prefix
+      const all = data.data ?? [];
+      setChatHistory(all.filter((c: Conversation) => !c.title.startsWith('[CB]')));
+    } catch {
+      /* non-blocking */
+    }
   }, []);
 
-  useEffect(() => { fetchHistory(); }, [fetchHistory]);
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   // Refresh history when navigating to chat
   useEffect(() => {
@@ -96,7 +126,11 @@ export function Sidebar() {
             onClick={() => setChatExpanded(!chatExpanded)}
             className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
           >
-            {chatExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {chatExpanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
             Chat
           </button>
           <button
@@ -151,7 +185,9 @@ export function Sidebar() {
 
       {/* Section label */}
       <div className="px-4 py-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Content Ops</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+          Content Ops
+        </p>
       </div>
 
       {/* Nav links */}
@@ -183,7 +219,11 @@ export function Sidebar() {
             className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-surface-3 transition-all duration-200"
           >
             {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-border-subtle" />
+              <img
+                src={avatarUrl}
+                alt=""
+                className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-border-subtle"
+              />
             ) : (
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-dim text-xs font-semibold text-accent">
                 {initials}

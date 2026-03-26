@@ -123,13 +123,14 @@ export function useContentBuilder() {
   const insertFromChat = useCallback(
     (text: string) => {
       setState((prev) => {
-        // If a platform tab is active and it has a custom body, append there
-        if (prev.activeTab && prev.platformBodies[prev.activeTab] !== undefined) {
+        // If a platform tab is active, insert into that platform's body
+        if (prev.activeTab) {
+          const existing = prev.platformBodies[prev.activeTab] ?? '';
           return {
             ...prev,
             platformBodies: {
               ...prev.platformBodies,
-              [prev.activeTab]: prev.platformBodies[prev.activeTab] + '\n' + text,
+              [prev.activeTab]: existing ? existing + '\n' + text : text,
             },
           };
         }

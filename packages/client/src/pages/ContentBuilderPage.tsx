@@ -250,6 +250,19 @@ export function ContentBuilderPage() {
         <div className="flex items-center gap-2.5">
           <PenTool className="h-5 w-5 text-accent" />
           <h1 className="text-lg font-semibold text-text-primary">Content Builder</h1>
+          <div className="flex items-center gap-1 ml-3">
+            {['WRITING', 'PLATFORMS_SELECTED', 'ADAPTED'].map((state, i) => {
+              const states = ['WRITING', 'PLATFORMS_SELECTED', 'ADAPTED', 'MEDIA_ADDED', 'READY'];
+              const stateIndex = states.indexOf(builder.flowState);
+              const isActive = i <= stateIndex && stateIndex >= 0;
+              return (
+                <div
+                  key={state}
+                  className={`h-1.5 w-1.5 rounded-full transition-colors ${isActive ? 'bg-accent' : 'bg-surface-3'}`}
+                />
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -306,47 +319,6 @@ export function ContentBuilderPage() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Step indicator */}
-      <div className="flex items-center justify-center gap-0 px-6 py-2 bg-surface-1/50 border-b border-border-subtle">
-        {['Write', 'Platforms', 'Adapt', 'Media', 'Schedule'].map((label, i) => {
-          const states = ['WRITING', 'PLATFORMS_SELECTED', 'ADAPTED', 'MEDIA_ADDED', 'READY'];
-          const stateIndex = states.indexOf(builder.flowState);
-          const isActive = i <= stateIndex;
-          const isCurrent = i === stateIndex || (i === 0 && builder.flowState === 'IDLE');
-          return (
-            <div key={label} className="flex items-center">
-              {i > 0 && (
-                <div
-                  className={`w-12 h-0.5 ${isActive ? 'bg-accent' : 'bg-surface-3'} transition-colors duration-500`}
-                />
-              )}
-              <div className="flex flex-col items-center gap-1">
-                <div
-                  className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
-                    isCurrent
-                      ? 'bg-accent shadow-[0_0_8px_rgba(255,214,10,0.4)] scale-125'
-                      : isActive
-                        ? 'bg-accent'
-                        : 'bg-surface-3'
-                  }`}
-                />
-                <span
-                  className={`text-[9px] font-medium transition-colors ${
-                    isCurrent
-                      ? 'text-accent'
-                      : isActive
-                        ? 'text-text-secondary'
-                        : 'text-text-tertiary'
-                  }`}
-                >
-                  {label}
-                </span>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
       {/* ── Three-panel layout ── */}
@@ -440,7 +412,7 @@ export function ContentBuilderPage() {
                 </div>
 
                 {/* Media Studio — image/video generation + upload */}
-                <div className="mt-4">
+                <div className="mt-3">
                   <MediaStudio
                     imageUrl={builder.imageUrl}
                     onImageChange={builder.setImageUrl}
@@ -454,7 +426,7 @@ export function ContentBuilderPage() {
           </div>
 
           {/* Inline mini-chat below composer */}
-          <div className="flex-shrink-0 border-t border-border-subtle" data-tour="ai-assistant">
+          <div className="border-t border-border-subtle" data-tour="ai-assistant">
             <MiniChat
               messages={chat.messages}
               isSending={chat.isSending}
@@ -482,10 +454,10 @@ export function ContentBuilderPage() {
         {/* ── Right Panel: Preview + Schedule ── */}
         <div
           className={`relative flex-shrink-0 border-l border-border-subtle bg-surface-1 transition-all duration-300 ease-in-out ${
-            rightOpen ? 'w-[320px]' : 'w-0'
+            rightOpen ? 'w-[280px]' : 'w-0'
           } overflow-hidden`}
         >
-          <div className="flex h-full w-[320px] flex-col">
+          <div className="flex h-full w-[280px] flex-col">
             <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
               <span className="text-sm font-medium text-text-secondary">Preview & Schedule</span>
               <button

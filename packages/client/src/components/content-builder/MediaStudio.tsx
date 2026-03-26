@@ -113,23 +113,19 @@ export default function MediaStudio({
     alert('AI regeneration coming soon');
   }, []);
 
-  /* ── Collapsed bar ──────────────────────────────────────── */
+  /* ── Collapsed bar — slim toolbar link ──────────────────── */
   if (isCollapsed && !imageUrl) {
     return (
       <button
         type="button"
         onClick={() => setIsCollapsed(false)}
-        className={`w-full flex items-center gap-3 bg-surface-1/60 backdrop-blur-sm rounded-xl border px-4 py-3 transition-all duration-300 hover:bg-surface-2/60 ${
-          nudge
-            ? 'border-accent/40 shadow-[0_0_12px_rgba(255,214,10,0.1)] animate-pulse'
-            : 'border-border-subtle'
-        }`}
+        className={`inline-flex items-center gap-2 text-sm transition-colors py-1 ${
+          nudge ? 'text-accent animate-pulse' : 'text-text-tertiary hover:text-text-secondary'
+        } cursor-pointer`}
       >
-        <Image size={18} className={nudge ? 'text-accent' : 'text-text-tertiary'} />
-        <span className={`text-sm font-medium ${nudge ? 'text-accent' : 'text-text-secondary'}`}>
-          Add Media
-        </span>
-        <ChevronDown size={16} className="ml-auto text-text-tertiary" />
+        <Image size={15} />
+        <span className="font-medium">Add Media</span>
+        <ChevronDown size={14} />
       </button>
     );
   }
