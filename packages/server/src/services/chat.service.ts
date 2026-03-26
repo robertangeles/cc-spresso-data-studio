@@ -33,11 +33,14 @@ export async function getConversation(conversationId: string, userId: string) {
 }
 
 export async function createConversation(userId: string, model: string, title?: string) {
-  const [conversation] = await db.insert(schema.conversations).values({
-    userId,
-    model,
-    title: title ?? 'New Chat',
-  }).returning();
+  const [conversation] = await db
+    .insert(schema.conversations)
+    .values({
+      userId,
+      model,
+      title: title ?? 'New Chat',
+    })
+    .returning();
 
   return conversation;
 }
@@ -60,6 +63,7 @@ export async function sendMessage(
   userId: string,
   content: string,
   model?: string,
+  systemPrompt?: string,
 ) {
   // Verify ownership
   const conversation = await db.query.conversations.findFirst({
@@ -91,14 +95,22 @@ export async function sendMessage(
 
   // Load global rules
   const activeRules = await getActiveRules(userId);
-  const globalRules = activeRules.length > 0
-    ? activeRules.map((r) => r.rules).join('\n\n')
-    : undefined;
+  const globalRules =
+    activeRules.length > 0 ? activeRules.map((r) => r.rules).join('\n\n') : undefined;
 
   // Build messages array
   const aiMessages: AICompletionRequest['messages'] = [];
+
+  // Inject custom system prompt (e.g., from Content Builder prompt library)
+  if (systemPrompt) {
+    aiMessages.push({ role: 'system', content: systemPrompt });
+  }
+
   if (globalRules) {
-    aiMessages.push({ role: 'system', content: `GLOBAL RULES (always follow these):\n\n${globalRules}` });
+    aiMessages.push({
+      role: 'system',
+      content: `GLOBAL RULES (always follow these):\n\n${globalRules}`,
+    });
   }
 
   // Include conversation history (last 20 messages to manage context)
@@ -108,7 +120,10 @@ export async function sendMessage(
   }
 
   // Call AI
-  logger.info({ conversationId, model: activeModel, messageCount: aiMessages.length }, 'Chat completion');
+  logger.info(
+    { conversationId, model: activeModel, messageCount: aiMessages.length },
+    'Chat completion',
+  );
 
   const response = await providerRegistry.complete({
     model: activeModel,
@@ -120,17 +135,21 @@ export async function sendMessage(
   const responseContent = response.imageUrl ?? stripThinkingBlocks(response.content);
 
   // Save assistant message
-  const [assistantMsg] = await db.insert(schema.messages).values({
-    conversationId,
-    role: 'assistant',
-    content: responseContent,
-    contentType,
-    model: response.model,
-    tokens: (response.usage?.inputTokens ?? 0) + (response.usage?.outputTokens ?? 0),
-  }).returning();
+  const [assistantMsg] = await db
+    .insert(schema.messages)
+    .values({
+      conversationId,
+      role: 'assistant',
+      content: responseContent,
+      contentType,
+      model: response.model,
+      tokens: (response.usage?.inputTokens ?? 0) + (response.usage?.outputTokens ?? 0),
+    })
+    .returning();
 
   // Update conversation timestamp and model
-  await db.update(schema.conversations)
+  await db
+    .update(schema.conversations)
     .set({ updatedAt: new Date(), model: activeModel })
     .where(eq(schema.conversations.id, conversationId));
 
@@ -152,16 +171,24 @@ async function generateTitle(conversationId: string, firstMessage: string) {
     const response = await providerRegistry.complete({
       model: 'claude-haiku-4-5',
       messages: [
-        { role: 'system', content: 'Generate a short title (3-6 words) for a conversation that starts with the following message. Return ONLY the title, no quotes, no explanation.' },
+        {
+          role: 'system',
+          content:
+            'Generate a short title (3-6 words) for a conversation that starts with the following message. Return ONLY the title, no quotes, no explanation.',
+        },
         { role: 'user', content: firstMessage },
       ],
       maxTokens: 20,
       temperature: 0.3,
     });
 
-    const title = response.content.trim().replace(/^["']|["']$/g, '').slice(0, 255);
+    const title = response.content
+      .trim()
+      .replace(/^["']|["']$/g, '')
+      .slice(0, 255);
     if (title) {
-      await db.update(schema.conversations)
+      await db
+        .update(schema.conversations)
         .set({ title })
         .where(eq(schema.conversations.id, conversationId));
     }
