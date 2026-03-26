@@ -2,7 +2,7 @@
 
 Project Rules for Claude Code Project: Content Pilot
 
-------------------------------------------------------------------------
+---
 
 # Project Overview
 
@@ -16,56 +16,56 @@ Where many tools focus only on publishing, Content Pilot is built around momentu
 
 Content Pilot is especially useful for people building a brand, launching an offer, growing a newsletter, promoting a service, or maintaining a consistent presence without hiring a full content team. It gives users a way to create once, adapt intelligently, and distribute with purpose.
 
-------------------------------------------------------------------------
+---
 
 # Workflow Orchestration
 
 ## 1. Plan Mode Default
 
--   Enter plan mode for ANY non-trivial task (3+ steps or architectural
-    decisions)
--   If something goes sideways, STOP and re-plan immediately --- do not
-    keep pushing
--   Use plan mode for verification steps, not just building
--   Write detailed specs upfront to reduce ambiguity
+- Enter plan mode for ANY non-trivial task (3+ steps or architectural
+  decisions)
+- If something goes sideways, STOP and re-plan immediately --- do not
+  keep pushing
+- Use plan mode for verification steps, not just building
+- Write detailed specs upfront to reduce ambiguity
 
 ## 2. Subagent Strategy
 
--   Use subagents liberally to keep main context window clean
--   Offload research, exploration, and parallel analysis to subagents
--   For complex problems, use multiple subagents for parallel reasoning
--   One task per subagent for focused execution
+- Use subagents liberally to keep main context window clean
+- Offload research, exploration, and parallel analysis to subagents
+- For complex problems, use multiple subagents for parallel reasoning
+- One task per subagent for focused execution
 
 ## 3. Self-Improvement Loop
 
--   After ANY correction from the user: update `tasks/lessons.md`
--   After ANY significant implementation, architectural decision, or
-    non-obvious bug fix: record it in `tasks/lessons.md`
--   Format: Problem / Fix / Rule
--   Write rules that prevent repeating mistakes
--   Review lessons at session start
+- After ANY correction from the user: update `tasks/lessons.md`
+- After ANY significant implementation, architectural decision, or
+  non-obvious bug fix: record it in `tasks/lessons.md`
+- Format: Problem / Fix / Rule
+- Write rules that prevent repeating mistakes
+- Review lessons at session start
 
 ## 4. Verification Before Done
 
--   Never mark a task complete without proving it works
--   Diff behavior between main and your changes when relevant
--   Ask: "Would a staff engineer approve this?"
--   Run tests, check logs, demonstrate correctness
--   When any user-facing feature is added or modified, the corresponding
-    `docs/` file must be created or updated before the task is marked
-    complete
+- Never mark a task complete without proving it works
+- Diff behavior between main and your changes when relevant
+- Ask: "Would a staff engineer approve this?"
+- Run tests, check logs, demonstrate correctness
+- When any user-facing feature is added or modified, the corresponding
+  `docs/` file must be created or updated before the task is marked
+  complete
 
 ## 5. Demand Elegance (Balanced)
 
--   For non-trivial changes ask: "Is there a more elegant solution?"
--   If a fix feels hacky, refactor before presenting
--   Avoid over-engineering simple problems
+- For non-trivial changes ask: "Is there a more elegant solution?"
+- If a fix feels hacky, refactor before presenting
+- Avoid over-engineering simple problems
 
 ## 6. Autonomous Bug Fixing
 
--   When given a bug report: investigate logs and errors and resolve it
--   Do not require the user to guide debugging steps
--   Fix failing tests and CI issues independently when possible
+- When given a bug report: investigate logs and errors and resolve it
+- Do not require the user to guide debugging steps
+- Fix failing tests and CI issues independently when possible
 
 ## 7. Testing Standards
 
@@ -80,11 +80,11 @@ When a new feature is added, generate:
 
 Rules:
 
--   Every new service function needs a unit test
--   Every new API endpoint needs an integration test
--   Every user-facing feature needs at least one E2E test
--   Test the unhappy path: invalid input, missing auth, rate limits,
-    edge cases
+- Every new service function needs a unit test
+- Every new API endpoint needs an integration test
+- Every user-facing feature needs at least one E2E test
+- Test the unhappy path: invalid input, missing auth, rate limits,
+  edge cases
 
 ### Regression Testing Protocol
 
@@ -104,35 +104,34 @@ After every new feature, before marking work complete:
 7. Confirm no existing tests were broken, modified, or deleted without justification
 8. Report pass/fail results before closing the task
 
-Never consider a feature done until all existing tests pass, the database schema is in sync, and all API routes are verified via curl.    
+Never consider a feature done until all existing tests pass, the database schema is in sync, and all API routes are verified via curl.
 
 ## 8. Enterprise Code Quality
 
 Every change must meet production-grade standards:
 
--   No shortcuts, workarounds, or "good enough" implementations
--   Every feature must be tested end-to-end before marking complete
--   Error handling must be specific and actionable (no generic messages)
--   Configuration must be admin-controllable (no hardcoded values that
-    users need to change)
--   API keys and credentials must be database-driven via the
-    Integrations panel
--   UI changes must refresh immediately without requiring a page reload
--   Unused or experimental code must not ship — verify all code paths
-    work
--   When integrating any external API, make a real test call during
-    implementation to verify the endpoint/model/key works
-
+- No shortcuts, workarounds, or "good enough" implementations
+- Every feature must be tested end-to-end before marking complete
+- Error handling must be specific and actionable (no generic messages)
+- Configuration must be admin-controllable (no hardcoded values that
+  users need to change)
+- API keys and credentials must be database-driven via the
+  Integrations panel
+- UI changes must refresh immediately without requiring a page reload
+- Unused or experimental code must not ship — verify all code paths
+  work
+- When integrating any external API, make a real test call during
+  implementation to verify the endpoint/model/key works
 
 # Architecture Principles
 
 The system must follow:
 
--   Separation of concerns
--   Modular architecture
--   Maintainable code
--   Scalable services
--   Clear folder structure
+- Separation of concerns
+- Modular architecture
+- Maintainable code
+- Scalable services
+- Clear folder structure
 
 Frontend, backend, AI services, prompts, and knowledge content must
 remain separated.
@@ -170,16 +169,16 @@ schema files, Drizzle ORM definitions, and any ad-hoc SQL.
 
 ### 3. Naming Conventions
 
-| Object         | Pattern                          | Example                    |
-|----------------|----------------------------------|----------------------------|
-| Tables         | `snake_case`, plural noun        | `recipe_versions`          |
-| Fact tables    | `fact_` prefix                   | `fact_recipe_usage`        |
-| Dimension tables | `dim_` prefix                  | `dim_ingredient`           |
-| Primary key    | `id` (UUID preferred)            | `id uuid primary key`      |
-| Foreign keys   | `{referenced_table_singular}_id` | `user_id`, `recipe_id`     |
-| Timestamps     | `created_at`, `updated_at`       | standard on every table    |
-| Boolean cols   | `is_` or `has_` prefix           | `is_published`, `has_image`|
-| Junction tables | both entity names, alphabetical | `ingredient_recipe`        |
+| Object           | Pattern                          | Example                     |
+| ---------------- | -------------------------------- | --------------------------- |
+| Tables           | `snake_case`, plural noun        | `recipe_versions`           |
+| Fact tables      | `fact_` prefix                   | `fact_recipe_usage`         |
+| Dimension tables | `dim_` prefix                    | `dim_ingredient`            |
+| Primary key      | `id` (UUID preferred)            | `id uuid primary key`       |
+| Foreign keys     | `{referenced_table_singular}_id` | `user_id`, `recipe_id`      |
+| Timestamps       | `created_at`, `updated_at`       | standard on every table     |
+| Boolean cols     | `is_` or `has_` prefix           | `is_published`, `has_image` |
+| Junction tables  | both entity names, alphabetical  | `ingredient_recipe`         |
 
 - No abbreviations unless universally understood (e.g. `id`, `url`).
 - No camelCase in SQL or schema files.
@@ -203,6 +202,7 @@ schema files, Drizzle ORM definitions, and any ad-hoc SQL.
 ### Enforcement
 
 Before generating or reviewing any schema:
+
 1. State which normal form the table satisfies.
 2. Confirm every FK has an index.
 3. Flag any column that violates naming conventions.
@@ -212,7 +212,7 @@ Before generating or reviewing any schema:
 If a design decision deviates from any rule above, state the deviation
 explicitly and provide a justification before proceeding.
 
-------------------------------------------------------------------------
+---
 
 # Project Folder Structure
 
@@ -255,7 +255,7 @@ Claude must follow this structure when generating code. Never create
 files under `client/`, `server/`, or `shared/` at the repo root —
 always use `packages/client/`, `packages/server/`, `packages/shared/`.
 
-------------------------------------------------------------------------
+---
 
 # Separation of Concerns
 
@@ -267,19 +267,19 @@ Location:
 
 Responsibilities:
 
--   UI rendering
--   chat interface
--   API communication
--   state management
+- UI rendering
+- chat interface
+- API communication
+- state management
 
 Rules:
 
--   HTML contains structure only
--   CSS contains styling only
--   JavaScript handles UI behavior
--   No business logic allowed
+- HTML contains structure only
+- CSS contains styling only
+- JavaScript handles UI behavior
+- No business logic allowed
 
-------------------------------------------------------------------------
+---
 
 ## Backend
 
@@ -289,14 +289,14 @@ Location:
 
 Responsibilities:
 
--   API endpoints
--   request validation
--   authentication
--   orchestration of services
+- API endpoints
+- request validation
+- authentication
+- orchestration of services
 
 Backend must never contain frontend UI logic.
 
-------------------------------------------------------------------------
+---
 
 ## Services Layer
 
@@ -306,17 +306,17 @@ Location:
 
 Examples:
 
--   aiService
--   chatService
--   knowledgeService
+- aiService
+- chatService
+- knowledgeService
 
 Responsibilities:
 
--   domain logic
--   AI integration
--   knowledge retrieval
+- domain logic
+- AI integration
+- knowledge retrieval
 
-------------------------------------------------------------------------
+---
 
 ## Routes
 
@@ -328,11 +328,11 @@ Routes must remain thin.
 
 They should:
 
--   receive requests
--   call controllers
--   return responses
+- receive requests
+- call controllers
+- return responses
 
-------------------------------------------------------------------------
+---
 
 ## Controllers
 
@@ -342,13 +342,13 @@ Location:
 
 Responsibilities:
 
--   validate input
--   call services
--   format responses
+- validate input
+- call services
+- format responses
 
 Controllers must not contain heavy business logic.
 
-------------------------------------------------------------------------
+---
 
 ## Database / Models
 
@@ -361,7 +361,6 @@ folder. Database entities (User, Conversation, Message, etc.) are
 defined as Drizzle table schemas in `packages/server/src/db/schema.ts`.
 Migrations are managed via `drizzle-kit` and output to
 `packages/server/drizzle/`.
-
 
 # API Design
 
@@ -385,23 +384,23 @@ AI service location:
 
 Responsibilities:
 
--   construct prompts
--   call LLM APIs
--   return responses
+- construct prompts
+- call LLM APIs
+- return responses
 
 Routes must never call LLM APIs directly.
 
-------------------------------------------------------------------------
+---
 
 # Security Guidelines
 
--   Store API keys in environment variables
--   Never commit secrets
--   Validate all request inputs
--   Sanitize user data
--   Implement rate limiting
+- Store API keys in environment variables
+- Never commit secrets
+- Validate all request inputs
+- Sanitize user data
+- Implement rate limiting
 
-------------------------------------------------------------------------
+---
 
 # Documentation
 
@@ -415,17 +414,17 @@ Structure:
       architecture/
       specs/
 
-------------------------------------------------------------------------
+---
 
 # Code Quality Rules
 
--   Keep files small and focused
--   Prefer modular functions
--   Avoid deeply nested logic
--   Use descriptive variable names
--   Avoid duplicated logic
+- Keep files small and focused
+- Prefer modular functions
+- Avoid deeply nested logic
+- Use descriptive variable names
+- Avoid duplicated logic
 
-------------------------------------------------------------------------
+---
 
 # MANDATORY: Infection Virus Design Standard
 
@@ -433,14 +432,14 @@ Every UI element must make the user want to touch it. This is not optional polis
 
 ## Principles
 
--   **Glass morphism**: Use `backdrop-blur`, semi-transparent backgrounds (`bg-surface-2/50`), and `border-white/5` to create depth layers
--   **Subtle amber glows**: Selected, active, and focused elements get soft glow shadows (`shadow-[0_0_12px_rgba(255,214,10,0.15)]`)
--   **Gradient accents**: Buttons, borders, and highlights use gradients (`bg-gradient-to-r from-accent to-amber-600`) instead of flat colors
--   **Depth that pulls you in**: Radial gradient backgrounds, inner shadows on inputs, cards that lift on hover (`hover:-translate-y-1 hover:shadow-dark-lg`)
--   **Micro-animations that respond**: Spring easing (`ease-spring`), scale-in on selection, slide-up on mount, shimmer during loading, pulse on idle CTAs
--   **Per-platform identity**: Each social platform gets its own accent color for chips, tabs, and preview cards — never generic gray
--   **No flat surfaces**: Every card, panel, and section should have visible depth through gradients, borders, or shadows
--   **Keyboard-first power user flow**: Every major action has a keyboard shortcut with visible hints
+- **Glass morphism**: Use `backdrop-blur`, semi-transparent backgrounds (`bg-surface-2/50`), and `border-white/5` to create depth layers
+- **Subtle amber glows**: Selected, active, and focused elements get soft glow shadows (`shadow-[0_0_12px_rgba(255,214,10,0.15)]`)
+- **Gradient accents**: Buttons, borders, and highlights use gradients (`bg-gradient-to-r from-accent to-amber-600`) instead of flat colors
+- **Depth that pulls you in**: Radial gradient backgrounds, inner shadows on inputs, cards that lift on hover (`hover:-translate-y-1 hover:shadow-dark-lg`)
+- **Micro-animations that respond**: Spring easing (`ease-spring`), scale-in on selection, slide-up on mount, shimmer during loading, pulse on idle CTAs
+- **Per-platform identity**: Each social platform gets its own accent color for chips, tabs, and preview cards — never generic gray
+- **No flat surfaces**: Every card, panel, and section should have visible depth through gradients, borders, or shadows
+- **Keyboard-first power user flow**: Every major action has a keyboard shortcut with visible hints
 
 ## When Building New UI
 
@@ -452,17 +451,17 @@ Every UI element must make the user want to touch it. This is not optional polis
 6. Progress bars and counters use color gradients (green → amber → red)
 7. Empty states must be inspiring, not clinical — use hero icons with glow, gradient text, and quick-start cards
 
-------------------------------------------------------------------------
+---
 
 # When Generating Code
 
 Claude must:
 
--   follow the folder structure
--   maintain separation of concerns
--   keep files modular
--   avoid monolithic code
--   generate production-quality implementations
+- follow the folder structure
+- maintain separation of concerns
+- keep files modular
+- avoid monolithic code
+- generate production-quality implementations
 
 # Security and Testing Standards
 
@@ -535,19 +534,26 @@ If a feature introduces security risk, Claude must:
 - propose a safer implementation
 - document the mitigation
 
-------------------------------------------------------------------------
+---
 
-# Git Workflow
+# Git Workflow — Trunk-Based Development
 
-Solo developer. `main` is the production branch — Railway auto-deploys on every push to it.
+`main` is the trunk. Every push auto-deploys via Railway. CI must pass.
+
+References:
+
+- https://www.atlassian.com/continuous-delivery/continuous-integration/trunk-based-development
+- https://trunkbaseddevelopment.com/
 
 ## Rules
 
+- **MANDATORY**: CI pipeline (GitHub Actions) must pass before merging. Never bypass.
 - **MANDATORY**: Always ask for explicit user confirmation before running `git push`. Never push automatically.
-- Work in a **feature branch** for anything beyond a 2-file change
-- Merge to `main` with `--no-ff` when the feature is tested and ready to deploy
-- For small bug fixes or config changes, commit directly to `main`
-- For production hotfixes, use a `hotfix/` branch
+- Small changes (< 3 files, config, docs): commit directly to `main`
+- Non-trivial changes: short-lived feature branch (max 2 days)
+- Merge to `main` with `--no-ff` when CI passes
+- For incomplete features touching shared code: use feature flags
+- Pre-commit hooks (Husky + lint-staged) run lint + format on staged files
 
 ## Branch Naming
 
@@ -555,12 +561,26 @@ Solo developer. `main` is the production branch — Railway auto-deploys on ever
     fix/guest-session-timeout
     hotfix/stripe-webhook-failure
 
+## CI Pipeline (GitHub Actions)
+
+Every push and PR to `main` runs:
+
+    1. pnpm install --frozen-lockfile
+    2. Lint (eslint)
+    3. TypeScript check (tsc --noEmit for shared, server, client)
+    4. Unit tests (vitest)
+    5. Build (pnpm build)
+
+All steps must pass. No exceptions.
+
 ## Merge Flow
 
     git checkout -b feature/my-feature
-    # ... work and commit ...
+    # ... work and commit (keep branch < 2 days) ...
+    # Push branch, CI runs automatically
     git checkout main
     git merge feature/my-feature --no-ff
+    # Confirm with user before pushing
     git push origin main
     git branch -d feature/my-feature
 
@@ -578,4 +598,5 @@ Solo developer. `main` is the production branch — Railway auto-deploys on ever
 - Push to any remote without explicit user confirmation
 - Push broken code to `main`
 - Commit `.env` files or secrets
-- Use PRs for solo work (unnecessary overhead)
+- Skip pre-commit hooks (--no-verify)
+- Let a feature branch live longer than 2 days

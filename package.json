@@ -14,7 +14,8 @@
     "db:migrate": "pnpm --filter @cc/server db:migrate",
     "db:push": "pnpm --filter @cc/server db:push",
     "db:studio": "pnpm --filter @cc/server db:studio",
-    "clean": "pnpm -r exec rm -rf dist node_modules && rm -rf node_modules"
+    "clean": "pnpm -r exec rm -rf dist node_modules && rm -rf node_modules",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
@@ -23,11 +24,26 @@
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.34.0",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.2.0",
     "typescript": "^5.4.0"
   },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css}": [
+      "prettier --write"
+    ]
+  },
   "pnpm": {
-    "onlyBuiltDependencies": ["bcrypt", "esbuild", "es5-ext"]
+    "onlyBuiltDependencies": [
+      "bcrypt",
+      "esbuild",
+      "es5-ext"
+    ]
   },
   "engines": {
     "node": ">=20.0.0",
