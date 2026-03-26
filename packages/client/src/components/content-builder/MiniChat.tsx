@@ -141,7 +141,7 @@ export function MiniChat({
       )}
 
       {/* Input bar — visible and inviting */}
-      <div className="flex items-end gap-2 bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 px-4 py-2.5 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
+      <div className="flex items-start gap-2 bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 px-4 py-3 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
         {/* AI label */}
         <span className="shrink-0 flex items-center gap-1.5 text-accent mr-1">
           <Wand2 className="h-4 w-4" />
@@ -169,9 +169,9 @@ export function MiniChat({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask AI to write, refine, or brainstorm..."
-          rows={1}
+          rows={3}
           disabled={isSending}
-          className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[28px]"
+          className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[60px]"
         />
         <div className="flex items-center gap-1.5 shrink-0">
           <select
