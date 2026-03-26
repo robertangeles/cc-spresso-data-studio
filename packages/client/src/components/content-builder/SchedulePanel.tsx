@@ -7,6 +7,7 @@ interface SchedulePanelProps {
   onSaveDraft: () => void;
   isSaving: boolean;
   selectedChannelCount: number;
+  flowState?: string;
 }
 
 export function SchedulePanel({
@@ -15,6 +16,7 @@ export function SchedulePanel({
   onSaveDraft,
   isSaving,
   selectedChannelCount,
+  flowState,
 }: SchedulePanelProps) {
   const [scheduleDate, setScheduleDate] = useState('');
 
@@ -43,8 +45,25 @@ export function SchedulePanel({
 
   const relativeDate = getRelativeDate();
 
+  // Early flow states: show dim placeholder
+  if (flowState === 'IDLE' || flowState === 'WRITING') {
+    return (
+      <div className="bg-surface-1 rounded-xl border border-border-subtle p-4 text-center">
+        <Calendar className="h-8 w-8 mx-auto text-text-tertiary/30 mb-2" />
+        <p className="text-xs text-text-tertiary">Create your content first, then schedule it here.</p>
+      </div>
+    );
+  }
+
+  // Determine if the panel should glow
+  const isGlowing = flowState === 'ADAPTED' || flowState === 'MEDIA_ADDED' || flowState === 'READY';
+
   return (
-    <div className="bg-surface-1 rounded-xl border border-border-subtle p-4 space-y-4">
+    <div className={`bg-surface-1 rounded-xl border p-4 space-y-4 transition-all duration-500 ${
+      isGlowing
+        ? 'border-accent/30 shadow-[0_0_10px_rgba(255,214,10,0.08)]'
+        : 'border-border-subtle'
+    }`}>
       {/* Header */}
       <div className="flex items-center gap-2">
         <Calendar className="h-4 w-4 text-accent" />

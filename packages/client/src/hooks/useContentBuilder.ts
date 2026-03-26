@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { api } from '../lib/api';
 
 interface ContentBuilderState {
@@ -186,6 +186,19 @@ export function useContentBuilder() {
     setState(initialState);
   }, []);
 
+  const flowState = useMemo((): FlowState => {
+    const hasChannels = state.selectedChannels.length > 0;
+    const hasAdapted = hasChannels && Object.keys(state.platformBodies).length > 0;
+    const hasMedia = !!state.imageUrl;
+
+    if (hasAdapted && hasMedia) return 'READY';
+    if (hasMedia && hasChannels) return 'MEDIA_ADDED';
+    if (hasAdapted) return 'ADAPTED';
+    if (hasChannels) return 'PLATFORMS_SELECTED';
+    if (state.mainBody.trim().length > 0) return 'WRITING';
+    return 'IDLE';
+  }, [state.selectedChannels, state.platformBodies, state.mainBody, state.imageUrl]);
+
   return {
     // State
     ...state,
@@ -204,5 +217,8 @@ export function useContentBuilder() {
     saveAsDraft,
     adaptAll,
     reset,
+    flowState,
   };
 }
+
+export type FlowState = 'IDLE' | 'WRITING' | 'PLATFORMS_SELECTED' | 'ADAPTED' | 'MEDIA_ADDED' | 'READY';

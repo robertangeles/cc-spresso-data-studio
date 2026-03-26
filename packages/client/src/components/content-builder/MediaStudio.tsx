@@ -1,10 +1,12 @@
 import { useState, useRef, useCallback } from 'react';
-import { Upload, X, RefreshCw, Loader2, Image } from 'lucide-react';
+import { Upload, X, RefreshCw, Loader2, Image, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface MediaStudioProps {
   imageUrl: string | null;
   onImageChange: (url: string | null) => void;
   selectedChannels: Array<{ id: string; name: string; slug: string; config: any }>;
+  flowState?: string;
+  nudge?: boolean;
 }
 
 const STYLE_PRESETS = [
@@ -34,7 +36,10 @@ export default function MediaStudio({
   imageUrl,
   onImageChange,
   selectedChannels,
+  // flowState reserved for future per-state rendering
+  nudge,
 }: MediaStudioProps) {
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [activePreset, setActivePreset] = useState<StylePresetId>('realistic');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -103,6 +108,25 @@ export default function MediaStudio({
     alert('AI regeneration coming soon');
   }, []);
 
+  /* ── Collapsed bar ──────────────────────────────────────── */
+  if (isCollapsed && !imageUrl) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsCollapsed(false)}
+        className={`w-full flex items-center gap-3 bg-surface-1/60 backdrop-blur-sm rounded-xl border px-4 py-3 transition-all duration-300 hover:bg-surface-2/60 ${
+          nudge
+            ? 'border-accent/40 shadow-[0_0_12px_rgba(255,214,10,0.1)] animate-pulse'
+            : 'border-border-subtle'
+        }`}
+      >
+        <Image size={18} className={nudge ? 'text-accent' : 'text-text-tertiary'} />
+        <span className={`text-sm font-medium ${nudge ? 'text-accent' : 'text-text-secondary'}`}>Add Media</span>
+        <ChevronDown size={16} className="ml-auto text-text-tertiary" />
+      </button>
+    );
+  }
+
   /* ── Image preview state ─────────────────────────────────── */
   if (imageUrl) {
     return (
@@ -161,6 +185,22 @@ export default function MediaStudio({
   /* ── Empty / upload state ────────────────────────────────── */
   return (
     <div className="rounded-xl border border-border-subtle bg-surface-1 p-4 space-y-4">
+      {/* Collapse toggle */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Image size={16} className="text-accent" />
+          <span className="text-sm font-semibold text-text-primary">Media Studio</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsCollapsed(true)}
+          className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-3 hover:text-text-secondary transition-all duration-200"
+          aria-label="Collapse media studio"
+        >
+          <ChevronUp size={16} />
+        </button>
+      </div>
+
       {/* Hidden file input */}
       <input
         ref={fileInputRef}

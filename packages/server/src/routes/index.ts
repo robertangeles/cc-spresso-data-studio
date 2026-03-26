@@ -13,6 +13,7 @@ import usageRoutes from './usage.routes.js';
 import { promptRoutes } from './prompt.routes.js';
 import { schedulerRoutes } from './scheduler.routes.js';
 import { systemPromptRoutes } from './system-prompt.routes.js';
+import { assistantRoutes } from './assistant.routes.js';
 
 const router = Router();
 
@@ -38,5 +39,6 @@ router.use('/admin/usage', usageRoutes);
 router.use('/prompts', promptRoutes);
 router.use('/schedule', schedulerRoutes);
 router.use('/system-prompts', systemPromptRoutes);
+router.use('/assistant', assistantRoutes);
 
 export { router };

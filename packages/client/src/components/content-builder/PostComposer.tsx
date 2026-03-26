@@ -15,6 +15,7 @@ interface PostComposerProps {
   onImageClick: () => void;
   isAdapting: boolean;
   onAdaptAll: () => void;
+  flowState?: string;
 }
 
 /** Slugs that typically use a title field */
@@ -104,10 +105,25 @@ function renderDualBar(count: number, limit: number, optimal: number) {
   );
 }
 
-function getPlaceholder(isMainTab: boolean, channelName?: string): string {
-  if (isMainTab) return 'Write your content here...';
-  if (channelName) return `Customize for ${channelName}...`;
-  return 'Write your content...';
+function getPlaceholder(isMainTab: boolean, channelName?: string, flowState?: string): string {
+  if (!isMainTab) {
+    if (channelName) return `Customize for ${channelName}...`;
+    return 'Write your content...';
+  }
+  switch (flowState) {
+    case 'IDLE':
+      return "What's on your mind? Start writing and we'll help you turn it into content for every platform...";
+    case 'WRITING':
+      return 'Keep going... Select platforms above when you\'re ready to adapt.';
+    case 'PLATFORMS_SELECTED':
+      return "Looking good! Click 'Adapt All' to generate versions for each platform.";
+    case 'ADAPTED':
+    case 'MEDIA_ADDED':
+    case 'READY':
+      return 'Content adapted! Edit any platform version using the tabs above.';
+    default:
+      return 'Write your content here...';
+  }
 }
 
 export function PostComposer({
@@ -124,6 +140,7 @@ export function PostComposer({
   onImageClick,
   isAdapting,
   onAdaptAll,
+  flowState,
 }: PostComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMainTab = activeTab === null;
@@ -153,7 +170,7 @@ export function PostComposer({
   const charCount = currentBody.length;
 
   // Contextual placeholder
-  const placeholder = getPlaceholder(isMainTab, activeChannel?.name);
+  const placeholder = getPlaceholder(isMainTab, activeChannel?.name, flowState);
 
   // Auto-resize textarea
   const autoResize = useCallback(() => {

@@ -8,6 +8,7 @@ import {
   PanelLeftClose,
   PanelRightClose,
   Keyboard,
+  Check,
 } from 'lucide-react';
 import { PlatformSelector } from '../components/content-builder/PlatformSelector';
 import { PostComposer } from '../components/content-builder/PostComposer';
@@ -196,22 +197,61 @@ export function ContentBuilderPage() {
               <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />Ctrl+S
             </span>
           </div>
-          <div className="flex flex-col items-center">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={builder.adaptAll}
-              disabled={builder.isAdapting || builder.selectedChannels.length === 0}
-              title="Adapt All (Ctrl+Shift+A)"
-            >
-              <Sparkles className="mr-1.5 h-4 w-4" />
-              {builder.isAdapting ? 'Adapting...' : 'Adapt All'}
-            </Button>
-            <span className="text-[9px] text-text-tertiary mt-0.5 hidden lg:block">
-              <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />Ctrl+Shift+A
-            </span>
-          </div>
+          {(builder.flowState === 'PLATFORMS_SELECTED' || builder.flowState === 'ADAPTED' || builder.flowState === 'MEDIA_ADDED' || builder.flowState === 'READY') && (
+            <div className="flex flex-col items-center" data-tour="adapt-all">
+              {builder.flowState === 'ADAPTED' || builder.flowState === 'MEDIA_ADDED' || builder.flowState === 'READY' ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={builder.adaptAll}
+                  disabled={builder.isAdapting}
+                  title="Re-adapt All (Ctrl+Shift+A)"
+                >
+                  <Check className="mr-1.5 h-4 w-4 text-green-400" />
+                  <span className="text-green-400">Adapted</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={builder.adaptAll}
+                  disabled={builder.isAdapting || builder.selectedChannels.length === 0}
+                  title="Adapt All (Ctrl+Shift+A)"
+                >
+                  <Sparkles className="mr-1.5 h-4 w-4" />
+                  {builder.isAdapting ? 'Adapting...' : 'Adapt All'}
+                </Button>
+              )}
+              <span className="text-[9px] text-text-tertiary mt-0.5 hidden lg:block">
+                <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />Ctrl+Shift+A
+              </span>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Step indicator */}
+      <div className="flex items-center justify-center gap-0 px-6 py-2 bg-surface-1/50 border-b border-border-subtle">
+        {['Write', 'Platforms', 'Adapt', 'Media', 'Schedule'].map((label, i) => {
+          const states = ['WRITING', 'PLATFORMS_SELECTED', 'ADAPTED', 'MEDIA_ADDED', 'READY'];
+          const stateIndex = states.indexOf(builder.flowState);
+          const isActive = i <= stateIndex;
+          const isCurrent = i === stateIndex || (i === 0 && builder.flowState === 'IDLE');
+          return (
+            <div key={label} className="flex items-center">
+              {i > 0 && <div className={`w-12 h-0.5 ${isActive ? 'bg-accent' : 'bg-surface-3'} transition-colors duration-500`} />}
+              <div className="flex flex-col items-center gap-1">
+                <div className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
+                  isCurrent ? 'bg-accent shadow-[0_0_8px_rgba(255,214,10,0.4)] scale-125' :
+                  isActive ? 'bg-accent' : 'bg-surface-3'
+                }`} />
+                <span className={`text-[9px] font-medium transition-colors ${
+                  isCurrent ? 'text-accent' : isActive ? 'text-text-secondary' : 'text-text-tertiary'
+                }`}>{label}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Three-panel layout ── */}
@@ -233,7 +273,7 @@ export function ContentBuilderPage() {
                 <PanelLeftClose className="h-4 w-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto" data-tour="prompt-library">
               <PromptLibrary
                 prompts={promptLibraryPrompts}
                 loading={promptsHook.loading}
@@ -261,11 +301,13 @@ export function ContentBuilderPage() {
         <div className="flex flex-1 flex-col overflow-hidden bg-surface-0" style={{ background: 'radial-gradient(ellipse at center 40%, rgba(255,255,255,0.015) 0%, transparent 60%)' }}>
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {/* Platform chip selector */}
-            <PlatformSelector
-              channels={channels}
-              selectedIds={builder.selectedChannels}
-              onToggle={builder.toggleChannel}
-            />
+            <div data-tour="platform-selector">
+              <PlatformSelector
+                channels={channels}
+                selectedIds={builder.selectedChannels}
+                onToggle={builder.toggleChannel}
+              />
+            </div>
 
             {showEmptyState ? (
               <BuilderEmptyState
@@ -276,21 +318,24 @@ export function ContentBuilderPage() {
             ) : (
               <>
                 {/* Main composer */}
-                <PostComposer
-                  title={builder.title}
-                  onTitleChange={builder.setTitle}
-                  mainBody={builder.mainBody}
-                  onMainBodyChange={builder.setMainBody}
-                  platformBodies={builder.platformBodies}
-                  onPlatformBodyChange={builder.setPlatformBody}
-                  activeTab={builder.activeTab}
-                  onTabChange={builder.setActiveTab}
-                  selectedChannels={selectedChannelObjects}
-                  imageUrl={builder.imageUrl}
-                  onImageClick={handleImageClick}
-                  isAdapting={builder.isAdapting}
-                  onAdaptAll={builder.adaptAll}
-                />
+                <div data-tour="composer">
+                  <PostComposer
+                    title={builder.title}
+                    onTitleChange={builder.setTitle}
+                    mainBody={builder.mainBody}
+                    onMainBodyChange={builder.setMainBody}
+                    platformBodies={builder.platformBodies}
+                    onPlatformBodyChange={builder.setPlatformBody}
+                    activeTab={builder.activeTab}
+                    onTabChange={builder.setActiveTab}
+                    selectedChannels={selectedChannelObjects}
+                    imageUrl={builder.imageUrl}
+                    onImageClick={handleImageClick}
+                    isAdapting={builder.isAdapting}
+                    onAdaptAll={builder.adaptAll}
+                    flowState={builder.flowState}
+                  />
+                </div>
 
                 {/* Media Studio — image/video generation + upload */}
                 <div className="mt-4">
@@ -298,6 +343,8 @@ export function ContentBuilderPage() {
                     imageUrl={builder.imageUrl}
                     onImageChange={builder.setImageUrl}
                     selectedChannels={selectedChannelObjects}
+                    flowState={builder.flowState}
+                    nudge={builder.flowState === 'ADAPTED'}
                   />
                 </div>
               </>
@@ -305,7 +352,7 @@ export function ContentBuilderPage() {
           </div>
 
           {/* Inline mini-chat below composer */}
-          <div className="flex-shrink-0 border-t border-border-subtle">
+          <div className="flex-shrink-0 border-t border-border-subtle" data-tour="ai-assistant">
             <MiniChat
               messages={chat.messages}
               isSending={chat.isSending}
@@ -354,13 +401,14 @@ export function ContentBuilderPage() {
                 imageUrl={builder.imageUrl}
                 userName={userName}
               />
-              <div className="border-t border-border-subtle">
+              <div className="border-t border-border-subtle" data-tour="schedule">
                 <SchedulePanel
                   onSchedule={handleSchedule}
                   onPublishNow={handlePublishNow}
                   onSaveDraft={builder.saveAsDraft}
                   isSaving={builder.isSaving}
                   selectedChannelCount={builder.selectedChannels.length}
+                  flowState={builder.flowState}
                 />
               </div>
             </div>
