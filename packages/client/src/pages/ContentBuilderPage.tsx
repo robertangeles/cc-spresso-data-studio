@@ -118,6 +118,7 @@ export function ContentBuilderPage() {
     id: p.id,
     name: p.name,
     description: p.description,
+    body: p.body ?? '',
     category: p.category ?? 'custom',
     defaultModel: p.defaultModel,
     currentVersion: p.currentVersion,
@@ -133,6 +134,25 @@ export function ContentBuilderPage() {
 
   const handleCreateNewPrompt = () => {
     setEditingPrompt(null);
+    setPromptModalOpen(true);
+  };
+
+  const handleEditPrompt = (prompt: {
+    id: string;
+    name: string;
+    description: string | null;
+    body: string;
+    category: string;
+    defaultModel: string | null;
+  }) => {
+    setEditingPrompt({
+      id: prompt.id,
+      name: prompt.name,
+      description: prompt.description,
+      body: prompt.body,
+      category: prompt.category,
+      defaultModel: prompt.defaultModel,
+    });
     setPromptModalOpen(true);
   };
 
@@ -347,6 +367,7 @@ export function ContentBuilderPage() {
                 category={promptsHook.category}
                 onCategoryChange={promptsHook.setCategory}
                 onSelectPrompt={handleSelectPrompt}
+                onEditPrompt={handleEditPrompt}
                 onCreateNew={handleCreateNewPrompt}
               />
             </div>

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Plus, Search, BookOpen } from 'lucide-react';
+import { Plus, Search, BookOpen, Pencil } from 'lucide-react';
 
 interface Prompt {
   id: string;
   name: string;
   description: string | null;
+  body: string;
   category: string;
   defaultModel: string | null;
   currentVersion: number;
@@ -16,6 +17,7 @@ interface PromptLibraryProps {
   category: string | null;
   onCategoryChange: (cat: string | null) => void;
   onSelectPrompt: (promptId: string, body: string) => void;
+  onEditPrompt?: (prompt: Prompt) => void;
   onCreateNew: () => void;
 }
 
@@ -33,6 +35,7 @@ export function PromptLibrary({
   category,
   onCategoryChange,
   onSelectPrompt,
+  onEditPrompt,
   onCreateNew,
 }: PromptLibraryProps) {
   const [search, setSearch] = useState('');
@@ -106,21 +109,44 @@ export function PromptLibrary({
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <BookOpen className="h-8 w-8 text-text-tertiary mb-2" />
             <p className="text-sm text-text-tertiary">
-              {search ? 'No prompts match your search.' : 'No prompts yet. Create one to get started.'}
+              {search
+                ? 'No prompts match your search.'
+                : 'No prompts yet. Create one to get started.'}
             </p>
           </div>
         ) : (
           filtered.map((prompt) => (
-            <button
+            <div
               key={prompt.id}
-              type="button"
-              onClick={() => onSelectPrompt(prompt.id, prompt.name)}
-              className="w-full text-left bg-surface-2 rounded-lg p-3 cursor-pointer hover:bg-surface-3 border border-transparent hover:border-border-default transition-all"
+              className="group w-full text-left bg-surface-2 rounded-lg p-3 cursor-pointer hover:bg-surface-3 border border-transparent hover:border-border-default transition-all"
             >
-              <p className="text-sm font-medium text-text-primary truncate">{prompt.name}</p>
-              {prompt.description && (
-                <p className="text-xs text-text-tertiary line-clamp-2 mt-0.5">{prompt.description}</p>
-              )}
+              <div className="flex items-start justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSelectPrompt(prompt.id, prompt.body)}
+                  className="flex-1 text-left min-w-0"
+                >
+                  <p className="text-sm font-medium text-text-primary truncate">{prompt.name}</p>
+                  {prompt.description && (
+                    <p className="text-xs text-text-tertiary line-clamp-2 mt-0.5">
+                      {prompt.description}
+                    </p>
+                  )}
+                </button>
+                {onEditPrompt && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditPrompt(prompt);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 shrink-0 rounded-md p-1 text-text-tertiary hover:bg-surface-2 hover:text-accent transition-all"
+                    title="Edit prompt"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-2 mt-2">
                 <span className="inline-flex rounded-full bg-surface-3 px-2 py-0.5 text-[10px] font-medium text-text-tertiary">
                   {prompt.category}
@@ -129,7 +155,7 @@ export function PromptLibrary({
                   v{prompt.currentVersion}
                 </span>
               </div>
-            </button>
+            </div>
           ))
         )}
       </div>
