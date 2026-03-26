@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -24,7 +27,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -33,17 +36,8 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: TypeScript check (shared)
-        run: pnpm -C packages/shared build
-
-      - name: TypeScript check (server)
-        run: pnpm tsc --noEmit -p packages/server/tsconfig.json
-
-      - name: TypeScript check (client)
-        run: pnpm tsc --noEmit -p packages/client/tsconfig.json
+      - name: TypeScript build (shared → server → client)
+        run: pnpm build
 
       - name: Unit tests
         run: pnpm test
-
-      - name: Build
-        run: pnpm build
