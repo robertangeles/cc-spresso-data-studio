@@ -20,7 +20,9 @@ async function getAITimeoutMs(): Promise<number> {
       const config = JSON.parse(setting.value);
       if (config.aiTimeoutSeconds) return config.aiTimeoutSeconds * 1000;
     }
-  } catch { /* use default */ }
+  } catch {
+    /* use default */
+  }
   return DEFAULT_AI_TIMEOUT_MS;
 }
 
@@ -47,9 +49,8 @@ export async function executeFlow(
 
   // Load global rules
   const activeRules = await getActiveRules(userId);
-  const globalRules = activeRules.length > 0
-    ? activeRules.map((r) => r.rules).join('\n\n')
-    : undefined;
+  const globalRules =
+    activeRules.length > 0 ? activeRules.map((r) => r.rules).join('\n\n') : undefined;
 
   const executionContext: Record<string, string> = { ...inputs };
   const stepResults: StepResult[] = [];
@@ -93,7 +94,7 @@ async function executeStep(
     let systemPrompt: string | undefined;
     let temperature: number | undefined;
     let maxTokens: number | undefined;
-    let skillId = step.skillId ?? 'raw';
+    const skillId = step.skillId ?? 'raw';
 
     if (step.skillId) {
       // Skill-based step
@@ -130,7 +131,10 @@ async function executeStep(
     // Build AI request
     const messages: AICompletionRequest['messages'] = [];
     if (globalRules) {
-      messages.push({ role: 'system', content: `GLOBAL RULES (always follow these):\n\n${globalRules}` });
+      messages.push({
+        role: 'system',
+        content: `GLOBAL RULES (always follow these):\n\n${globalRules}`,
+      });
     }
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
@@ -142,7 +146,10 @@ async function executeStep(
     // Check if any providers are registered
     const providers = providerRegistry.listProviders();
     if (providers.length === 0) {
-      throw new AppError(503, `No AI providers configured. Add an API key in Settings → Integrations to enable flow execution. (Step requires model: ${model || 'default'})`);
+      throw new AppError(
+        503,
+        `No AI providers configured. Add an API key in Settings → Integrations to enable flow execution. (Step requires model: ${model || 'default'})`,
+      );
     }
 
     const request: AICompletionRequest = {
@@ -275,23 +282,27 @@ async function loadSkillConfig(skillId: string, version?: number): Promise<Skill
   });
 
   return {
-    inputs: inputRows.sort((a, b) => a.sortOrder - b.sortOrder).map((i) => ({
-      id: i.inputId,
-      key: i.key,
-      type: i.type as SkillConfig['inputs'][number]['type'],
-      label: i.label,
-      description: i.description ?? undefined,
-      required: i.isRequired,
-      defaultValue: i.defaultValue ?? undefined,
-      options: (i.options as string[]) ?? [],
-    })),
-    outputs: outputRows.sort((a, b) => a.sortOrder - b.sortOrder).map((o) => ({
-      key: o.key,
-      type: o.type as SkillConfig['outputs'][number]['type'],
-      label: o.label,
-      description: o.description ?? undefined,
-      visible: o.isVisible,
-    })),
+    inputs: inputRows
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((i) => ({
+        id: i.inputId,
+        key: i.key,
+        type: i.type as SkillConfig['inputs'][number]['type'],
+        label: i.label,
+        description: i.description ?? undefined,
+        required: i.isRequired,
+        defaultValue: i.defaultValue ?? undefined,
+        options: (i.options as string[]) ?? [],
+      })),
+    outputs: outputRows
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((o) => ({
+        key: o.key,
+        type: o.type as SkillConfig['outputs'][number]['type'],
+        label: o.label,
+        description: o.description ?? undefined,
+        visible: o.isVisible,
+      })),
     promptTemplate: skill.promptTemplate ?? '',
     systemPrompt: skill.systemPrompt ?? undefined,
     temperature: skill.temperature ?? undefined,
@@ -321,17 +332,23 @@ async function waitForApproval(
   signal?: AbortSignal,
 ): Promise<{ action: 'approve' | 'revise' | 'edit'; feedback?: string }> {
   // Insert pending approval record and get its ID
-  const [inserted] = await db.insert(schema.pendingApprovals).values({
-    flowId,
-    userId,
-    stepIndex,
-    round,
-    generatorOutput: generatorOutput.slice(0, 50000),
-    editorFeedback: editorFeedback.slice(0, 10000),
-    status: 'pending',
-  }).returning();
+  const [inserted] = await db
+    .insert(schema.pendingApprovals)
+    .values({
+      flowId,
+      userId,
+      stepIndex,
+      round,
+      generatorOutput: generatorOutput.slice(0, 50000),
+      editorFeedback: editorFeedback.slice(0, 10000),
+      status: 'pending',
+    })
+    .returning();
 
-  logger.info({ flowId, stepIndex, round, approvalId: inserted.id }, 'Waiting for manual editor approval (DB polling)...');
+  logger.info(
+    { flowId, stepIndex, round, approvalId: inserted.id },
+    'Waiting for manual editor approval (DB polling)...',
+  );
 
   // Poll DB every 2 seconds — check if the record's status changed from 'pending'
   const maxWait = 30 * 60 * 1000; // 30 minutes
@@ -389,12 +406,20 @@ export async function executeFlowStreaming(
 
   // Load global rules
   const activeRules = await getActiveRules(userId);
-  const globalRules = activeRules.length > 0
-    ? activeRules.map((r) => r.rules).join('\n\n')
-    : undefined;
+  const globalRules =
+    activeRules.length > 0 ? activeRules.map((r) => r.rules).join('\n\n') : undefined;
 
   const executionContext: Record<string, string> = { ...inputs };
-  const collectedResults: Array<{ stepIndex: number; skillName: string; model: string; output: Record<string, string>; duration: number; tokens: { input: number; output: number }; status: string; error?: string }> = [];
+  const collectedResults: Array<{
+    stepIndex: number;
+    skillName: string;
+    model: string;
+    output: Record<string, string>;
+    duration: number;
+    tokens: { input: number; output: number };
+    status: string;
+    error?: string;
+  }> = [];
   let allSucceeded = true;
 
   for (let i = 0; i < steps.length; i++) {
@@ -421,17 +446,33 @@ export async function executeFlowStreaming(
 
       if (step.editor?.enabled && stepResult.outputs) {
         const editorResult = await runEditorLoop(
-          step, stepResult, executionContext, i, emit, options, globalRules, flowId, userId,
+          step,
+          stepResult,
+          executionContext,
+          i,
+          emit,
+          options,
+          globalRules,
+          flowId,
+          userId,
         );
         finalOutput = editorResult.outputs;
         editorRounds = editorResult.rounds;
 
         // Update execution log with editor rounds
         if (editorRounds > 0) {
-          await logExecution(flowId, userId, i, `${skillName} (editor)`, {
-            ...stepResult,
-            outputs: finalOutput,
-          }, editorRounds, step.skillId);
+          await logExecution(
+            flowId,
+            userId,
+            i,
+            `${skillName} (editor)`,
+            {
+              ...stepResult,
+              outputs: finalOutput,
+            },
+            editorRounds,
+            step.skillId,
+          );
         }
       }
 
@@ -440,7 +481,12 @@ export async function executeFlowStreaming(
       }
 
       const pricing = await getModelPricing();
-      const stepCost = calculateCost(stepResult.model, stepResult.usage.inputTokens, stepResult.usage.outputTokens, pricing);
+      const stepCost = calculateCost(
+        stepResult.model,
+        stepResult.usage.inputTokens,
+        stepResult.usage.outputTokens,
+        pricing,
+      );
 
       emit({
         type: 'step_complete',
@@ -453,11 +499,31 @@ export async function executeFlowStreaming(
           estimatedCost: stepCost,
         },
       });
-      collectedResults.push({ stepIndex: i, skillName, model: stepResult.model, output: finalOutput, duration: stepResult.durationMs, tokens: { input: stepResult.usage.inputTokens, output: stepResult.usage.outputTokens }, status: 'success' });
+      collectedResults.push({
+        stepIndex: i,
+        skillName,
+        model: stepResult.model,
+        output: finalOutput,
+        duration: stepResult.durationMs,
+        tokens: { input: stepResult.usage.inputTokens, output: stepResult.usage.outputTokens },
+        status: 'success',
+      });
     } else {
       allSucceeded = false;
-      collectedResults.push({ stepIndex: i, skillName, model: stepResult.model, output: {}, duration: stepResult.durationMs, tokens: { input: 0, output: 0 }, status: 'error', error: stepResult.error });
-      emit({ type: 'step_error', data: { stepIndex: i, error: stepResult.error ?? 'Unknown error' } });
+      collectedResults.push({
+        stepIndex: i,
+        skillName,
+        model: stepResult.model,
+        output: {},
+        duration: stepResult.durationMs,
+        tokens: { input: 0, output: 0 },
+        status: 'error',
+        error: stepResult.error,
+      });
+      emit({
+        type: 'step_error',
+        data: { stepIndex: i, error: stepResult.error ?? 'Unknown error' },
+      });
       break;
     }
   }
@@ -490,7 +556,9 @@ export async function executeFlowStreaming(
         if (c !== null) totalCost += c;
       }
     }
-  } catch { /* non-blocking */ }
+  } catch {
+    /* non-blocking */
+  }
 
   emit({
     type: 'done',
@@ -515,9 +583,8 @@ export async function rerunSingleStep(
 
   // Load global rules
   const activeRules = await getActiveRules(userId);
-  const globalRules = activeRules.length > 0
-    ? activeRules.map((r) => r.rules).join('\n\n')
-    : undefined;
+  const globalRules =
+    activeRules.length > 0 ? activeRules.map((r) => r.rules).join('\n\n') : undefined;
 
   const steps = await loadFlowSteps(flowId);
 
@@ -567,22 +634,24 @@ async function executeStepWithTimeout(
         });
       }, timeoutMs);
 
-      executeStep(step, context, globalRules).then((result) => {
-        clearTimeout(timer);
-        resolve(result);
-      }).catch((err) => {
-        clearTimeout(timer);
-        resolve({
-          stepId: step.id,
-          skillId: step.skillId ?? 'raw',
-          outputs: {},
-          usage: { inputTokens: 0, outputTokens: 0 },
-          model: step.model || 'unknown',
-          durationMs: timeoutMs,
-          status: 'error',
-          error: err instanceof Error ? err.message : 'Unknown error',
+      executeStep(step, context, globalRules)
+        .then((result) => {
+          clearTimeout(timer);
+          resolve(result);
+        })
+        .catch((err) => {
+          clearTimeout(timer);
+          resolve({
+            stepId: step.id,
+            skillId: step.skillId ?? 'raw',
+            outputs: {},
+            usage: { inputTokens: 0, outputTokens: 0 },
+            model: step.model || 'unknown',
+            durationMs: timeoutMs,
+            status: 'error',
+            error: err instanceof Error ? err.message : 'Unknown error',
+          });
         });
-      });
     });
   };
 
@@ -590,7 +659,10 @@ async function executeStepWithTimeout(
   const result = await attempt();
 
   // Retry once on timeout or rate limit
-  if (result.status === 'error' && (result.error?.includes('timed out') || result.error?.includes('429'))) {
+  if (
+    result.status === 'error' &&
+    (result.error?.includes('timed out') || result.error?.includes('429'))
+  ) {
     logger.warn({ stepId: step.id, error: result.error }, 'Retrying step after failure');
     await new Promise((r) => setTimeout(r, 5000)); // 5s backoff
     return attempt();
@@ -617,29 +689,29 @@ export function stripThinkingBlocks(content: string): string {
   // 2. "Thinking Process:" plain text block (Qwen 3.x)
   //    Match from "Thinking Process:" until the actual content starts
   //    Content starts at: a markdown heading, "Block 1", a title in proper case, or JSON
-  cleaned = cleaned.replace(
-    /^(?:Thinking Process|Chain of Thought|Internal Reasoning|Reasoning|Analysis):?\s*\n[\s\S]*?(?=^(?:#{1,3}\s|Block \d|[A-Z][a-z]+ [A-Z][a-z]+\n|\{))/im,
-    '',
-  ).trim();
+  cleaned = cleaned
+    .replace(
+      /^(?:Thinking Process|Chain of Thought|Internal Reasoning|Reasoning|Analysis):?\s*\n[\s\S]*?(?=^(?:#{1,3}\s|Block \d|[A-Z][a-z]+ [A-Z][a-z]+\n|\{))/im,
+      '',
+    )
+    .trim();
 
   // 3. "Wait, check..." self-dialogue loops (Qwen reasoning artifacts)
   //    These appear as blocks of short lines starting with "Wait,", "OK.", "Review against", "Check"
-  cleaned = cleaned.replace(
-    /(?:^(?:Wait,|OK\.|Review against|Check |Fix:|I need to|I will|Let me|Scan |Revision|My |Total:)[^\n]*\n?){3,}/gim,
-    '',
-  ).trim();
+  cleaned = cleaned
+    .replace(
+      /(?:^(?:Wait,|OK\.|Review against|Check |Fix:|I need to|I will|Let me|Scan |Revision|My |Total:)[^\n]*\n?){3,}/gim,
+      '',
+    )
+    .trim();
 
   // 4. Numbered self-check lines: "Sentence 1: ... (OK)" or "Sentence 1: ... (Active, no banned words)."
-  cleaned = cleaned.replace(
-    /(?:^Sentence \d+:.*\n?){3,}/gim,
-    '',
-  ).trim();
+  cleaned = cleaned.replace(/(?:^Sentence \d+:.*\n?){3,}/gim, '').trim();
 
   // 5. Word-by-word banned word scanning: lines like '"Rain"(1) taps(2)...' or 'Wait, check "that" in "..."'
-  cleaned = cleaned.replace(
-    /(?:^(?:Wait, check|"[A-Za-z]+"(?:\(\d+\))?)[^\n]*\n?){3,}/gim,
-    '',
-  ).trim();
+  cleaned = cleaned
+    .replace(/(?:^(?:Wait, check|"[A-Za-z]+"(?:\(\d+\))?)[^\n]*\n?){3,}/gim, '')
+    .trim();
 
   // 6. If content still starts with a huge reasoning block before the real output,
   //    look for common essay/content markers and trim everything before
@@ -674,14 +746,19 @@ function parseEditorVerdict(raw: string): { verdict: string; feedback: string } 
 
   // Detect template echo — model returned the format instruction instead of actual feedback
   if (cleaned.includes('"approve"|"revise"') || cleaned.includes("'approve'|'revise'")) {
-    return { verdict: 'approve', feedback: 'Editor returned format template instead of feedback. Auto-approved.' };
+    return {
+      verdict: 'approve',
+      feedback: 'Editor returned format template instead of feedback. Auto-approved.',
+    };
   }
 
   // Try direct JSON parse
   try {
     const parsed = JSON.parse(cleaned);
     if (parsed.verdict && parsed.feedback) return parsed;
-  } catch { /* continue */ }
+  } catch {
+    /* continue */
+  }
 
   // Try extracting JSON from markdown code block (```json ... ``` or ``` ... ```)
   const codeBlockMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
@@ -689,7 +766,9 @@ function parseEditorVerdict(raw: string): { verdict: string; feedback: string } 
     try {
       const parsed = JSON.parse(codeBlockMatch[1].trim());
       if (parsed.verdict && parsed.feedback) return parsed;
-    } catch { /* continue */ }
+    } catch {
+      /* continue */
+    }
   }
 
   // Try extracting JSON object from mixed text
@@ -698,7 +777,9 @@ function parseEditorVerdict(raw: string): { verdict: string; feedback: string } 
     try {
       const parsed = JSON.parse(jsonMatch[0]);
       if (parsed.verdict && parsed.feedback) return parsed;
-    } catch { /* continue */ }
+    } catch {
+      /* continue */
+    }
   }
 
   // Keyword fallback — scan for approve/revise intent in plain text
@@ -725,7 +806,7 @@ async function runEditorLoop(
   const editor = step.editor as EditorConfig;
   const maxRounds = Math.min(editor.maxRounds, MAX_EDITOR_ROUNDS);
   let currentOutput = Object.values(stepResult.outputs).join('\n');
-  let outputs = { ...stepResult.outputs };
+  const outputs = { ...stepResult.outputs };
   let round = 0;
 
   const editorSystemPrompt = `You are a content editor. Your ONLY output format is a single JSON object. No prose, no explanation, no markdown — just the JSON.
@@ -758,11 +839,12 @@ ${editor.systemPrompt}`;
 
     // Editor critiques — with full conversation history
     try {
-      const roundContext = round === maxRounds
-        ? '\nThis is the FINAL round. Approve unless there are critical factual errors or major structural problems. Style preferences and minor polish should be accepted at this stage.'
-        : round >= Math.ceil(maxRounds * 0.75)
-          ? '\nFocus only on significant issues. Minor style preferences should be approved.'
-          : '';
+      const roundContext =
+        round === maxRounds
+          ? '\nThis is the FINAL round. Approve unless there are critical factual errors or major structural problems. Style preferences and minor polish should be accepted at this stage.'
+          : round >= Math.ceil(maxRounds * 0.75)
+            ? '\nFocus only on significant issues. Minor style preferences should be approved.'
+            : '';
 
       const userMessage = `Round ${round} of ${maxRounds}.${roundContext}\n\nReview this output:\n\n${currentOutput}`;
       editorHistory.push({ role: 'user', content: userMessage });
@@ -806,8 +888,13 @@ ${editor.systemPrompt}`;
         });
 
         const userDecision = await waitForApproval(
-          flowId, userId, stepIndex, round,
-          currentOutput, verdict.feedback, options.signal,
+          flowId,
+          userId,
+          stepIndex,
+          round,
+          currentOutput,
+          verdict.feedback,
+          options.signal,
         );
 
         if (userDecision.action === 'approve') break;
@@ -820,9 +907,21 @@ ${editor.systemPrompt}`;
       const reviseResponse = await providerRegistry.complete({
         model: step.model,
         messages: [
-          ...(globalRules ? [{ role: 'system' as const, content: `GLOBAL RULES (always follow these):\n\n${globalRules}` }] : []),
-          ...(step.overrides?.systemPrompt ? [{ role: 'system' as const, content: step.overrides.systemPrompt }] : []),
-          { role: 'user', content: `Here is your previous output:\n\n${currentOutput}\n\nEditor feedback:\n${verdict.feedback}\n\nPlease revise your output to address this feedback. Output only the revised content.` },
+          ...(globalRules
+            ? [
+                {
+                  role: 'system' as const,
+                  content: `GLOBAL RULES (always follow these):\n\n${globalRules}`,
+                },
+              ]
+            : []),
+          ...(step.overrides?.systemPrompt
+            ? [{ role: 'system' as const, content: step.overrides.systemPrompt }]
+            : []),
+          {
+            role: 'user',
+            content: `Here is your previous output:\n\n${currentOutput}\n\nEditor feedback:\n${verdict.feedback}\n\nPlease revise your output to address this feedback. Output only the revised content.`,
+          },
         ],
         temperature: step.overrides?.temperature,
         maxTokens: step.overrides?.maxTokens,

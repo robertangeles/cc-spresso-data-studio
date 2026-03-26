@@ -10,7 +10,13 @@ interface PostComposerProps {
   onPlatformBodyChange: (channelId: string, body: string) => void;
   activeTab: string | null;
   onTabChange: (channelId: string | null) => void;
-  selectedChannels: Array<{ id: string; name: string; slug: string; icon: string; config: any }>;
+  selectedChannels: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    icon: string;
+    config: Record<string, unknown>;
+  }>;
   imageUrl: string | null;
   onImageClick: () => void;
   isAdapting: boolean;
@@ -23,17 +29,17 @@ const TITLE_SLUGS = new Set(['blog', 'youtube', 'email', 'newsletter', 'article'
 
 /** Platform-specific tab colors */
 const TAB_COLORS: Record<string, { active: string; border: string; bg: string }> = {
-  twitter:   { active: 'text-blue-400',    border: 'border-blue-400',    bg: 'bg-blue-400/5' },
-  linkedin:  { active: 'text-blue-500',    border: 'border-blue-500',    bg: 'bg-blue-500/5' },
-  instagram: { active: 'text-pink-500',    border: 'border-pink-500',    bg: 'bg-pink-500/5' },
-  facebook:  { active: 'text-blue-600',    border: 'border-blue-600',    bg: 'bg-blue-600/5' },
-  pinterest: { active: 'text-red-500',     border: 'border-red-500',     bg: 'bg-red-500/5' },
-  tiktok:    { active: 'text-cyan-400',    border: 'border-cyan-400',    bg: 'bg-cyan-400/5' },
-  threads:   { active: 'text-gray-300',    border: 'border-gray-300',    bg: 'bg-gray-300/5' },
-  bluesky:   { active: 'text-sky-400',     border: 'border-sky-400',     bg: 'bg-sky-400/5' },
-  youtube:   { active: 'text-red-600',     border: 'border-red-600',     bg: 'bg-red-600/5' },
-  blog:      { active: 'text-emerald-400', border: 'border-emerald-400', bg: 'bg-emerald-400/5' },
-  email:     { active: 'text-amber-400',   border: 'border-amber-400',   bg: 'bg-amber-400/5' },
+  twitter: { active: 'text-blue-400', border: 'border-blue-400', bg: 'bg-blue-400/5' },
+  linkedin: { active: 'text-blue-500', border: 'border-blue-500', bg: 'bg-blue-500/5' },
+  instagram: { active: 'text-pink-500', border: 'border-pink-500', bg: 'bg-pink-500/5' },
+  facebook: { active: 'text-blue-600', border: 'border-blue-600', bg: 'bg-blue-600/5' },
+  pinterest: { active: 'text-red-500', border: 'border-red-500', bg: 'bg-red-500/5' },
+  tiktok: { active: 'text-cyan-400', border: 'border-cyan-400', bg: 'bg-cyan-400/5' },
+  threads: { active: 'text-gray-300', border: 'border-gray-300', bg: 'bg-gray-300/5' },
+  bluesky: { active: 'text-sky-400', border: 'border-sky-400', bg: 'bg-sky-400/5' },
+  youtube: { active: 'text-red-600', border: 'border-red-600', bg: 'bg-red-600/5' },
+  blog: { active: 'text-emerald-400', border: 'border-emerald-400', bg: 'bg-emerald-400/5' },
+  email: { active: 'text-amber-400', border: 'border-amber-400', bg: 'bg-amber-400/5' },
 };
 
 const DEFAULT_TAB_COLOR = { active: 'text-accent', border: 'border-accent', bg: 'bg-accent/5' };
@@ -42,14 +48,14 @@ function getTabColor(slug: string) {
   return TAB_COLORS[slug] ?? DEFAULT_TAB_COLOR;
 }
 
-function getCharLimit(channel: { config: any } | undefined): number {
+function getCharLimit(channel: { config: Record<string, unknown> } | undefined): number {
   if (!channel) return 0;
-  return channel.config?.charLimit ?? 0;
+  return (channel.config?.charLimit as number) ?? 0;
 }
 
-function getOptimalLimit(channel: { config: any } | undefined): number {
+function getOptimalLimit(channel: { config: Record<string, unknown> } | undefined): number {
   if (!channel) return 0;
-  return channel.config?.optimalCharLimit ?? 0;
+  return (channel.config?.optimalCharLimit as number) ?? 0;
 }
 
 function formatCount(count: number, limit: number, optimal: number): string {
@@ -75,10 +81,14 @@ function renderDualBar(count: number, limit: number, optimal: number) {
   if (optimal <= 0 || optimal >= limit) {
     // Single-zone fallback
     const pct = Math.min((count / limit) * 100, 100);
-    const color = count > limit ? 'bg-red-400' : (count / limit) > 0.7 ? 'bg-amber-400' : 'bg-green-400';
+    const color =
+      count > limit ? 'bg-red-400' : count / limit > 0.7 ? 'bg-amber-400' : 'bg-green-400';
     return (
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
-        <div className={`h-full rounded-full transition-all duration-300 ${color}`} style={{ width: `${pct}%` }} />
+        <div
+          className={`h-full rounded-full transition-all duration-300 ${color}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     );
   }
@@ -114,7 +124,7 @@ function getPlaceholder(isMainTab: boolean, channelName?: string, flowState?: st
     case 'IDLE':
       return "What's on your mind? Start writing and we'll help you turn it into content for every platform...";
     case 'WRITING':
-      return 'Keep going... Select platforms above when you\'re ready to adapt.';
+      return "Keep going... Select platforms above when you're ready to adapt.";
     case 'PLATFORMS_SELECTED':
       return "Looking good! Click 'Adapt All' to generate versions for each platform.";
     case 'ADAPTED':
@@ -147,13 +157,14 @@ export function PostComposer({
   const showTabs = selectedChannels.length >= 2;
 
   const activeChannel = selectedChannels.find((ch) => ch.id === activeTab);
-  const showTitle =
-    isMainTab || (activeChannel && TITLE_SLUGS.has(activeChannel.slug));
+  const showTitle = isMainTab || (activeChannel && TITLE_SLUGS.has(activeChannel.slug));
 
   // Determine the current body text
   const currentBody = isMainTab
     ? mainBody
-    : (activeTab ? platformBodies[activeTab] ?? '' : mainBody);
+    : activeTab
+      ? (platformBodies[activeTab] ?? '')
+      : mainBody;
 
   // Determine char limit for counter
   const charLimit = isMainTab
@@ -248,7 +259,15 @@ export function PostComposer({
       {/* Body textarea */}
       <div className="relative">
         {isAdapting && (
-          <div className="pointer-events-none absolute inset-0 rounded-lg animate-shimmer" style={{ background: 'linear-gradient(90deg, transparent 25%, rgba(255,214,10,0.05) 50%, transparent 75%)', backgroundSize: '200% 100%', animation: 'shimmer 2s infinite' }} />
+          <div
+            className="pointer-events-none absolute inset-0 rounded-lg animate-shimmer"
+            style={{
+              background:
+                'linear-gradient(90deg, transparent 25%, rgba(255,214,10,0.05) 50%, transparent 75%)',
+              backgroundSize: '200% 100%',
+              animation: 'shimmer 2s infinite',
+            }}
+          />
         )}
         <textarea
           ref={textareaRef}
@@ -287,7 +306,9 @@ export function PostComposer({
         <div className="flex items-center justify-between">
           {/* Character counter with optimal zone */}
           <div className="flex items-center gap-2">
-            <span className={`text-xs font-medium tabular-nums ${getCountColor(charCount, charLimit, optimalLimit)}`}>
+            <span
+              className={`text-xs font-medium tabular-nums ${getCountColor(charCount, charLimit, optimalLimit)}`}
+            >
               {formatCount(charCount, charLimit, optimalLimit)}
               {charLimit === 0 && <span className="ml-1 text-text-tertiary">chars</span>}
             </span>

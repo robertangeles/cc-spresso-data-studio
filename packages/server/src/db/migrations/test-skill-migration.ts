@@ -45,7 +45,7 @@ async function testMigration() {
 
   let totalInputs = 0;
   let totalOutputs = 0;
-  let errors: string[] = [];
+  const errors: string[] = [];
 
   for (const skill of skills) {
     console.log(`--- Skill: "${skill.name}" (${skill.id}) ---`);
@@ -67,7 +67,9 @@ async function testMigration() {
         const inp = config.inputs[i];
         if (!inp.key) errors.push(`Skill ${skill.id}: input[${i}] missing key`);
         if (!inp.type) errors.push(`Skill ${skill.id}: input[${i}] missing type`);
-        console.log(`    [${i}] ${inp.type} "${inp.label}" key=${inp.key} required=${inp.required}`);
+        console.log(
+          `    [${i}] ${inp.type} "${inp.label}" key=${inp.key} required=${inp.required}`,
+        );
       }
     }
 
@@ -85,10 +87,16 @@ async function testMigration() {
     }
 
     // Validate scalar fields
-    console.log(`  promptTemplate: ${config.promptTemplate ? `${config.promptTemplate.length} chars` : 'MISSING'}`);
+    console.log(
+      `  promptTemplate: ${config.promptTemplate ? `${config.promptTemplate.length} chars` : 'MISSING'}`,
+    );
     if (!config.promptTemplate) errors.push(`Skill ${skill.id}: missing promptTemplate`);
-    console.log(`  systemPrompt: ${config.systemPrompt ? `${config.systemPrompt.length} chars` : 'none'}`);
-    console.log(`  temperature: ${config.temperature ?? 'default'}, maxTokens: ${config.maxTokens ?? 'default'}`);
+    console.log(
+      `  systemPrompt: ${config.systemPrompt ? `${config.systemPrompt.length} chars` : 'none'}`,
+    );
+    console.log(
+      `  temperature: ${config.temperature ?? 'default'}, maxTokens: ${config.maxTokens ?? 'default'}`,
+    );
     console.log(`  defaultModel: ${config.defaultModel ?? 'none'}`);
     console.log('');
   }

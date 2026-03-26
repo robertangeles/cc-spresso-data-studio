@@ -4,7 +4,12 @@ import { Upload, X, RefreshCw, Loader2, Image, ChevronDown, ChevronUp } from 'lu
 interface MediaStudioProps {
   imageUrl: string | null;
   onImageChange: (url: string | null) => void;
-  selectedChannels: Array<{ id: string; name: string; slug: string; config: any }>;
+  selectedChannels: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    config: Record<string, unknown>;
+  }>;
   flowState?: string;
   nudge?: boolean;
 }
@@ -24,8 +29,8 @@ function getSuggestedDimensions(
 ): { width: number; height: number; label: string } | null {
   if (channels.length === 0) return null;
   const first = channels[0];
-  const w = first.config?.imageWidth;
-  const h = first.config?.imageHeight;
+  const w = first.config?.imageWidth as number | undefined;
+  const h = first.config?.imageHeight as number | undefined;
   if (w && h) {
     return { width: w, height: h, label: first.name };
   }
@@ -121,7 +126,9 @@ export default function MediaStudio({
         }`}
       >
         <Image size={18} className={nudge ? 'text-accent' : 'text-text-tertiary'} />
-        <span className={`text-sm font-medium ${nudge ? 'text-accent' : 'text-text-secondary'}`}>Add Media</span>
+        <span className={`text-sm font-medium ${nudge ? 'text-accent' : 'text-text-secondary'}`}>
+          Add Media
+        </span>
         <ChevronDown size={16} className="ml-auto text-text-tertiary" />
       </button>
     );
@@ -163,8 +170,8 @@ export default function MediaStudio({
         {selectedChannels.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {selectedChannels.map((ch) => {
-              const w = ch.config?.imageWidth;
-              const h = ch.config?.imageHeight;
+              const w = ch.config?.imageWidth as number | undefined;
+              const h = ch.config?.imageHeight as number | undefined;
               if (!w || !h) return null;
               return (
                 <span
@@ -235,17 +242,13 @@ export default function MediaStudio({
         >
           <Upload size={20} />
         </div>
-        <span className="text-sm text-text-tertiary">
-          Drag &amp; drop or click to upload
-        </span>
+        <span className="text-sm text-text-tertiary">Drag &amp; drop or click to upload</span>
       </button>
 
       {/* Divider */}
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px bg-border-subtle" />
-        <span className="text-xs text-text-tertiary whitespace-nowrap">
-          or generate with AI
-        </span>
+        <span className="text-xs text-text-tertiary whitespace-nowrap">or generate with AI</span>
         <div className="flex-1 h-px bg-border-subtle" />
       </div>
 

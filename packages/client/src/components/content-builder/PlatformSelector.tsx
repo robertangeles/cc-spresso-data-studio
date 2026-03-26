@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 
 interface PlatformSelectorProps {
-  channels: Array<{ id: string; name: string; slug: string; icon: string; config: any }>;
+  channels: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    icon: string;
+    config: Record<string, unknown>;
+  }>;
   selectedIds: string[];
   onToggle: (channelId: string) => void;
 }
@@ -14,21 +20,141 @@ function formatCharLimit(limit: number | undefined | null): string {
 }
 
 /** Platform-specific accent colors */
-const PLATFORM_COLORS: Record<string, { text: string; bg: string; gradientBg: string; border: string; ring: string; glow: string; leftBorder: string; checkBg: string }> = {
-  twitter:   { text: 'text-blue-400',    bg: 'bg-blue-400/10',    gradientBg: 'bg-gradient-to-r from-blue-400/15 to-blue-400/5',       border: 'border-blue-400/50',    ring: 'ring-1 ring-blue-400/40',    glow: 'shadow-[0_0_16px_rgba(96,165,250,0.30)]',  leftBorder: 'border-l-blue-400/40',    checkBg: 'bg-blue-400' },
-  linkedin:  { text: 'text-blue-500',    bg: 'bg-blue-500/10',    gradientBg: 'bg-gradient-to-r from-blue-500/15 to-blue-500/5',       border: 'border-blue-500/50',    ring: 'ring-1 ring-blue-500/40',    glow: 'shadow-[0_0_16px_rgba(59,130,246,0.30)]',  leftBorder: 'border-l-blue-500/40',    checkBg: 'bg-blue-500' },
-  instagram: { text: 'text-pink-500',    bg: 'bg-pink-500/10',    gradientBg: 'bg-gradient-to-r from-pink-500/15 to-pink-500/5',       border: 'border-pink-500/50',    ring: 'ring-1 ring-pink-500/40',    glow: 'shadow-[0_0_16px_rgba(236,72,153,0.30)]',  leftBorder: 'border-l-pink-500/40',    checkBg: 'bg-pink-500' },
-  facebook:  { text: 'text-blue-600',    bg: 'bg-blue-600/10',    gradientBg: 'bg-gradient-to-r from-blue-600/15 to-blue-600/5',       border: 'border-blue-600/50',    ring: 'ring-1 ring-blue-600/40',    glow: 'shadow-[0_0_16px_rgba(37,99,235,0.30)]',   leftBorder: 'border-l-blue-600/40',    checkBg: 'bg-blue-600' },
-  pinterest: { text: 'text-red-500',     bg: 'bg-red-500/10',     gradientBg: 'bg-gradient-to-r from-red-500/15 to-red-500/5',         border: 'border-red-500/50',     ring: 'ring-1 ring-red-500/40',     glow: 'shadow-[0_0_16px_rgba(239,68,68,0.30)]',   leftBorder: 'border-l-red-500/40',     checkBg: 'bg-red-500' },
-  tiktok:    { text: 'text-cyan-400',    bg: 'bg-cyan-400/10',    gradientBg: 'bg-gradient-to-r from-cyan-400/15 to-cyan-400/5',       border: 'border-cyan-400/50',    ring: 'ring-1 ring-cyan-400/40',    glow: 'shadow-[0_0_16px_rgba(34,211,238,0.30)]',  leftBorder: 'border-l-cyan-400/40',    checkBg: 'bg-cyan-400' },
-  threads:   { text: 'text-gray-300',    bg: 'bg-gray-300/10',    gradientBg: 'bg-gradient-to-r from-gray-300/15 to-gray-300/5',       border: 'border-gray-300/50',    ring: 'ring-1 ring-gray-300/40',    glow: 'shadow-[0_0_16px_rgba(209,213,219,0.24)]', leftBorder: 'border-l-gray-300/40',    checkBg: 'bg-gray-300' },
-  bluesky:   { text: 'text-sky-400',     bg: 'bg-sky-400/10',     gradientBg: 'bg-gradient-to-r from-sky-400/15 to-sky-400/5',         border: 'border-sky-400/50',     ring: 'ring-1 ring-sky-400/40',     glow: 'shadow-[0_0_16px_rgba(56,189,248,0.30)]',  leftBorder: 'border-l-sky-400/40',     checkBg: 'bg-sky-400' },
-  youtube:   { text: 'text-red-600',     bg: 'bg-red-600/10',     gradientBg: 'bg-gradient-to-r from-red-600/15 to-red-600/5',         border: 'border-red-600/50',     ring: 'ring-1 ring-red-600/40',     glow: 'shadow-[0_0_16px_rgba(220,38,38,0.30)]',   leftBorder: 'border-l-red-600/40',     checkBg: 'bg-red-600' },
-  blog:      { text: 'text-emerald-400', bg: 'bg-emerald-400/10', gradientBg: 'bg-gradient-to-r from-emerald-400/15 to-emerald-400/5', border: 'border-emerald-400/50', ring: 'ring-1 ring-emerald-400/40', glow: 'shadow-[0_0_16px_rgba(52,211,153,0.30)]',  leftBorder: 'border-l-emerald-400/40', checkBg: 'bg-emerald-400' },
-  email:     { text: 'text-amber-400',   bg: 'bg-amber-400/10',   gradientBg: 'bg-gradient-to-r from-amber-400/15 to-amber-400/5',     border: 'border-amber-400/50',   ring: 'ring-1 ring-amber-400/40',   glow: 'shadow-[0_0_16px_rgba(251,191,36,0.30)]',  leftBorder: 'border-l-amber-400/40',   checkBg: 'bg-amber-400' },
+const PLATFORM_COLORS: Record<
+  string,
+  {
+    text: string;
+    bg: string;
+    gradientBg: string;
+    border: string;
+    ring: string;
+    glow: string;
+    leftBorder: string;
+    checkBg: string;
+  }
+> = {
+  twitter: {
+    text: 'text-blue-400',
+    bg: 'bg-blue-400/10',
+    gradientBg: 'bg-gradient-to-r from-blue-400/15 to-blue-400/5',
+    border: 'border-blue-400/50',
+    ring: 'ring-1 ring-blue-400/40',
+    glow: 'shadow-[0_0_16px_rgba(96,165,250,0.30)]',
+    leftBorder: 'border-l-blue-400/40',
+    checkBg: 'bg-blue-400',
+  },
+  linkedin: {
+    text: 'text-blue-500',
+    bg: 'bg-blue-500/10',
+    gradientBg: 'bg-gradient-to-r from-blue-500/15 to-blue-500/5',
+    border: 'border-blue-500/50',
+    ring: 'ring-1 ring-blue-500/40',
+    glow: 'shadow-[0_0_16px_rgba(59,130,246,0.30)]',
+    leftBorder: 'border-l-blue-500/40',
+    checkBg: 'bg-blue-500',
+  },
+  instagram: {
+    text: 'text-pink-500',
+    bg: 'bg-pink-500/10',
+    gradientBg: 'bg-gradient-to-r from-pink-500/15 to-pink-500/5',
+    border: 'border-pink-500/50',
+    ring: 'ring-1 ring-pink-500/40',
+    glow: 'shadow-[0_0_16px_rgba(236,72,153,0.30)]',
+    leftBorder: 'border-l-pink-500/40',
+    checkBg: 'bg-pink-500',
+  },
+  facebook: {
+    text: 'text-blue-600',
+    bg: 'bg-blue-600/10',
+    gradientBg: 'bg-gradient-to-r from-blue-600/15 to-blue-600/5',
+    border: 'border-blue-600/50',
+    ring: 'ring-1 ring-blue-600/40',
+    glow: 'shadow-[0_0_16px_rgba(37,99,235,0.30)]',
+    leftBorder: 'border-l-blue-600/40',
+    checkBg: 'bg-blue-600',
+  },
+  pinterest: {
+    text: 'text-red-500',
+    bg: 'bg-red-500/10',
+    gradientBg: 'bg-gradient-to-r from-red-500/15 to-red-500/5',
+    border: 'border-red-500/50',
+    ring: 'ring-1 ring-red-500/40',
+    glow: 'shadow-[0_0_16px_rgba(239,68,68,0.30)]',
+    leftBorder: 'border-l-red-500/40',
+    checkBg: 'bg-red-500',
+  },
+  tiktok: {
+    text: 'text-cyan-400',
+    bg: 'bg-cyan-400/10',
+    gradientBg: 'bg-gradient-to-r from-cyan-400/15 to-cyan-400/5',
+    border: 'border-cyan-400/50',
+    ring: 'ring-1 ring-cyan-400/40',
+    glow: 'shadow-[0_0_16px_rgba(34,211,238,0.30)]',
+    leftBorder: 'border-l-cyan-400/40',
+    checkBg: 'bg-cyan-400',
+  },
+  threads: {
+    text: 'text-gray-300',
+    bg: 'bg-gray-300/10',
+    gradientBg: 'bg-gradient-to-r from-gray-300/15 to-gray-300/5',
+    border: 'border-gray-300/50',
+    ring: 'ring-1 ring-gray-300/40',
+    glow: 'shadow-[0_0_16px_rgba(209,213,219,0.24)]',
+    leftBorder: 'border-l-gray-300/40',
+    checkBg: 'bg-gray-300',
+  },
+  bluesky: {
+    text: 'text-sky-400',
+    bg: 'bg-sky-400/10',
+    gradientBg: 'bg-gradient-to-r from-sky-400/15 to-sky-400/5',
+    border: 'border-sky-400/50',
+    ring: 'ring-1 ring-sky-400/40',
+    glow: 'shadow-[0_0_16px_rgba(56,189,248,0.30)]',
+    leftBorder: 'border-l-sky-400/40',
+    checkBg: 'bg-sky-400',
+  },
+  youtube: {
+    text: 'text-red-600',
+    bg: 'bg-red-600/10',
+    gradientBg: 'bg-gradient-to-r from-red-600/15 to-red-600/5',
+    border: 'border-red-600/50',
+    ring: 'ring-1 ring-red-600/40',
+    glow: 'shadow-[0_0_16px_rgba(220,38,38,0.30)]',
+    leftBorder: 'border-l-red-600/40',
+    checkBg: 'bg-red-600',
+  },
+  blog: {
+    text: 'text-emerald-400',
+    bg: 'bg-emerald-400/10',
+    gradientBg: 'bg-gradient-to-r from-emerald-400/15 to-emerald-400/5',
+    border: 'border-emerald-400/50',
+    ring: 'ring-1 ring-emerald-400/40',
+    glow: 'shadow-[0_0_16px_rgba(52,211,153,0.30)]',
+    leftBorder: 'border-l-emerald-400/40',
+    checkBg: 'bg-emerald-400',
+  },
+  email: {
+    text: 'text-amber-400',
+    bg: 'bg-amber-400/10',
+    gradientBg: 'bg-gradient-to-r from-amber-400/15 to-amber-400/5',
+    border: 'border-amber-400/50',
+    ring: 'ring-1 ring-amber-400/40',
+    glow: 'shadow-[0_0_16px_rgba(251,191,36,0.30)]',
+    leftBorder: 'border-l-amber-400/40',
+    checkBg: 'bg-amber-400',
+  },
 };
 
-const DEFAULT_COLOR = { text: 'text-accent', bg: 'bg-accent/10', gradientBg: 'bg-gradient-to-r from-accent/15 to-accent/5', border: 'border-accent/50', ring: 'ring-1 ring-accent/40', glow: 'shadow-[0_0_16px_rgba(255,214,10,0.24)]', leftBorder: 'border-l-accent/40', checkBg: 'bg-accent' };
+const DEFAULT_COLOR = {
+  text: 'text-accent',
+  bg: 'bg-accent/10',
+  gradientBg: 'bg-gradient-to-r from-accent/15 to-accent/5',
+  border: 'border-accent/50',
+  ring: 'ring-1 ring-accent/40',
+  glow: 'shadow-[0_0_16px_rgba(255,214,10,0.24)]',
+  leftBorder: 'border-l-accent/40',
+  checkBg: 'bg-accent',
+};
 
 function getPlatformColor(slug: string) {
   return PLATFORM_COLORS[slug] ?? DEFAULT_COLOR;
@@ -53,7 +179,9 @@ export function PlatformSelector({ channels, selectedIds, onToggle }: PlatformSe
       >
         <div className="flex items-center gap-2 text-sm">
           {selectedIds.length === 0 ? (
-            <span className="text-text-secondary font-medium">Select platforms to publish to...</span>
+            <span className="text-text-secondary font-medium">
+              Select platforms to publish to...
+            </span>
           ) : (
             <>
               {selectedChannels.slice(0, 4).map((ch) => {
@@ -73,11 +201,13 @@ export function PlatformSelector({ channels, selectedIds, onToggle }: PlatformSe
             </>
           )}
         </div>
-        <div className={`flex items-center gap-1.5 transition-colors ${
-          selectedIds.length > 0
-            ? 'text-text-secondary group-hover:text-text-primary'
-            : 'text-accent group-hover:text-accent-hover'
-        }`}>
+        <div
+          className={`flex items-center gap-1.5 transition-colors ${
+            selectedIds.length > 0
+              ? 'text-text-secondary group-hover:text-text-primary'
+              : 'text-accent group-hover:text-accent-hover'
+          }`}
+        >
           {selectedIds.length > 0 && (
             <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full font-medium">
               {selectedIds.length}
@@ -104,7 +234,7 @@ export function PlatformSelector({ channels, selectedIds, onToggle }: PlatformSe
         <div className="flex flex-wrap gap-2">
           {channels.map((ch) => {
             const isSelected = selectedIds.includes(ch.id);
-            const limitLabel = formatCharLimit(ch.config?.charLimit);
+            const limitLabel = formatCharLimit(ch.config?.charLimit as number | undefined | null);
             const color = getPlatformColor(ch.slug);
 
             return (
@@ -120,21 +250,25 @@ export function PlatformSelector({ channels, selectedIds, onToggle }: PlatformSe
               >
                 {/* Checkmark badge — top-right overlay */}
                 {isSelected && (
-                  <span className={`absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full ${color.checkBg} shadow-md`}>
+                  <span
+                    className={`absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full ${color.checkBg} shadow-md`}
+                  >
                     <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
                   </span>
                 )}
 
                 {/* Platform icon — bigger when selected */}
-                <span className={`leading-none transition-all duration-200 ${isSelected ? 'text-xl' : 'text-lg'}`}>{ch.icon}</span>
+                <span
+                  className={`leading-none transition-all duration-200 ${isSelected ? 'text-xl' : 'text-lg'}`}
+                >
+                  {ch.icon}
+                </span>
 
                 {/* Platform name */}
                 <span>{ch.name}</span>
 
                 {/* Char limit badge */}
-                <span className="text-[10px] opacity-60 font-normal">
-                  {limitLabel}
-                </span>
+                <span className="text-[10px] opacity-60 font-normal">{limitLabel}</span>
               </button>
             );
           })}

@@ -29,7 +29,13 @@ interface FlowStep {
   skillVersion?: number;
   inputMappings?: Record<string, string>;
   overrides?: { temperature?: number; maxTokens?: number; systemPrompt?: string };
-  editor?: { enabled: boolean; model: string; systemPrompt: string; maxRounds: number; approvalMode: string };
+  editor?: {
+    enabled: boolean;
+    model: string;
+    systemPrompt: string;
+    maxRounds: number;
+    approvalMode: string;
+  };
   provider: string;
   model: string;
   prompt: string;
@@ -51,7 +57,7 @@ async function testMigration() {
 
   let totalFields = 0;
   let totalSteps = 0;
-  let errors: string[] = [];
+  const errors: string[] = [];
 
   for (const flow of flows) {
     console.log(`--- Flow: "${flow.name}" (${flow.id}) ---`);
@@ -78,7 +84,9 @@ async function testMigration() {
         if (!f.id) errors.push(`Flow ${flow.id}: field[${i}] missing id`);
         if (!f.type) errors.push(`Flow ${flow.id}: field[${i}] missing type`);
         if (!f.label) errors.push(`Flow ${flow.id}: field[${i}] missing label`);
-        console.log(`    [${i}] ${f.type} "${f.label}" (id: ${f.id?.slice(0, 8)}...) required=${f.required ?? false}`);
+        console.log(
+          `    [${i}] ${f.type} "${f.label}" (id: ${f.id?.slice(0, 8)}...) required=${f.required ?? false}`,
+        );
       }
     }
 
@@ -94,10 +102,14 @@ async function testMigration() {
         const s = config.steps[i];
         if (!s.id) errors.push(`Flow ${flow.id}: step[${i}] missing id`);
         if (s.order === undefined) errors.push(`Flow ${flow.id}: step[${i}] missing order`);
-        console.log(`    [${i}] skill=${s.skillId?.slice(0, 8) ?? 'raw'} model=${s.model} order=${s.order} mappings=${Object.keys(s.inputMappings ?? {}).length}`);
+        console.log(
+          `    [${i}] skill=${s.skillId?.slice(0, 8) ?? 'raw'} model=${s.model} order=${s.order} mappings=${Object.keys(s.inputMappings ?? {}).length}`,
+        );
 
         if (s.editor?.enabled) {
-          console.log(`          editor: ${s.editor.model} maxRounds=${s.editor.maxRounds} mode=${s.editor.approvalMode}`);
+          console.log(
+            `          editor: ${s.editor.model} maxRounds=${s.editor.maxRounds} mode=${s.editor.approvalMode}`,
+          );
         }
       }
     }

@@ -5,7 +5,7 @@ interface Channel {
   name: string;
   slug: string;
   icon: string;
-  config: any;
+  config: Record<string, unknown>;
 }
 
 interface PlatformPreviewProps {
@@ -30,31 +30,31 @@ const CHAR_LIMITS: Record<string, number> = {
 
 /** Platform accent colors for top border bar */
 const PLATFORM_TOP_BORDER: Record<string, string> = {
-  twitter:   'bg-blue-400',
-  linkedin:  'bg-blue-500',
+  twitter: 'bg-blue-400',
+  linkedin: 'bg-blue-500',
   instagram: 'bg-pink-500',
-  facebook:  'bg-blue-600',
+  facebook: 'bg-blue-600',
   pinterest: 'bg-red-500',
-  tiktok:    'bg-cyan-400',
-  threads:   'bg-gray-300',
-  bluesky:   'bg-sky-400',
-  youtube:   'bg-red-600',
-  blog:      'bg-emerald-400',
-  email:     'bg-amber-400',
+  tiktok: 'bg-cyan-400',
+  threads: 'bg-gray-300',
+  bluesky: 'bg-sky-400',
+  youtube: 'bg-red-600',
+  blog: 'bg-emerald-400',
+  email: 'bg-amber-400',
 };
 
 const PLATFORM_ICON_COLOR: Record<string, string> = {
-  twitter:   'text-blue-400',
-  linkedin:  'text-blue-500',
+  twitter: 'text-blue-400',
+  linkedin: 'text-blue-500',
   instagram: 'text-pink-500',
-  facebook:  'text-blue-600',
+  facebook: 'text-blue-600',
   pinterest: 'text-red-500',
-  tiktok:    'text-cyan-400',
-  threads:   'text-gray-300',
-  bluesky:   'text-sky-400',
-  youtube:   'text-red-600',
-  blog:      'text-emerald-400',
-  email:     'text-amber-400',
+  tiktok: 'text-cyan-400',
+  threads: 'text-gray-300',
+  bluesky: 'text-sky-400',
+  youtube: 'text-red-600',
+  blog: 'text-emerald-400',
+  email: 'text-amber-400',
 };
 
 function getBody(slug: string, platformBodies: Record<string, string>, mainBody: string): string {
@@ -82,7 +82,11 @@ function GhostTwitterCard() {
   return (
     <div
       className="bg-surface-2/40 rounded-xl border border-border-subtle/30 overflow-hidden opacity-30 animate-slide-up"
-      style={{ animationDelay: '0ms', animationFillMode: 'both', animation: 'pulse 3s ease-in-out infinite, slide-up 0.3s ease-out both' }}
+      style={{
+        animationDelay: '0ms',
+        animationFillMode: 'both',
+        animation: 'pulse 3s ease-in-out infinite, slide-up 0.3s ease-out both',
+      }}
     >
       <div className="h-[3px] bg-blue-400/40" />
       <div className="p-3 space-y-2.5">
@@ -114,7 +118,11 @@ function GhostLinkedInCard() {
   return (
     <div
       className="bg-surface-2/40 rounded-xl border border-border-subtle/30 overflow-hidden opacity-30 animate-slide-up"
-      style={{ animationDelay: '100ms', animationFillMode: 'both', animation: 'pulse 3s ease-in-out 0.5s infinite, slide-up 0.3s ease-out 100ms both' }}
+      style={{
+        animationDelay: '100ms',
+        animationFillMode: 'both',
+        animation: 'pulse 3s ease-in-out 0.5s infinite, slide-up 0.3s ease-out 100ms both',
+      }}
     >
       <div className="h-[3px] bg-blue-500/40" />
       <div className="p-3 space-y-2.5">
@@ -146,7 +154,11 @@ function GhostInstagramCard() {
   return (
     <div
       className="bg-surface-2/40 rounded-xl border border-border-subtle/30 overflow-hidden opacity-30 animate-slide-up"
-      style={{ animationDelay: '200ms', animationFillMode: 'both', animation: 'pulse 3s ease-in-out 1s infinite, slide-up 0.3s ease-out 200ms both' }}
+      style={{
+        animationDelay: '200ms',
+        animationFillMode: 'both',
+        animation: 'pulse 3s ease-in-out 1s infinite, slide-up 0.3s ease-out 200ms both',
+      }}
     >
       <div className="h-[3px] bg-pink-500/40" />
       <div className="aspect-[4/3] bg-surface-3/20 flex items-center justify-center">
@@ -167,7 +179,15 @@ function GhostInstagramCard() {
 
 /* ---------- Platform-specific preview renderers ---------- */
 
-function TwitterPreview({ body, imageUrl, userName }: { body: string; imageUrl: string | null; userName: string }) {
+function TwitterPreview({
+  body,
+  imageUrl,
+  userName,
+}: {
+  body: string;
+  imageUrl: string | null;
+  userName: string;
+}) {
   return (
     <div className="p-3 space-y-2">
       <div className="flex gap-2.5">
@@ -175,11 +195,19 @@ function TwitterPreview({ body, imageUrl, userName }: { body: string; imageUrl: 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="text-sm font-semibold text-text-primary truncate">{userName}</span>
-            <span className="text-xs text-text-tertiary">@{userName.toLowerCase().replace(/\s/g, '')}</span>
+            <span className="text-xs text-text-tertiary">
+              @{userName.toLowerCase().replace(/\s/g, '')}
+            </span>
           </div>
-          <p className="text-sm text-text-secondary whitespace-pre-wrap mt-1">{truncate(body, 280)}</p>
+          <p className="text-sm text-text-secondary whitespace-pre-wrap mt-1">
+            {truncate(body, 280)}
+          </p>
           {imageUrl && (
-            <img src={imageUrl} alt="" className="mt-2 rounded-xl border border-border-subtle w-full object-cover max-h-48" />
+            <img
+              src={imageUrl}
+              alt=""
+              className="mt-2 rounded-xl border border-border-subtle w-full object-cover max-h-48"
+            />
           )}
           <div className="flex items-center gap-6 mt-2.5 text-text-tertiary">
             <MessageCircle className="h-3.5 w-3.5" />
@@ -193,7 +221,15 @@ function TwitterPreview({ body, imageUrl, userName }: { body: string; imageUrl: 
   );
 }
 
-function LinkedInPreview({ body, imageUrl, userName }: { body: string; imageUrl: string | null; userName: string }) {
+function LinkedInPreview({
+  body,
+  imageUrl,
+  userName,
+}: {
+  body: string;
+  imageUrl: string | null;
+  userName: string;
+}) {
   return (
     <div className="p-3 space-y-2">
       <div className="flex gap-2.5">
@@ -205,19 +241,39 @@ function LinkedInPreview({ body, imageUrl, userName }: { body: string; imageUrl:
       </div>
       <p className="text-sm text-text-secondary whitespace-pre-wrap">{truncate(body, 700)}</p>
       {imageUrl && (
-        <img src={imageUrl} alt="" className="rounded-lg border border-border-subtle w-full object-cover max-h-48" />
+        <img
+          src={imageUrl}
+          alt=""
+          className="rounded-lg border border-border-subtle w-full object-cover max-h-48"
+        />
       )}
       <div className="flex items-center gap-4 pt-2 border-t border-border-subtle text-text-tertiary text-xs">
-        <span className="flex items-center gap-1"><ThumbsUp className="h-3.5 w-3.5" /> Like</span>
-        <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> Comment</span>
-        <span className="flex items-center gap-1"><Repeat2 className="h-3.5 w-3.5" /> Repost</span>
-        <span className="flex items-center gap-1"><Share className="h-3.5 w-3.5" /> Send</span>
+        <span className="flex items-center gap-1">
+          <ThumbsUp className="h-3.5 w-3.5" /> Like
+        </span>
+        <span className="flex items-center gap-1">
+          <MessageCircle className="h-3.5 w-3.5" /> Comment
+        </span>
+        <span className="flex items-center gap-1">
+          <Repeat2 className="h-3.5 w-3.5" /> Repost
+        </span>
+        <span className="flex items-center gap-1">
+          <Share className="h-3.5 w-3.5" /> Send
+        </span>
       </div>
     </div>
   );
 }
 
-function InstagramPreview({ body, imageUrl, userName }: { body: string; imageUrl: string | null; userName: string }) {
+function InstagramPreview({
+  body,
+  imageUrl,
+  userName,
+}: {
+  body: string;
+  imageUrl: string | null;
+  userName: string;
+}) {
   return (
     <div>
       {imageUrl ? (
@@ -235,7 +291,9 @@ function InstagramPreview({ body, imageUrl, userName }: { body: string; imageUrl
           <Bookmark className="h-4 w-4 ml-auto" />
         </div>
         <p className="text-sm text-text-secondary">
-          <span className="font-semibold text-text-primary mr-1">{userName.toLowerCase().replace(/\s/g, '')}</span>
+          <span className="font-semibold text-text-primary mr-1">
+            {userName.toLowerCase().replace(/\s/g, '')}
+          </span>
           {truncate(body, 150)}
         </p>
       </div>
@@ -287,7 +345,13 @@ export function PlatformPreview({
           {/* Centered overlay prompt */}
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <div className="bg-surface-1/80 backdrop-blur-sm rounded-xl px-5 py-3 border border-border-subtle/50 shadow-dark-lg">
-              <svg className="h-4 w-4 text-accent mx-auto mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg
+                className="h-4 w-4 text-accent mx-auto mb-1.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
               </svg>
               <p className="text-xs font-medium text-text-secondary">Select platforms above</p>
@@ -345,11 +409,20 @@ export function PlatformPreview({
             {(channel.slug === 'threads' || channel.slug === 'bluesky') && (
               <SimpleTextPreview body={body} userName={userName} slug={channel.slug} />
             )}
-            {(channel.slug === 'blog' || channel.slug === 'email' || channel.slug === 'youtube') && (
-              <TitledPreview title={title} body={body} />
-            )}
+            {(channel.slug === 'blog' ||
+              channel.slug === 'email' ||
+              channel.slug === 'youtube') && <TitledPreview title={title} body={body} />}
             {/* Fallback for unknown platforms */}
-            {!['twitter', 'linkedin', 'instagram', 'threads', 'bluesky', 'blog', 'email', 'youtube'].includes(channel.slug) && (
+            {![
+              'twitter',
+              'linkedin',
+              'instagram',
+              'threads',
+              'bluesky',
+              'blog',
+              'email',
+              'youtube',
+            ].includes(channel.slug) && (
               <SimpleTextPreview body={body} userName={userName} slug={channel.slug} />
             )}
           </div>

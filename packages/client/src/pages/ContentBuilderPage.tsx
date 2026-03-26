@@ -31,7 +31,7 @@ interface Channel {
   name: string;
   slug: string;
   icon: string;
-  config: any;
+  config: Record<string, unknown>;
 }
 
 export function ContentBuilderPage() {
@@ -39,7 +39,7 @@ export function ContentBuilderPage() {
   const [rightOpen, setRightOpen] = useState(true);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [promptModalOpen, setPromptModalOpen] = useState(false);
-  const [editingPrompt, setEditingPrompt] = useState<any>(null);
+  const [editingPrompt, setEditingPrompt] = useState<Record<string, unknown> | null>(null);
 
   const builder = useContentBuilder();
   const promptsHook = usePrompts();
@@ -62,7 +62,9 @@ export function ContentBuilderPage() {
       }
     }
     fetchChannels();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Keyboard shortcuts
@@ -86,7 +88,9 @@ export function ContentBuilderPage() {
       // Ctrl+Shift+S / Cmd+Shift+S → focus schedule input
       if (e.key === 'S' && e.shiftKey) {
         e.preventDefault();
-        const scheduleInput = document.querySelector<HTMLInputElement>('input[type="datetime-local"], input[type="date"]');
+        const scheduleInput = document.querySelector<HTMLInputElement>(
+          'input[type="datetime-local"], input[type="date"]',
+        );
         if (scheduleInput) scheduleInput.focus();
         return;
       }
@@ -100,9 +104,7 @@ export function ContentBuilderPage() {
   }, [handleKeyboard]);
 
   // Compute selected channel objects from IDs
-  const selectedChannelObjects = channels.filter((ch) =>
-    builder.selectedChannels.includes(ch.id),
-  );
+  const selectedChannelObjects = channels.filter((ch) => builder.selectedChannels.includes(ch.id));
 
   // Map prompts from usePrompts to the shape PromptLibrary expects
   const promptLibraryPrompts = promptsHook.prompts.map((p) => ({
@@ -124,7 +126,13 @@ export function ContentBuilderPage() {
     setPromptModalOpen(true);
   };
 
-  const handleSavePrompt = async (data: { name: string; description: string; body: string; category: string; defaultModel: string }) => {
+  const handleSavePrompt = async (data: {
+    name: string;
+    description: string;
+    body: string;
+    category: string;
+    defaultModel: string;
+  }) => {
     if (editingPrompt) {
       await promptsHook.updatePrompt(editingPrompt.id, data);
     } else {
@@ -136,9 +144,7 @@ export function ContentBuilderPage() {
 
   // Whether to show the empty state
   const showEmptyState =
-    builder.selectedChannels.length === 0 &&
-    !builder.mainBody.trim() &&
-    !builder.title.trim();
+    builder.selectedChannels.length === 0 && !builder.mainBody.trim() && !builder.title.trim();
 
   // Empty state handlers
   const handleStartScratch = () => {
@@ -194,12 +200,18 @@ export function ContentBuilderPage() {
               {builder.isSaving ? 'Saving...' : 'Save Draft'}
             </Button>
             <span className="text-[9px] text-text-tertiary mt-0.5 hidden lg:block">
-              <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />Ctrl+S
+              <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />
+              Ctrl+S
             </span>
           </div>
-          {(builder.flowState === 'PLATFORMS_SELECTED' || builder.flowState === 'ADAPTED' || builder.flowState === 'MEDIA_ADDED' || builder.flowState === 'READY') && (
+          {(builder.flowState === 'PLATFORMS_SELECTED' ||
+            builder.flowState === 'ADAPTED' ||
+            builder.flowState === 'MEDIA_ADDED' ||
+            builder.flowState === 'READY') && (
             <div className="flex flex-col items-center" data-tour="adapt-all">
-              {builder.flowState === 'ADAPTED' || builder.flowState === 'MEDIA_ADDED' || builder.flowState === 'READY' ? (
+              {builder.flowState === 'ADAPTED' ||
+              builder.flowState === 'MEDIA_ADDED' ||
+              builder.flowState === 'READY' ? (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -223,7 +235,8 @@ export function ContentBuilderPage() {
                 </Button>
               )}
               <span className="text-[9px] text-text-tertiary mt-0.5 hidden lg:block">
-                <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />Ctrl+Shift+A
+                <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />
+                Ctrl+Shift+A
               </span>
             </div>
           )}
@@ -239,15 +252,32 @@ export function ContentBuilderPage() {
           const isCurrent = i === stateIndex || (i === 0 && builder.flowState === 'IDLE');
           return (
             <div key={label} className="flex items-center">
-              {i > 0 && <div className={`w-12 h-0.5 ${isActive ? 'bg-accent' : 'bg-surface-3'} transition-colors duration-500`} />}
+              {i > 0 && (
+                <div
+                  className={`w-12 h-0.5 ${isActive ? 'bg-accent' : 'bg-surface-3'} transition-colors duration-500`}
+                />
+              )}
               <div className="flex flex-col items-center gap-1">
-                <div className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
-                  isCurrent ? 'bg-accent shadow-[0_0_8px_rgba(255,214,10,0.4)] scale-125' :
-                  isActive ? 'bg-accent' : 'bg-surface-3'
-                }`} />
-                <span className={`text-[9px] font-medium transition-colors ${
-                  isCurrent ? 'text-accent' : isActive ? 'text-text-secondary' : 'text-text-tertiary'
-                }`}>{label}</span>
+                <div
+                  className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
+                    isCurrent
+                      ? 'bg-accent shadow-[0_0_8px_rgba(255,214,10,0.4)] scale-125'
+                      : isActive
+                        ? 'bg-accent'
+                        : 'bg-surface-3'
+                  }`}
+                />
+                <span
+                  className={`text-[9px] font-medium transition-colors ${
+                    isCurrent
+                      ? 'text-accent'
+                      : isActive
+                        ? 'text-text-secondary'
+                        : 'text-text-tertiary'
+                  }`}
+                >
+                  {label}
+                </span>
               </div>
             </div>
           );
@@ -298,7 +328,13 @@ export function ContentBuilderPage() {
         )}
 
         {/* ── Center Panel: Composer + Chat ── */}
-        <div className="flex flex-1 flex-col overflow-hidden bg-surface-0" style={{ background: 'radial-gradient(ellipse at center 40%, rgba(255,255,255,0.015) 0%, transparent 60%)' }}>
+        <div
+          className="flex flex-1 flex-col overflow-hidden bg-surface-0"
+          style={{
+            background:
+              'radial-gradient(ellipse at center 40%, rgba(255,255,255,0.015) 0%, transparent 60%)',
+          }}
+        >
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {/* Platform chip selector */}
             <div data-tour="platform-selector">
@@ -419,7 +455,10 @@ export function ContentBuilderPage() {
       {/* Prompt Editor Modal */}
       <PromptEditorModal
         isOpen={promptModalOpen}
-        onClose={() => { setPromptModalOpen(false); setEditingPrompt(null); }}
+        onClose={() => {
+          setPromptModalOpen(false);
+          setEditingPrompt(null);
+        }}
         onSave={handleSavePrompt}
         editPrompt={editingPrompt}
       />
