@@ -33,13 +33,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build shared (declarations needed by lint + server)
-        run: pnpm -C packages/shared build
-
       - name: Lint
         run: pnpm lint
 
-      - name: Build (shared → server → client)
+      - name: Build all packages
         run: pnpm build
 
       - name: Unit tests

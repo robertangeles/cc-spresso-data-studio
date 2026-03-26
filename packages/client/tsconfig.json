@@ -8,12 +8,10 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@cc/shared": ["../shared/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "references": [
-    { "path": "../shared" },
-    { "path": "./tsconfig.node.json" }
-  ]
+  "references": [{ "path": "../shared" }, { "path": "./tsconfig.node.json" }]
 }
