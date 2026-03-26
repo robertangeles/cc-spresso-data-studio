@@ -5,10 +5,7 @@
     "rootDir": "./src",
     "module": "ESNext",
     "target": "ES2022",
-    "baseUrl": ".",
-    "paths": {
-      "@cc/shared": ["../shared/src/index.ts"]
-    }
+    "baseUrl": "."
   },
   "include": ["src/**/*.ts"],
   "references": [{ "path": "../shared" }]

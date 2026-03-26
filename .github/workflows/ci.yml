@@ -33,6 +33,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Shared must build first — composite project references require
+      # .d.ts declarations to exist before dependents (server/client)
+      # can typecheck or lint. This is by design, not a workaround.
+      - name: Build shared package (declarations for server/client)
+        run: pnpm -C packages/shared build
+
       - name: Lint
         run: pnpm lint
 
