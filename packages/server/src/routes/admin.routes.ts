@@ -19,6 +19,9 @@ router.get('/settings/cloudinary', adminController.getCloudinaryConfig);
 router.put('/settings/cloudinary', adminController.updateCloudinaryConfig);
 router.post('/settings/cloudinary/test', adminController.testCloudinaryConnection);
 
+// Generic key-value settings (key in body)
+router.put('/settings', adminController.upsertSetting);
+// Single setting by key (key in URL)
 router.get('/settings/:key', adminController.getSetting);
 router.put('/settings/:key', adminController.updateSetting);
 

@@ -69,7 +69,21 @@ export async function getSetting(
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const setting = await adminService.getSetting(req.params.key);
-    res.json({ success: true, data: setting });
+    if (!setting) {
+      res.json({ success: true, data: null });
+      return;
+    }
+    // Mask secret values: show first 4 + last 4 chars only
+    const maskedValue =
+      setting.isSecret && setting.value.length > 8
+        ? `${setting.value.slice(0, 4)}${'*'.repeat(setting.value.length - 8)}${setting.value.slice(-4)}`
+        : setting.isSecret
+          ? '****'
+          : setting.value;
+    res.json({
+      success: true,
+      data: { key: setting.key, value: maskedValue, isSecret: setting.isSecret },
+    });
   } catch (err) {
     next(err);
   }
@@ -85,6 +99,34 @@ export async function updateSetting(
     const { value, isSecret } = req.body;
     const setting = await adminService.updateSetting(req.params.key, value, isSecret);
     res.json({ success: true, data: setting });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function upsertSetting(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const { key, value, isSecret } = req.body;
+    if (!key || typeof key !== 'string') {
+      res.status(400).json({ success: false, data: null, message: 'Missing required field: key' });
+      return;
+    }
+    if (value === undefined || value === null) {
+      res
+        .status(400)
+        .json({ success: false, data: null, message: 'Missing required field: value' });
+      return;
+    }
+    const setting = await adminService.updateSetting(key, String(value), isSecret ?? false);
+    res.json({
+      success: true,
+      data: { key: setting.key, value: setting.value, isSecret: setting.isSecret },
+    });
   } catch (err) {
     next(err);
   }
@@ -258,7 +300,13 @@ export async function testCloudinaryConnection(
 
     const config = JSON.parse(setting.value);
     if (!config.cloudName || !config.apiKey || !config.apiSecret) {
-      res.status(400).json({ success: false, data: null, message: 'Missing cloud name, API key, or API secret' });
+      res
+        .status(400)
+        .json({
+          success: false,
+          data: null,
+          message: 'Missing cloud name, API key, or API secret',
+        });
       return;
     }
 
@@ -269,10 +317,24 @@ export async function testCloudinaryConnection(
     });
 
     if (response.ok) {
-      res.json({ success: true, data: null, message: `Connected to Cloudinary (${config.cloudName}). Upload folder: ${config.uploadFolder}/` });
+      res.json({
+        success: true,
+        data: null,
+        message: `Connected to Cloudinary (${config.cloudName}). Upload folder: ${config.uploadFolder}/`,
+      });
     } else {
-      const errBody = await response.json().catch(() => ({ error: { message: 'Unknown error' } })) as { error?: { message?: string } };
-      res.status(400).json({ success: false, data: null, message: `Cloudinary error: ${errBody.error?.message ?? response.statusText}` });
+      const errBody = (await response
+        .json()
+        .catch(() => ({ error: { message: 'Unknown error' } }))) as {
+        error?: { message?: string };
+      };
+      res
+        .status(400)
+        .json({
+          success: false,
+          data: null,
+          message: `Cloudinary error: ${errBody.error?.message ?? response.statusText}`,
+        });
     }
   } catch (err) {
     next(err);
