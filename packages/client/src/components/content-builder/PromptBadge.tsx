@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Search, Plus, Theater } from 'lucide-react';
+import { X, Search, Plus, Theater, Pencil } from 'lucide-react';
 import { usePrompts } from '../../hooks/usePrompts';
 
 interface PromptBadgeProps {
@@ -8,6 +8,14 @@ interface PromptBadgeProps {
   onSelectPrompt: (promptId: string, name: string, body: string) => void;
   onClearPrompt: () => void;
   onCreateNew: () => void;
+  onEditPrompt?: (prompt: {
+    id: string;
+    name: string;
+    description: string | null;
+    body: string;
+    category: string;
+    defaultModel: string | null;
+  }) => void;
 }
 
 const CATEGORIES = [
@@ -24,6 +32,7 @@ export function PromptBadge({
   onSelectPrompt,
   onClearPrompt,
   onCreateNew,
+  onEditPrompt,
 }: PromptBadgeProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -156,19 +165,44 @@ export function PromptBadge({
               </p>
             ) : (
               filtered.map((prompt) => (
-                <button
+                <div
                   key={prompt.id}
-                  type="button"
-                  onClick={() => handleSelect(prompt)}
-                  className={`w-full text-left rounded-lg px-3 py-2 hover:bg-surface-3 transition-colors ${
+                  className={`group flex items-center justify-between rounded-lg px-3 py-2 hover:bg-surface-3 transition-colors ${
                     prompt.id === activePromptId ? 'bg-accent/10 border border-accent/20' : ''
                   }`}
                 >
-                  <p className="text-sm font-medium text-text-primary truncate">{prompt.name}</p>
-                  <span className="inline-flex rounded-full bg-surface-3 px-1.5 py-0.5 text-[9px] font-medium text-text-tertiary mt-0.5">
-                    {prompt.category ?? 'custom'}
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(prompt)}
+                    className="flex-1 text-left min-w-0"
+                  >
+                    <p className="text-sm font-medium text-text-primary truncate">{prompt.name}</p>
+                    <span className="inline-flex rounded-full bg-surface-3 px-1.5 py-0.5 text-[9px] font-medium text-text-tertiary mt-0.5">
+                      {prompt.category ?? 'custom'}
+                    </span>
+                  </button>
+                  {onEditPrompt && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpen(false);
+                        onEditPrompt({
+                          id: prompt.id,
+                          name: prompt.name,
+                          description: prompt.description,
+                          body: prompt.body ?? '',
+                          category: prompt.category ?? 'custom',
+                          defaultModel: prompt.defaultModel,
+                        });
+                      }}
+                      className="opacity-0 group-hover:opacity-100 shrink-0 rounded-md p-1 text-text-tertiary hover:text-accent transition-all ml-1"
+                      title="Edit prompt"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
               ))
             )}
           </div>

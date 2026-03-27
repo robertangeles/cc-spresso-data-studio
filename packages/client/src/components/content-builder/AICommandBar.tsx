@@ -14,6 +14,14 @@ interface AICommandBarProps {
   onSelectPrompt: (promptId: string, name: string, body: string) => void;
   onClearPrompt: () => void;
   onCreateNewPrompt: () => void;
+  onEditPrompt?: (prompt: {
+    id: string;
+    name: string;
+    description: string | null;
+    body: string;
+    category: string;
+    defaultModel: string | null;
+  }) => void;
 }
 
 function relativeTime(timestamp: string): string {
@@ -38,6 +46,7 @@ export function AICommandBar({
   onSelectPrompt,
   onClearPrompt,
   onCreateNewPrompt,
+  onEditPrompt,
 }: AICommandBarProps) {
   const { models: configuredModels } = useConfiguredModels();
   const [input, setInput] = useState('');
@@ -98,6 +107,7 @@ export function AICommandBar({
           onSelectPrompt={onSelectPrompt}
           onClearPrompt={onClearPrompt}
           onCreateNew={onCreateNewPrompt}
+          onEditPrompt={onEditPrompt}
         />
 
         {/* AI icon */}

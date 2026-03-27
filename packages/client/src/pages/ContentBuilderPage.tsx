@@ -100,7 +100,7 @@ export function ContentBuilderPage() {
       // Ctrl+Shift+A / Cmd+Shift+A -> adapt all
       if (e.key === 'A' && e.shiftKey) {
         e.preventDefault();
-        if (!builder.isAdapting && builder.selectedChannels.length > 0) builder.adaptAll();
+        if (!builder.isAdapting && builder.selectedChannels.length >= 2) builder.adaptAll();
         return;
       }
       // Ctrl+Shift+S / Cmd+Shift+S -> focus schedule input
@@ -140,6 +140,25 @@ export function ContentBuilderPage() {
 
   const handleCreateNewPrompt = () => {
     setEditingPrompt(null);
+    setPromptModalOpen(true);
+  };
+
+  const handleEditPrompt = (prompt: {
+    id: string;
+    name: string;
+    description: string | null;
+    body: string;
+    category: string;
+    defaultModel: string | null;
+  }) => {
+    setEditingPrompt({
+      id: prompt.id,
+      name: prompt.name,
+      description: prompt.description,
+      body: prompt.body,
+      category: prompt.category,
+      defaultModel: prompt.defaultModel,
+    });
     setPromptModalOpen(true);
   };
 
@@ -324,42 +343,43 @@ export function ContentBuilderPage() {
               Ctrl+S
             </span>
           </div>
-          {(builder.flowState === 'PLATFORMS_SELECTED' ||
-            builder.flowState === 'ADAPTED' ||
-            builder.flowState === 'MEDIA_ADDED' ||
-            builder.flowState === 'READY') && (
-            <div className="flex flex-col items-center" data-tour="adapt-all">
-              {builder.flowState === 'ADAPTED' ||
+          {builder.selectedChannels.length >= 2 &&
+            (builder.flowState === 'PLATFORMS_SELECTED' ||
+              builder.flowState === 'ADAPTED' ||
               builder.flowState === 'MEDIA_ADDED' ||
-              builder.flowState === 'READY' ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={builder.adaptAll}
-                  disabled={builder.isAdapting}
-                  title="Re-adapt All (Ctrl+Shift+A)"
-                >
-                  <Check className="mr-1.5 h-4 w-4 text-green-400" />
-                  <span className="text-green-400">Adapted</span>
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={builder.adaptAll}
-                  disabled={builder.isAdapting || builder.selectedChannels.length === 0}
-                  title="Adapt All (Ctrl+Shift+A)"
-                >
-                  <Sparkles className="mr-1.5 h-4 w-4" />
-                  {builder.isAdapting ? 'Adapting...' : 'Adapt All'}
-                </Button>
-              )}
-              <span className="text-[9px] text-text-tertiary mt-0.5 hidden lg:block">
-                <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />
-                Ctrl+Shift+A
-              </span>
-            </div>
-          )}
+              builder.flowState === 'READY') && (
+              <div className="flex flex-col items-center" data-tour="adapt-all">
+                {builder.flowState === 'ADAPTED' ||
+                builder.flowState === 'MEDIA_ADDED' ||
+                builder.flowState === 'READY' ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={builder.adaptAll}
+                    disabled={builder.isAdapting}
+                    title="Re-adapt All (Ctrl+Shift+A)"
+                  >
+                    <Check className="mr-1.5 h-4 w-4 text-green-400" />
+                    <span className="text-green-400">Adapted</span>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={builder.adaptAll}
+                    disabled={builder.isAdapting || builder.selectedChannels.length === 0}
+                    title="Adapt All (Ctrl+Shift+A)"
+                  >
+                    <Sparkles className="mr-1.5 h-4 w-4" />
+                    {builder.isAdapting ? 'Adapting...' : 'Adapt All'}
+                  </Button>
+                )}
+                <span className="text-[9px] text-text-tertiary mt-0.5 hidden lg:block">
+                  <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />
+                  Ctrl+Shift+A
+                </span>
+              </div>
+            )}
         </div>
       </div>
 
@@ -456,6 +476,7 @@ export function ContentBuilderPage() {
               onSelectPrompt={handleSelectPrompt}
               onClearPrompt={builder.clearPrompt}
               onCreateNewPrompt={handleCreateNewPrompt}
+              onEditPrompt={handleEditPrompt}
             />
           </div>
         </div>
