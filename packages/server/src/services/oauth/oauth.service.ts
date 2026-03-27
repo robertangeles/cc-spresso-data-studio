@@ -3,10 +3,12 @@ import { db, schema } from '../../db/index.js';
 import { logger } from '../../config/logger.js';
 import type { OAuthProvider, OAuthTokens } from './oauth.interface.js';
 import { InstagramOAuthProvider } from './instagram.oauth.js';
+import { BlueskyOAuthProvider } from './bluesky.oauth.js';
 
 // Registry of OAuth providers
 const providers: Record<string, OAuthProvider> = {
   instagram: new InstagramOAuthProvider(),
+  bluesky: new BlueskyOAuthProvider(),
 };
 
 export function getOAuthProvider(platform: string): OAuthProvider {

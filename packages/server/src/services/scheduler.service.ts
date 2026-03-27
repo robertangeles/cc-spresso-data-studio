@@ -4,6 +4,7 @@ import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
 import { getConnectedAccount } from './oauth/oauth.service.js';
 import { publishToInstagram } from './publishers/instagram.publisher.js';
+import { publishToBluesky } from './publishers/bluesky.publisher.js';
 
 /**
  * List all scheduled posts for a user, ordered by scheduledAt asc, pending first.
@@ -157,6 +158,29 @@ export async function processDuePosts(): Promise<number> {
             logger.warn(
               { postId: post.id, error: result.error },
               'Instagram auto-publish failed — marking as published locally',
+            );
+          }
+        }
+      }
+
+      // Attempt auto-publish to Bluesky if channel matches
+      if (channelSlug === 'bluesky' && contentItem) {
+        const account = await getConnectedAccount(post.userId, 'bluesky');
+        if (account?.accessToken && account.accountId) {
+          const result = await publishToBluesky({
+            accessToken: account.accessToken,
+            did: account.accountId,
+            text: contentItem.body,
+            refreshToken: account.refreshToken ?? undefined,
+          });
+
+          if (result.success) {
+            autoPublished = true;
+            logger.info({ postId: post.id, bskyUri: result.postUri }, 'Auto-published to Bluesky');
+          } else {
+            logger.warn(
+              { postId: post.id, error: result.error },
+              'Bluesky auto-publish failed — marking as published locally',
             );
           }
         }

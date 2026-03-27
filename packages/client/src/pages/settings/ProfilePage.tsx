@@ -648,33 +648,49 @@ interface ConnectedAccount {
   connected: boolean;
 }
 
-// Platforms with live OAuth support
+// Platforms with live OAuth support (redirect-based)
 const OAUTH_ENABLED_PLATFORMS = new Set(['instagram']);
+
+// Platforms that use credential-based auth (handle + app password)
+const CREDENTIAL_AUTH_PLATFORMS = new Set(['bluesky']);
 
 function SocialAccountsTab() {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [credentialModal, setCredentialModal] = useState<string | null>(null);
+  const [credHandle, setCredHandle] = useState('');
+  const [credAppPassword, setCredAppPassword] = useState('');
+  const [credConnecting, setCredConnecting] = useState(false);
 
   // Fetch connected accounts on mount
   useEffect(() => {
-    api
-      .get('/oauth/instagram/status')
-      .then(({ data }) => {
-        const acct = data.data;
-        if (acct?.connected) {
-          setConnectedAccounts([
-            {
-              platform: 'instagram',
+    const fetchStatuses = async () => {
+      const platforms = ['instagram', 'bluesky'];
+      const accounts: ConnectedAccount[] = [];
+
+      for (const platform of platforms) {
+        try {
+          const { data } = await api.get(`/oauth/${platform}/status`);
+          const acct = data.data;
+          if (acct?.connected) {
+            accounts.push({
+              platform,
               accountName: acct.accountName ?? null,
               accountId: acct.accountId ?? null,
               connected: true,
-            },
-          ]);
+            });
+          }
+        } catch {
+          // Platform not available or not connected
         }
-      })
-      .catch(() => {});
+      }
+
+      setConnectedAccounts(accounts);
+    };
+
+    fetchStatuses();
   }, []);
 
   // Handle OAuth callback params
@@ -687,15 +703,16 @@ function SocialAccountsTab() {
         `${platform.charAt(0).toUpperCase() + platform.slice(1)} connected successfully!`,
         'success',
       );
-      // Refresh connected accounts
+      // Refresh connected account for the platform
       api
-        .get('/oauth/instagram/status')
+        .get(`/oauth/${platform}/status`)
         .then(({ data }) => {
           const acct = data.data;
           if (acct?.connected) {
-            setConnectedAccounts([
+            setConnectedAccounts((prev) => [
+              ...prev.filter((a) => a.platform !== platform),
               {
-                platform: 'instagram',
+                platform,
                 accountName: acct.accountName ?? null,
                 accountId: acct.accountId ?? null,
                 connected: true,
@@ -726,8 +743,47 @@ function SocialAccountsTab() {
     connectedAccounts.find((a) => a.platform === platformId && a.connected);
 
   const handleConnect = (platformId: string) => {
+    if (CREDENTIAL_AUTH_PLATFORMS.has(platformId)) {
+      setCredentialModal(platformId);
+      setCredHandle('');
+      setCredAppPassword('');
+      return;
+    }
     if (!OAUTH_ENABLED_PLATFORMS.has(platformId)) return;
     window.location.href = `/api/oauth/${platformId}/connect`;
+  };
+
+  const handleCredentialConnect = async () => {
+    if (!credentialModal || !credHandle || !credAppPassword) return;
+    setCredConnecting(true);
+    try {
+      const { data } = await api.post(`/oauth/${credentialModal}/connect`, {
+        handle: credHandle,
+        appPassword: credAppPassword,
+      });
+      const result = data.data;
+      setConnectedAccounts((prev) => [
+        ...prev.filter((a) => a.platform !== credentialModal),
+        {
+          platform: credentialModal,
+          accountName: result?.accountName ?? null,
+          accountId: result?.accountId ?? null,
+          connected: true,
+        },
+      ]);
+      toast(
+        `${credentialModal.charAt(0).toUpperCase() + credentialModal.slice(1)} connected successfully!`,
+        'success',
+      );
+      setCredentialModal(null);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        `Failed to connect ${credentialModal}. Check your handle and app password.`;
+      toast(msg, 'error');
+    } finally {
+      setCredConnecting(false);
+    }
   };
 
   const handleDisconnect = async (platformId: string) => {
@@ -755,6 +811,8 @@ function SocialAccountsTab() {
         {SOCIAL_PLATFORMS.map((platform) => {
           const connected = getConnected(platform.id);
           const isOAuthEnabled = OAUTH_ENABLED_PLATFORMS.has(platform.id);
+          const isCredentialAuth = CREDENTIAL_AUTH_PLATFORMS.has(platform.id);
+          const isConnectable = isOAuthEnabled || isCredentialAuth;
 
           return (
             <div
@@ -784,7 +842,7 @@ function SocialAccountsTab() {
                     </p>
                   ) : (
                     <p className="text-xs text-text-tertiary">
-                      {isOAuthEnabled ? 'Not connected' : 'Coming soon'}
+                      {isConnectable ? 'Not connected' : 'Coming soon'}
                     </p>
                   )}
                 </div>
@@ -803,13 +861,13 @@ function SocialAccountsTab() {
                   <div className="relative group">
                     <Button
                       size="sm"
-                      variant={isOAuthEnabled ? 'primary' : 'secondary'}
+                      variant={isConnectable ? 'primary' : 'secondary'}
                       onClick={() => handleConnect(platform.id)}
-                      disabled={!isOAuthEnabled}
+                      disabled={!isConnectable}
                     >
                       Connect
                     </Button>
-                    {!isOAuthEnabled && (
+                    {!isConnectable && (
                       <span className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-surface-4 px-2 py-1 text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                         Coming soon
                       </span>
@@ -821,6 +879,43 @@ function SocialAccountsTab() {
           );
         })}
       </div>
+
+      {/* Credential-based auth modal (Bluesky) */}
+      <Modal
+        isOpen={!!credentialModal}
+        onClose={() => setCredentialModal(null)}
+        title={`Connect ${credentialModal ? credentialModal.charAt(0).toUpperCase() + credentialModal.slice(1) : ''}`}
+        confirmLabel={credConnecting ? 'Connecting...' : 'Connect'}
+        onConfirm={handleCredentialConnect}
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-text-secondary">
+            Enter your Bluesky handle and an{' '}
+            <a
+              href="https://bsky.app/settings/app-passwords"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent underline"
+            >
+              App Password
+            </a>{' '}
+            (not your main password).
+          </p>
+          <Input
+            label="Handle"
+            value={credHandle}
+            onChange={(e) => setCredHandle(e.target.value)}
+            placeholder="username.bsky.social"
+          />
+          <Input
+            label="App Password"
+            type="password"
+            value={credAppPassword}
+            onChange={(e) => setCredAppPassword(e.target.value)}
+            placeholder="xxxx-xxxx-xxxx-xxxx"
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

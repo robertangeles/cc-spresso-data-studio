@@ -15,6 +15,7 @@ import { schedulerRoutes } from './scheduler.routes.js';
 import { systemPromptRoutes } from './system-prompt.routes.js';
 import { assistantRoutes } from './assistant.routes.js';
 import { instagramOAuthRoutes } from './oauth/instagram.routes.js';
+import { blueskyOAuthRoutes } from './oauth/bluesky.routes.js';
 
 const router = Router();
 
@@ -42,5 +43,6 @@ router.use('/schedule', schedulerRoutes);
 router.use('/system-prompts', systemPromptRoutes);
 router.use('/assistant', assistantRoutes);
 router.use('/oauth/instagram', instagramOAuthRoutes);
+router.use('/oauth/bluesky', blueskyOAuthRoutes);
 
 export { router };
