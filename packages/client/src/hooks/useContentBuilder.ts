@@ -1,5 +1,7 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { api } from '../lib/api';
+
+const STORAGE_KEY = 'spresso_content_builder_draft';
 
 interface CommandHistoryEntry {
   instruction: string;
@@ -43,7 +45,57 @@ const initialState: ContentBuilderState = {
 };
 
 export function useContentBuilder() {
-  const [state, setState] = useState<ContentBuilderState>(initialState);
+  const [state, setState] = useState<ContentBuilderState>(() => {
+    // Restore draft from localStorage on mount
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...initialState,
+          ...parsed,
+          isDirty: false,
+          isSaving: false,
+          isAdapting: false,
+          isProcessing: false,
+        };
+      }
+    } catch {
+      /* ignore corrupt data */
+    }
+    return initialState;
+  });
+
+  // Auto-save to localStorage on content changes (debounced)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (state.mainBody || state.title || Object.keys(state.platformBodies).length > 0) {
+        const toSave = {
+          title: state.title,
+          mainBody: state.mainBody,
+          platformBodies: state.platformBodies,
+          imageUrl: state.imageUrl,
+          selectedChannels: state.selectedChannels,
+          activePromptId: state.activePromptId,
+          activePromptName: state.activePromptName,
+          activePromptBody: state.activePromptBody,
+          activeTab: state.activeTab,
+          commandHistory: state.commandHistory,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+      }
+    }, 1000); // save 1s after last change
+    return () => clearTimeout(timer);
+  }, [
+    state.title,
+    state.mainBody,
+    state.platformBodies,
+    state.imageUrl,
+    state.selectedChannels,
+    state.activeTab,
+    state.activePromptId,
+    state.commandHistory,
+  ]);
 
   const markDirty = useCallback(() => {
     setState((prev) => (prev.isDirty ? prev : { ...prev, isDirty: true }));
@@ -246,6 +298,7 @@ export function useContentBuilder() {
 
   const reset = useCallback(() => {
     setState(initialState);
+    localStorage.removeItem(STORAGE_KEY);
   }, []);
 
   const flowState = useMemo((): FlowState => {
