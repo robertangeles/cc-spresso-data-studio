@@ -168,6 +168,12 @@ export async function sendMessage(
 
 async function generateTitle(conversationId: string, firstMessage: string) {
   try {
+    // Check if this is a Content Builder conversation — don't rename those
+    const conversation = await db.query.conversations.findFirst({
+      where: eq(schema.conversations.id, conversationId),
+    });
+    if (conversation?.title.startsWith('[CB]')) return; // preserve CB prefix
+
     const response = await providerRegistry.complete({
       model: 'claude-haiku-4-5',
       messages: [
