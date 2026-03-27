@@ -1,0 +1,161 @@
+import { useState, useRef, useEffect } from 'react';
+import { Send, Check, Loader2, Wand2 } from 'lucide-react';
+import { useConfiguredModels } from '../../hooks/useConfiguredModels';
+import { PromptBadge } from './PromptBadge';
+
+interface AICommandBarProps {
+  onCommand: (instruction: string) => void;
+  isProcessing: boolean;
+  commandHistory: Array<{ instruction: string; timestamp: string }>;
+  model: string;
+  onModelChange: (model: string) => void;
+  activePromptId: string | null;
+  activePromptName: string | null;
+  onSelectPrompt: (promptId: string, name: string, body: string) => void;
+  onClearPrompt: () => void;
+  onCreateNewPrompt: () => void;
+}
+
+function relativeTime(timestamp: string): string {
+  const diff = Date.now() - new Date(timestamp).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+export function AICommandBar({
+  onCommand,
+  isProcessing,
+  commandHistory,
+  model,
+  onModelChange,
+  activePromptId,
+  activePromptName,
+  onSelectPrompt,
+  onClearPrompt,
+  onCreateNewPrompt,
+}: AICommandBarProps) {
+  const { models: configuredModels } = useConfiguredModels();
+  const [input, setInput] = useState('');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize the textarea (single line default, expands on Shift+Enter)
+  useEffect(() => {
+    const el = inputRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, 80)}px`;
+    }
+  }, [input]);
+
+  const handleSend = () => {
+    if (!input.trim() || isProcessing) return;
+    onCommand(input.trim());
+    setInput('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const hasContent = input.trim().length > 0;
+  const visibleHistory = commandHistory.slice(-5);
+
+  return (
+    <div className="space-y-2">
+      {/* Command history — collapsed list above the bar */}
+      {visibleHistory.length > 0 && (
+        <div className="max-h-[120px] overflow-y-auto space-y-0.5 scrollbar-thin">
+          {visibleHistory.map((cmd, i) => (
+            <div
+              key={`${cmd.timestamp}-${i}`}
+              className="flex items-center gap-2 text-xs text-text-tertiary px-1 py-0.5"
+            >
+              <Check className="h-3 w-3 text-green-400 shrink-0" />
+              <span className="truncate flex-1">{cmd.instruction}</span>
+              <span className="shrink-0 text-[10px] text-text-tertiary/60">
+                {relativeTime(cmd.timestamp)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Input bar */}
+      <div className="flex items-center gap-2 bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 px-3 py-2 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
+        {/* Prompt badge */}
+        <PromptBadge
+          activePromptId={activePromptId}
+          activePromptName={activePromptName}
+          onSelectPrompt={onSelectPrompt}
+          onClearPrompt={onClearPrompt}
+          onCreateNew={onCreateNewPrompt}
+        />
+
+        {/* AI icon */}
+        <span className="shrink-0 text-accent">
+          <Wand2 className="h-4 w-4" />
+        </span>
+
+        {/* Input */}
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Tell the AI what to write..."
+          rows={1}
+          disabled={isProcessing}
+          className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[24px] leading-6"
+        />
+
+        {/* Model selector */}
+        <select
+          value={model}
+          onChange={(e) => onModelChange(e.target.value)}
+          className="text-[10px] text-text-tertiary font-medium px-1.5 py-0.5 rounded bg-surface-2 border border-border-subtle hover:border-border-default focus:border-accent/40 focus:outline-none cursor-pointer appearance-none pr-4 transition-colors shrink-0"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'right 4px center',
+          }}
+        >
+          {configuredModels.map((m) => (
+            <option key={m.model} value={m.model}>
+              {m.displayName}
+            </option>
+          ))}
+        </select>
+
+        {/* Send button */}
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!hasContent || isProcessing}
+          className={`rounded-lg p-1.5 transition-all shrink-0 ${
+            isProcessing
+              ? 'bg-accent/50 text-text-inverse'
+              : hasContent
+                ? 'bg-accent text-text-inverse hover:bg-accent-hover'
+                : 'bg-surface-2 text-text-tertiary'
+          } disabled:opacity-30`}
+        >
+          {isProcessing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Send className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}

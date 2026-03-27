@@ -1,6 +1,11 @@
 import { useState, useCallback, useMemo } from 'react';
 import { api } from '../lib/api';
 
+interface CommandHistoryEntry {
+  instruction: string;
+  timestamp: string;
+}
+
 interface ContentBuilderState {
   title: string;
   mainBody: string;
@@ -14,6 +19,9 @@ interface ContentBuilderState {
   isDirty: boolean;
   isSaving: boolean;
   isAdapting: boolean;
+  isProcessing: boolean;
+  commandHistory: CommandHistoryEntry[];
+  previousContent: string | null;
 }
 
 const initialState: ContentBuilderState = {
@@ -29,6 +37,9 @@ const initialState: ContentBuilderState = {
   isDirty: false,
   isSaving: false,
   isAdapting: false,
+  isProcessing: false,
+  commandHistory: [],
+  previousContent: null,
 };
 
 export function useContentBuilder() {
@@ -201,6 +212,38 @@ export function useContentBuilder() {
     }
   }, [state]);
 
+  const addCommand = useCallback((instruction: string) => {
+    setState((prev) => ({
+      ...prev,
+      commandHistory: [
+        ...prev.commandHistory,
+        { instruction, timestamp: new Date().toISOString() },
+      ],
+    }));
+  }, []);
+
+  const undoLastAI = useCallback(() => {
+    setState((prev) => {
+      if (prev.previousContent === null) return prev;
+      // Restore to the active editor target
+      if (prev.activeTab) {
+        return {
+          ...prev,
+          platformBodies: {
+            ...prev.platformBodies,
+            [prev.activeTab]: prev.previousContent,
+          },
+          previousContent: null,
+        };
+      }
+      return {
+        ...prev,
+        mainBody: prev.previousContent,
+        previousContent: null,
+      };
+    });
+  }, []);
+
   const reset = useCallback(() => {
     setState(initialState);
   }, []);
@@ -236,8 +279,20 @@ export function useContentBuilder() {
     insertFromChat,
     saveAsDraft,
     adaptAll,
+    addCommand,
+    undoLastAI,
     reset,
     flowState,
+
+    // AI Command helpers
+    setProcessing: (v: boolean) => setState((prev) => ({ ...prev, isProcessing: v })),
+    storePreviousContent: () =>
+      setState((prev) => {
+        const current = prev.activeTab
+          ? (prev.platformBodies[prev.activeTab] ?? '')
+          : prev.mainBody;
+        return { ...prev, previousContent: current };
+      }),
   };
 }
 

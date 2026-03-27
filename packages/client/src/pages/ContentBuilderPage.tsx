@@ -2,18 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   PenTool,
   ChevronLeft,
-  ChevronRight,
   Sparkles,
   Save,
-  PanelLeftClose,
   PanelRightClose,
   Keyboard,
   Check,
 } from 'lucide-react';
 import { PlatformSelector } from '../components/content-builder/PlatformSelector';
 import { PostComposer } from '../components/content-builder/PostComposer';
-import { MiniChat } from '../components/content-builder/MiniChat';
-import { PromptLibrary } from '../components/content-builder/PromptLibrary';
+import { AICommandBar } from '../components/content-builder/AICommandBar';
 import { PlatformPreview } from '../components/content-builder/PlatformPreview';
 import { SchedulePanel } from '../components/content-builder/SchedulePanel';
 import { BuilderEmptyState } from '../components/content-builder/BuilderEmptyState';
@@ -36,7 +33,6 @@ interface Channel {
 }
 
 export function ContentBuilderPage() {
-  const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [promptModalOpen, setPromptModalOpen] = useState(false);
@@ -95,19 +91,19 @@ export function ContentBuilderPage() {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
 
-      // Ctrl+S / Cmd+S → save draft
+      // Ctrl+S / Cmd+S -> save draft
       if (e.key === 's' && !e.shiftKey) {
         e.preventDefault();
         if (builder.isDirty && !builder.isSaving) builder.saveAsDraft();
         return;
       }
-      // Ctrl+Shift+A / Cmd+Shift+A → adapt all
+      // Ctrl+Shift+A / Cmd+Shift+A -> adapt all
       if (e.key === 'A' && e.shiftKey) {
         e.preventDefault();
         if (!builder.isAdapting && builder.selectedChannels.length > 0) builder.adaptAll();
         return;
       }
-      // Ctrl+Shift+S / Cmd+Shift+S → focus schedule input
+      // Ctrl+Shift+S / Cmd+Shift+S -> focus schedule input
       if (e.key === 'S' && e.shiftKey) {
         e.preventDefault();
         const scheduleInput = document.querySelector<HTMLInputElement>(
@@ -116,8 +112,15 @@ export function ContentBuilderPage() {
         if (scheduleInput) scheduleInput.focus();
         return;
       }
+      // Ctrl+Z -> undo last AI command (only if previousContent exists)
+      if (e.key === 'z' && !e.shiftKey && builder.previousContent !== null) {
+        e.preventDefault();
+        builder.undoLastAI();
+        toast('AI change undone', 'info');
+        return;
+      }
     },
-    [builder],
+    [builder, toast],
   );
 
   useEffect(() => {
@@ -128,47 +131,15 @@ export function ContentBuilderPage() {
   // Compute selected channel objects from IDs
   const selectedChannelObjects = channels.filter((ch) => builder.selectedChannels.includes(ch.id));
 
-  // Map prompts from usePrompts to the shape PromptLibrary expects
-  const promptLibraryPrompts = promptsHook.prompts.map((p) => ({
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    body: p.body ?? '',
-    category: p.category ?? 'custom',
-    defaultModel: p.defaultModel,
-    currentVersion: p.currentVersion,
-  }));
-
-  // PromptLibrary's onSelectPrompt expects (promptId, body)
-  const handleSelectPrompt = (promptId: string, body: string) => {
-    const prompt = promptsHook.prompts.find((p) => p.id === promptId);
-    builder.loadPrompt(promptId, prompt?.name, body);
-    // Clear chat when switching prompts so new context applies
+  // Handle prompt selection from PromptBadge
+  const handleSelectPrompt = (promptId: string, name: string, body: string) => {
+    builder.loadPrompt(promptId, name, body);
     chat.clearChat();
-    toast(`Prompt loaded: ${prompt?.name ?? 'Custom'}`, 'success');
+    toast(`Prompt loaded: ${name}`, 'success');
   };
 
   const handleCreateNewPrompt = () => {
     setEditingPrompt(null);
-    setPromptModalOpen(true);
-  };
-
-  const handleEditPrompt = (prompt: {
-    id: string;
-    name: string;
-    description: string | null;
-    body: string;
-    category: string;
-    defaultModel: string | null;
-  }) => {
-    setEditingPrompt({
-      id: prompt.id,
-      name: prompt.name,
-      description: prompt.description,
-      body: prompt.body,
-      category: prompt.category,
-      defaultModel: prompt.defaultModel,
-    });
     setPromptModalOpen(true);
   };
 
@@ -194,38 +165,78 @@ export function ContentBuilderPage() {
     setEditingPrompt(null);
   };
 
+  // AI Command handler
+  const handleAICommand = useCallback(
+    async (instruction: string) => {
+      // Get current content from active editor
+      const currentContent = builder.activeTab
+        ? (builder.platformBodies[builder.activeTab] ?? '')
+        : builder.mainBody;
+
+      // Store previous content for undo
+      builder.storePreviousContent();
+      builder.setProcessing(true);
+
+      try {
+        const result = await chat.executeCommand(
+          instruction,
+          currentContent,
+          builder.activePromptBody,
+        );
+
+        // Replace the active editor content with AI result
+        if (builder.activeTab) {
+          builder.setPlatformBody(builder.activeTab, result);
+        } else {
+          builder.setMainBody(result);
+        }
+
+        // Add to command history
+        builder.addCommand(instruction);
+
+        toast('AI content applied. Ctrl+Z to undo.', 'success');
+      } catch {
+        toast('AI command failed. Please try again.', 'error');
+      } finally {
+        builder.setProcessing(false);
+      }
+    },
+    [builder, chat, toast],
+  );
+
   // Whether to show the empty state
   const showEmptyState =
     builder.selectedChannels.length === 0 && !builder.mainBody.trim() && !builder.title.trim();
 
   // Empty state handlers
   const handleStartScratch = () => {
-    // Focus the composer textarea
     const textarea = document.querySelector<HTMLTextAreaElement>('textarea');
     if (textarea) textarea.focus();
   };
 
   const handleOpenPrompts = () => {
-    setLeftOpen(true);
+    // Focus the prompt badge in the command bar
+    const promptBtn = document.querySelector<HTMLButtonElement>(
+      '[data-tour="ai-assistant"] button',
+    );
+    if (promptBtn) promptBtn.click();
   };
 
   const handleRepurpose = () => {
     // TODO: navigate to content library
   };
 
-  // Image click handler (toggle or open picker)
+  // Image click handler
   const handleImageClick = () => {
     if (builder.imageUrl) {
       builder.setImageUrl(null);
     }
-    // TODO: open image picker when no image
   };
 
   // Schedule handlers
   const handleSchedule = async (date: string) => {
     if (builder.selectedChannels.length === 0 || !builder.mainBody.trim()) return;
     try {
-      // Save content items first
       const { data: batchData } = await api.post('/content/batch', {
         userId: user?.id,
         title: builder.title || 'Untitled Post',
@@ -238,7 +249,6 @@ export function ContentBuilderPage() {
         status: 'draft',
       });
       const items = batchData.data ?? [];
-      // Schedule each item
       for (const item of items) {
         await api.post('/schedule', {
           contentItemId: item.id,
@@ -259,7 +269,7 @@ export function ContentBuilderPage() {
 
   return (
     <div className="flex h-full flex-col -m-6">
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex items-center justify-between border-b border-accent/10 bg-gradient-to-r from-surface-2 to-surface-1 px-6 py-3">
         <div className="flex items-center gap-2.5">
           <PenTool className="h-5 w-5 text-accent" />
@@ -335,68 +345,26 @@ export function ContentBuilderPage() {
         </div>
       </div>
 
-      {/* ── Contextual flow hint ── */}
+      {/* Contextual flow hint */}
       {builder.flowState !== 'READY' && (
         <div className="px-6 py-1.5 bg-accent/[0.03] border-b border-border-subtle">
           <p className="text-xs text-text-tertiary text-center">
             {builder.flowState === 'IDLE' &&
-              '✍️ Start writing your content below, or load a prompt from the library'}
+              'Start writing your content below, or pick a prompt from the AI bar'}
             {builder.flowState === 'WRITING' &&
-              '📱 Next: Select platforms above to target your content'}
+              'Next: Select platforms above to target your content'}
             {builder.flowState === 'PLATFORMS_SELECTED' &&
-              '✨ Looking good! Click "Adapt All" to generate versions for each platform'}
-            {builder.flowState === 'ADAPTED' && '🖼️ Optional: Add media, then schedule when ready'}
+              'Looking good! Click "Adapt All" to generate versions for each platform'}
+            {builder.flowState === 'ADAPTED' && 'Optional: Add media, then schedule when ready'}
             {builder.flowState === 'MEDIA_ADDED' &&
-              '📅 Ready to go! Schedule your posts or publish now'}
+              'Ready to go! Schedule your posts or publish now'}
           </p>
         </div>
       )}
 
-      {/* ── Three-panel layout ── */}
+      {/* Two-panel layout */}
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Left Panel: Prompt Library ── */}
-        <div
-          className={`relative flex-shrink-0 border-r border-border-subtle bg-surface-1 transition-all duration-300 ease-in-out ${
-            leftOpen ? 'w-[280px]' : 'w-0'
-          } overflow-hidden`}
-        >
-          <div className="flex h-full w-[280px] flex-col">
-            <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
-              <span className="text-sm font-medium text-text-secondary">Prompt Library</span>
-              <button
-                onClick={() => setLeftOpen(false)}
-                className="rounded-lg p-1.5 text-text-tertiary bg-surface-2/50 backdrop-blur-sm border border-white/5 hover:bg-surface-3 hover:text-text-secondary transition-all duration-200"
-                aria-label="Collapse prompt library"
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto" data-tour="prompt-library">
-              <PromptLibrary
-                prompts={promptLibraryPrompts}
-                loading={promptsHook.loading}
-                category={promptsHook.category}
-                onCategoryChange={promptsHook.setCategory}
-                onSelectPrompt={handleSelectPrompt}
-                onEditPrompt={handleEditPrompt}
-                onCreateNew={handleCreateNewPrompt}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Left collapse toggle (visible when collapsed) */}
-        {!leftOpen && (
-          <button
-            onClick={() => setLeftOpen(true)}
-            className="flex-shrink-0 border-r border-border-subtle bg-surface-1 px-1.5 text-text-tertiary hover:bg-surface-2 hover:text-text-secondary transition-all duration-200 shadow-[0_0_8px_rgba(255,214,10,0.06)]"
-            aria-label="Expand prompt library"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        )}
-
-        {/* ── Center Panel: Composer + Chat ── */}
+        {/* Main panel: Editor + AI Command Bar */}
         <div
           className="flex flex-1 flex-col overflow-hidden bg-surface-0"
           style={{
@@ -443,7 +411,7 @@ export function ContentBuilderPage() {
                   />
                 </div>
 
-                {/* Media Studio — image/video generation + upload */}
+                {/* Media Studio */}
                 <div className="mt-3">
                   <MediaStudio
                     imageUrl={builder.imageUrl}
@@ -457,17 +425,19 @@ export function ContentBuilderPage() {
             )}
           </div>
 
-          {/* Inline mini-chat below composer */}
-          <div className="border-t border-border-subtle" data-tour="ai-assistant">
-            <MiniChat
-              messages={chat.messages}
-              isSending={chat.isSending}
-              onSendMessage={chat.sendMessage}
-              onInsert={builder.insertFromChat}
+          {/* AI Command Bar — pinned at bottom */}
+          <div className="border-t border-border-subtle px-6 py-3" data-tour="ai-assistant">
+            <AICommandBar
+              onCommand={handleAICommand}
+              isProcessing={builder.isProcessing}
+              commandHistory={builder.commandHistory}
               model={chat.model}
               onModelChange={chat.setModel}
+              activePromptId={builder.activePromptId}
               activePromptName={builder.activePromptName}
+              onSelectPrompt={handleSelectPrompt}
               onClearPrompt={builder.clearPrompt}
+              onCreateNewPrompt={handleCreateNewPrompt}
             />
           </div>
         </div>
@@ -483,7 +453,7 @@ export function ContentBuilderPage() {
           </button>
         )}
 
-        {/* ── Right Panel: Preview + Schedule ── */}
+        {/* Right Panel: Preview + Schedule */}
         <div
           className={`relative flex-shrink-0 border-l border-border-subtle bg-surface-1 transition-all duration-300 ease-in-out ${
             rightOpen ? 'w-[280px]' : 'w-0'

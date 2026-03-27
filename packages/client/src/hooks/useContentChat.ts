@@ -82,6 +82,37 @@ export function useContentChat(systemPrompt?: string | null) {
     [isSending, ensureConversation, model],
   );
 
+  const executeCommand = useCallback(
+    async (
+      instruction: string,
+      currentContent: string,
+      systemPromptOverride?: string | null,
+    ): Promise<string> => {
+      setIsSending(true);
+      try {
+        const convId = await ensureConversation();
+
+        // Build the command message: include current content as context
+        const contextPrefix = currentContent.trim()
+          ? `The user has written the following content:\n---\n${currentContent}\n---\n\nInstruction: ${instruction}`
+          : instruction;
+
+        const { data } = await api.post(`/chat/conversations/${convId}/messages`, {
+          content: contextPrefix,
+          model,
+          systemPrompt: systemPromptOverride ?? systemPrompt ?? undefined,
+          metadata: { source: 'content-builder-command' },
+        });
+
+        const msg = data.data.message ?? data.data;
+        return msg.content as string;
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [ensureConversation, model, systemPrompt],
+  );
+
   const clearChat = useCallback(() => {
     setMessages([]);
     setConversationId(null);
@@ -93,6 +124,7 @@ export function useContentChat(systemPrompt?: string | null) {
     model,
     setModel,
     sendMessage,
+    executeCommand,
     clearChat,
     conversationId,
   };
