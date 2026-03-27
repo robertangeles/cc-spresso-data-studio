@@ -2,6 +2,8 @@ import { eq, and, asc, lte, gte } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
+import { getConnectedAccount } from './oauth/oauth.service.js';
+import { publishToInstagram } from './publishers/instagram.publisher.js';
 
 /**
  * List all scheduled posts for a user, ordered by scheduledAt asc, pending first.
@@ -119,6 +121,47 @@ export async function processDuePosts(): Promise<number> {
 
   for (const post of duePosts) {
     try {
+      // Resolve channel slug to determine target platform
+      let channelSlug: string | null = null;
+      if (post.channelId) {
+        const channel = await db.query.channels.findFirst({
+          where: eq(schema.channels.id, post.channelId),
+        });
+        channelSlug = channel?.slug ?? null;
+      }
+
+      // Fetch the content item for publishing payload
+      const contentItem = await db.query.contentItems.findFirst({
+        where: eq(schema.contentItems.id, post.contentItemId),
+      });
+
+      // Attempt auto-publish to Instagram if channel matches
+      let autoPublished = false;
+      if (channelSlug === 'instagram' && contentItem) {
+        const account = await getConnectedAccount(post.userId, 'instagram');
+        if (account?.accessToken && account.accountId) {
+          const result = await publishToInstagram({
+            accessToken: account.accessToken,
+            igUserId: account.accountId,
+            caption: contentItem.body,
+            imageUrl: contentItem.imageUrl ?? undefined,
+          });
+
+          if (result.success) {
+            autoPublished = true;
+            logger.info(
+              { postId: post.id, igPostId: result.postId },
+              'Auto-published to Instagram',
+            );
+          } else {
+            logger.warn(
+              { postId: post.id, error: result.error },
+              'Instagram auto-publish failed — marking as published locally',
+            );
+          }
+        }
+      }
+
       // Mark scheduled post as published
       await db
         .update(schema.scheduledPosts)
@@ -131,7 +174,10 @@ export async function processDuePosts(): Promise<number> {
         .set({ status: 'published', updatedAt: now })
         .where(eq(schema.contentItems.id, post.contentItemId));
 
-      logger.info({ postId: post.id, contentItemId: post.contentItemId }, 'Published scheduled post');
+      logger.info(
+        { postId: post.id, contentItemId: post.contentItemId, autoPublished },
+        'Published scheduled post',
+      );
     } catch (err) {
       logger.error({ err, postId: post.id }, 'Failed to publish scheduled post');
       await db

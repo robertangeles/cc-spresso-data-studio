@@ -14,6 +14,7 @@ import { promptRoutes } from './prompt.routes.js';
 import { schedulerRoutes } from './scheduler.routes.js';
 import { systemPromptRoutes } from './system-prompt.routes.js';
 import { assistantRoutes } from './assistant.routes.js';
+import { instagramOAuthRoutes } from './oauth/instagram.routes.js';
 
 const router = Router();
 
@@ -40,5 +41,6 @@ router.use('/prompts', promptRoutes);
 router.use('/schedule', schedulerRoutes);
 router.use('/system-prompts', systemPromptRoutes);
 router.use('/assistant', assistantRoutes);
+router.use('/oauth/instagram', instagramOAuthRoutes);
 
 export { router };

@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useProfile, useRules } from '../../hooks/useProfile';
+import { useToast } from '../../components/ui/Toast';
 import { ModelSelector } from '../../components/ui/ModelSelector';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -30,7 +32,12 @@ const SOCIAL_PLATFORMS = [
   { id: 'twitter', name: 'Twitter / X', icon: '\u{1D54F}', color: 'bg-black' },
   { id: 'linkedin', name: 'LinkedIn', icon: 'in', color: 'bg-blue-700' },
   { id: 'facebook', name: 'Facebook', icon: 'f', color: 'bg-blue-600' },
-  { id: 'instagram', name: 'Instagram', icon: '\uD83D\uDCF7', color: 'bg-gradient-to-r from-purple-500 to-pink-500' },
+  {
+    id: 'instagram',
+    name: 'Instagram',
+    icon: '\uD83D\uDCF7',
+    color: 'bg-gradient-to-r from-purple-500 to-pink-500',
+  },
   { id: 'tiktok', name: 'TikTok', icon: '\u266A', color: 'bg-black' },
   { id: 'threads', name: 'Threads', icon: '@', color: 'bg-black' },
   { id: 'pinterest', name: 'Pinterest', icon: 'P', color: 'bg-red-600' },
@@ -40,7 +47,13 @@ const SOCIAL_PLATFORMS = [
 
 export function ProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>('info');
-  const { profile, isLoading: profileLoading, refresh, updateProfile, changePassword } = useProfile();
+  const {
+    profile,
+    isLoading: profileLoading,
+    refresh,
+    updateProfile,
+    changePassword,
+  } = useProfile();
 
   if (profileLoading) {
     return (
@@ -53,7 +66,9 @@ export function ProfilePage() {
   return (
     <div>
       <h2 className="text-xl font-semibold text-text-primary mb-1">User Profile</h2>
-      <p className="text-sm text-text-secondary mb-6">Manage your profile, rules, brand, and preferences.</p>
+      <p className="text-sm text-text-secondary mb-6">
+        Manage your profile, rules, brand, and preferences.
+      </p>
 
       <div className="flex gap-1 border-b border-border-default mb-6">
         {TABS.map((tab) => (
@@ -71,10 +86,19 @@ export function ProfilePage() {
         ))}
       </div>
 
-      {activeTab === 'info' && <ProfileInfoTab profile={profile} updateProfile={updateProfile} changePassword={changePassword} refreshProfile={refresh} />}
+      {activeTab === 'info' && (
+        <ProfileInfoTab
+          profile={profile}
+          updateProfile={updateProfile}
+          changePassword={changePassword}
+          refreshProfile={refresh}
+        />
+      )}
       {activeTab === 'rules' && <RulesEngineTab />}
       {activeTab === 'brand' && <BrandKitTab profile={profile} updateProfile={updateProfile} />}
-      {activeTab === 'preferences' && <PreferencesTab profile={profile} updateProfile={updateProfile} />}
+      {activeTab === 'preferences' && (
+        <PreferencesTab profile={profile} updateProfile={updateProfile} />
+      )}
       {activeTab === 'social' && <SocialAccountsTab />}
     </div>
   );
@@ -82,7 +106,12 @@ export function ProfilePage() {
 
 // --- Profile Info Tab ---
 
-function ProfileInfoTab({ profile, updateProfile, changePassword, refreshProfile }: {
+function ProfileInfoTab({
+  profile,
+  updateProfile,
+  changePassword,
+  refreshProfile,
+}: {
   profile: ReturnType<typeof useProfile>['profile'];
   updateProfile: ReturnType<typeof useProfile>['updateProfile'];
   changePassword: ReturnType<typeof useProfile>['changePassword'];
@@ -112,7 +141,9 @@ function ProfileInfoTab({ profile, updateProfile, changePassword, refreshProfile
       setCurrentPw('');
       setNewPw('');
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to change password';
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        'Failed to change password';
       setPwMsg(msg);
     }
   };
@@ -124,7 +155,16 @@ function ProfileInfoTab({ profile, updateProfile, changePassword, refreshProfile
         <div className="space-y-4">
           <AvatarUpload
             currentUrl={profile?.avatarUrl}
-            initials={displayName ? displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) : '??'}
+            initials={
+              displayName
+                ? displayName
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)
+                : '??'
+            }
             onUpload={async (blob) => {
               const reader = new FileReader();
               const base64 = await new Promise<string>((resolve) => {
@@ -135,14 +175,25 @@ function ProfileInfoTab({ profile, updateProfile, changePassword, refreshProfile
               await refreshProfile();
             }}
           />
-          <Input label="Display Name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+          <Input
+            label="Display Name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
           <div>
             <label className="mb-1 block text-sm font-medium text-text-secondary">Bio</label>
-            <textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Tell us about yourself..." rows={3}
-              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder="Tell us about yourself..."
+              rows={3}
+              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+            />
           </div>
           <div className="flex items-center gap-3">
-            <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
             {saved && <span className="text-sm text-status-success">Saved</span>}
           </div>
         </div>
@@ -151,10 +202,28 @@ function ProfileInfoTab({ profile, updateProfile, changePassword, refreshProfile
       <Card padding="lg">
         <h4 className="mb-4 font-medium text-text-primary">Change Password</h4>
         <div className="space-y-3 max-w-sm">
-          <Input label="Current Password" type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} />
-          <Input label="New Password" type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
-          {pwMsg && <p className={`text-sm ${pwMsg.includes('success') ? 'text-status-success' : 'text-red-400'}`}>{pwMsg}</p>}
-          <Button onClick={handlePasswordChange} disabled={!currentPw || !newPw}>Change Password</Button>
+          <Input
+            label="Current Password"
+            type="password"
+            value={currentPw}
+            onChange={(e) => setCurrentPw(e.target.value)}
+          />
+          <Input
+            label="New Password"
+            type="password"
+            value={newPw}
+            onChange={(e) => setNewPw(e.target.value)}
+          />
+          {pwMsg && (
+            <p
+              className={`text-sm ${pwMsg.includes('success') ? 'text-status-success' : 'text-red-400'}`}
+            >
+              {pwMsg}
+            </p>
+          )}
+          <Button onClick={handlePasswordChange} disabled={!currentPw || !newPw}>
+            Change Password
+          </Button>
         </div>
       </Card>
     </div>
@@ -167,7 +236,11 @@ function RulesEngineTab() {
   const { rules, isLoading, createRule, updateRule, deleteRule } = useRules();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<CreateRuleDTO>({ name: '', rules: '', category: 'writing' });
+  const [formData, setFormData] = useState<CreateRuleDTO>({
+    name: '',
+    rules: '',
+    category: 'writing',
+  });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -178,9 +251,13 @@ function RulesEngineTab() {
     setFormError(null);
   };
 
-  const handleEdit = (rule: typeof rules[0]) => {
+  const handleEdit = (rule: (typeof rules)[0]) => {
     setEditingId(rule.id);
-    setFormData({ name: rule.name, rules: rule.rules, category: rule.category as CreateRuleDTO['category'] });
+    setFormData({
+      name: rule.name,
+      rules: rule.rules,
+      category: rule.category as CreateRuleDTO['category'],
+    });
     setShowForm(true);
   };
 
@@ -196,14 +273,16 @@ function RulesEngineTab() {
       }
       resetForm();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to save rule';
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Failed to save rule';
       setFormError(msg);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleToggle = async (rule: typeof rules[0]) => {
+  const handleToggle = async (rule: (typeof rules)[0]) => {
     await updateRule(rule.id, { isActive: !rule.isActive });
   };
 
@@ -219,40 +298,84 @@ function RulesEngineTab() {
     <div>
       <div className="mb-4 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
         <p className="text-sm text-blue-400">
-          Rules are injected as system instructions into <strong>every AI call</strong> in your orchestrations.
-          Active rules apply globally — no need to repeat them in skill prompts.
+          Rules are injected as system instructions into <strong>every AI call</strong> in your
+          orchestrations. Active rules apply globally — no need to repeat them in skill prompts.
         </p>
       </div>
 
       <div className="flex justify-end mb-4">
-        <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }}>+ Add Rule</Button>
+        <Button
+          size="sm"
+          onClick={() => {
+            resetForm();
+            setShowForm(true);
+          }}
+        >
+          + Add Rule
+        </Button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="mb-6 rounded-lg border border-border-default bg-surface-3 p-4">
-          <h4 className="text-sm font-semibold text-text-primary mb-3">{editingId ? 'Edit Rule' : 'New Rule'}</h4>
+        <form
+          onSubmit={handleSubmit}
+          className="mb-6 rounded-lg border border-border-default bg-surface-3 p-4"
+        >
+          <h4 className="text-sm font-semibold text-text-primary mb-3">
+            {editingId ? 'Edit Rule' : 'New Rule'}
+          </h4>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., Writing Style" required />
+              <Input
+                label="Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g., Writing Style"
+                required
+              />
               <div>
-                <label className="mb-1 block text-sm font-medium text-text-secondary">Category</label>
-                <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value as CreateRuleDTO['category'] })}
-                  className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none">
-                  {RULE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
+                  Category
+                </label>
+                <select
+                  value={formData.category}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      category: e.target.value as CreateRuleDTO['category'],
+                    })
+                  }
+                  className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+                >
+                  {RULE_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-text-secondary">Rules (markdown supported)</label>
-              <textarea value={formData.rules} onChange={(e) => setFormData({ ...formData, rules: e.target.value })}
-                placeholder={"Example:\n- Never use em-dashes\n- No passive voice\n- Banned words: 'just', 'actually', 'that', 'discover'\n- Keep sentences under 20 words"}
+              <label className="mb-1 block text-sm font-medium text-text-secondary">
+                Rules (markdown supported)
+              </label>
+              <textarea
+                value={formData.rules}
+                onChange={(e) => setFormData({ ...formData, rules: e.target.value })}
+                placeholder={
+                  "Example:\n- Never use em-dashes\n- No passive voice\n- Banned words: 'just', 'actually', 'that', 'discover'\n- Keep sentences under 20 words"
+                }
                 rows={10}
-                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 font-mono text-sm text-text-primary focus:border-accent focus:outline-none" />
+                className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 font-mono text-sm text-text-primary focus:border-accent focus:outline-none"
+              />
             </div>
             {formError && <p className="text-sm text-red-400">{formError}</p>}
             <div className="flex gap-2">
-              <Button type="submit" disabled={saving}>{saving ? 'Saving...' : editingId ? 'Update' : 'Create'}</Button>
-              <Button type="button" variant="ghost" onClick={resetForm}>Cancel</Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Saving...' : editingId ? 'Update' : 'Create'}
+              </Button>
+              <Button type="button" variant="ghost" onClick={resetForm}>
+                Cancel
+              </Button>
             </div>
           </div>
         </form>
@@ -269,22 +392,46 @@ function RulesEngineTab() {
       ) : (
         <div className="space-y-2">
           {rules.map((rule) => (
-            <div key={rule.id} className={`rounded-lg border p-4 ${rule.isActive ? 'border-green-500/20 bg-green-500/5' : 'border-border-default bg-surface-3 opacity-60'}`}>
+            <div
+              key={rule.id}
+              className={`rounded-lg border p-4 ${rule.isActive ? 'border-green-500/20 bg-green-500/5' : 'border-border-default bg-surface-3 opacity-60'}`}
+            >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => handleToggle(rule)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${rule.isActive ? 'bg-green-500' : 'bg-surface-4'}`}>
-                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${rule.isActive ? 'translate-x-4' : 'translate-x-1'}`} />
+                  <button
+                    type="button"
+                    onClick={() => handleToggle(rule)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${rule.isActive ? 'bg-green-500' : 'bg-surface-4'}`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${rule.isActive ? 'translate-x-4' : 'translate-x-1'}`}
+                    />
                   </button>
                   <span className="font-medium text-text-primary">{rule.name}</span>
-                  <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[10px] font-medium text-text-secondary">{rule.category}</span>
+                  <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[10px] font-medium text-text-secondary">
+                    {rule.category}
+                  </span>
                 </div>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => handleEdit(rule)} className="text-xs text-accent hover:text-accent-hover">Edit</button>
-                  <button type="button" onClick={() => setDeleteRuleId(rule.id)} className="text-xs text-red-400 hover:text-red-300">Delete</button>
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(rule)}
+                    className="text-xs text-accent hover:text-accent-hover"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteRuleId(rule.id)}
+                    className="text-xs text-red-400 hover:text-red-300"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
-              <pre className="text-xs text-text-secondary whitespace-pre-wrap line-clamp-3">{rule.rules}</pre>
+              <pre className="text-xs text-text-secondary whitespace-pre-wrap line-clamp-3">
+                {rule.rules}
+              </pre>
             </div>
           ))}
         </div>
@@ -306,7 +453,10 @@ function RulesEngineTab() {
 
 // --- Brand Kit Tab ---
 
-function BrandKitTab({ profile, updateProfile }: {
+function BrandKitTab({
+  profile,
+  updateProfile,
+}: {
   profile: ReturnType<typeof useProfile>['profile'];
   updateProfile: ReturnType<typeof useProfile>['updateProfile'];
 }) {
@@ -329,33 +479,59 @@ function BrandKitTab({ profile, updateProfile }: {
     <div className="space-y-4">
       <div className="mb-4 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
         <p className="text-sm text-blue-400">
-          Your Brand Kit helps AI understand your brand voice and audience. This context is available to all skills and orchestrations.
+          Your Brand Kit helps AI understand your brand voice and audience. This context is
+          available to all skills and orchestrations.
         </p>
       </div>
 
       <Card padding="lg">
         <div className="space-y-4">
-          <Input label="Brand Name" value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="Your brand or business name" />
+          <Input
+            label="Brand Name"
+            value={brandName}
+            onChange={(e) => setBrandName(e.target.value)}
+            placeholder="Your brand or business name"
+          />
           <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">Brand Voice & Tone</label>
-            <textarea value={brandVoice} onChange={(e) => setBrandVoice(e.target.value)}
+            <label className="mb-1 block text-sm font-medium text-text-secondary">
+              Brand Voice & Tone
+            </label>
+            <textarea
+              value={brandVoice}
+              onChange={(e) => setBrandVoice(e.target.value)}
               placeholder="Describe how your brand communicates. Example: 'Direct, conversational, no jargon. Think Paul Graham meets Seth Godin. We challenge conventional wisdom with evidence.'"
-              rows={4} className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+              rows={4}
+              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+            />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">Target Audience</label>
-            <textarea value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)}
+            <label className="mb-1 block text-sm font-medium text-text-secondary">
+              Target Audience
+            </label>
+            <textarea
+              value={targetAudience}
+              onChange={(e) => setTargetAudience(e.target.value)}
               placeholder="Who are you creating content for? Example: 'COOs, CIOs, and Chief Transformation Officers at mid-to-large enterprises. Upper-mid to senior level, asset-heavy industries.'"
-              rows={3} className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+              rows={3}
+              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+            />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">Key Messaging</label>
-            <textarea value={keyMessaging} onChange={(e) => setKeyMessaging(e.target.value)}
+            <label className="mb-1 block text-sm font-medium text-text-secondary">
+              Key Messaging
+            </label>
+            <textarea
+              value={keyMessaging}
+              onChange={(e) => setKeyMessaging(e.target.value)}
               placeholder="Core messages, value propositions, or themes that should come through in your content."
-              rows={4} className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+              rows={4}
+              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+            />
           </div>
           <div className="flex items-center gap-3">
-            <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Brand Kit'}</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Brand Kit'}
+            </Button>
             {saved && <span className="text-sm text-status-success">Saved</span>}
           </div>
         </div>
@@ -366,21 +542,36 @@ function BrandKitTab({ profile, updateProfile }: {
 
 // --- Preferences Tab ---
 
-function PreferencesTab({ profile, updateProfile }: {
+function PreferencesTab({
+  profile,
+  updateProfile,
+}: {
   profile: ReturnType<typeof useProfile>['profile'];
   updateProfile: ReturnType<typeof useProfile>['updateProfile'];
 }) {
   const [defaultModel, setDefaultModel] = useState(profile?.defaultModel ?? '');
   const [defaultEditorModel, setDefaultEditorModel] = useState(profile?.defaultEditorModel ?? '');
-  const [defaultEditorMaxRounds, setDefaultEditorMaxRounds] = useState(profile?.defaultEditorMaxRounds ?? 3);
-  const [defaultEditorApprovalMode, setDefaultEditorApprovalMode] = useState(profile?.defaultEditorApprovalMode ?? 'auto');
-  const [timezone, setTimezone] = useState(profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [defaultEditorMaxRounds, setDefaultEditorMaxRounds] = useState(
+    profile?.defaultEditorMaxRounds ?? 3,
+  );
+  const [defaultEditorApprovalMode, setDefaultEditorApprovalMode] = useState(
+    profile?.defaultEditorApprovalMode ?? 'auto',
+  );
+  const [timezone, setTimezone] = useState(
+    profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
-    await updateProfile({ defaultModel, defaultEditorModel, defaultEditorMaxRounds, defaultEditorApprovalMode, timezone });
+    await updateProfile({
+      defaultModel,
+      defaultEditorModel,
+      defaultEditorMaxRounds,
+      defaultEditorApprovalMode,
+      timezone,
+    });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -392,25 +583,39 @@ function PreferencesTab({ profile, updateProfile }: {
         <h4 className="mb-4 font-medium text-text-primary">Default AI Settings</h4>
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">Default Model</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">
+              Default Model
+            </label>
             <ModelSelector value={defaultModel} onChange={setDefaultModel} allowAuto />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">Default Editor Model</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">
+              Default Editor Model
+            </label>
             <ModelSelector value={defaultEditorModel} onChange={setDefaultEditorModel} allowAuto />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-text-secondary">
               Default Editor Max Rounds: {defaultEditorMaxRounds}
             </label>
-            <input type="range" min={1} max={10} value={defaultEditorMaxRounds}
-              onChange={(e) => setDefaultEditorMaxRounds(parseInt(e.target.value))} className="w-full" />
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={defaultEditorMaxRounds}
+              onChange={(e) => setDefaultEditorMaxRounds(parseInt(e.target.value))}
+              className="w-full"
+            />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">Default Editor Approval</label>
-            <select value={defaultEditorApprovalMode}
+            <label className="mb-1 block text-sm font-medium text-text-secondary">
+              Default Editor Approval
+            </label>
+            <select
+              value={defaultEditorApprovalMode}
               onChange={(e) => setDefaultEditorApprovalMode(e.target.value as 'auto' | 'manual')}
-              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none">
+              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+            >
               <option value="auto">Auto (editor decides)</option>
               <option value="manual">Manual (you approve each round)</option>
             </select>
@@ -423,7 +628,9 @@ function PreferencesTab({ profile, updateProfile }: {
         <div className="space-y-4">
           <Input label="Timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)} />
           <div className="flex items-center gap-3">
-            <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Preferences'}</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Preferences'}
+            </Button>
             {saved && <span className="text-sm text-status-success">Saved</span>}
           </div>
         </div>
@@ -434,37 +641,186 @@ function PreferencesTab({ profile, updateProfile }: {
 
 // --- Social Accounts Tab ---
 
+interface ConnectedAccount {
+  platform: string;
+  accountName: string | null;
+  accountId: string | null;
+  connected: boolean;
+}
+
+// Platforms with live OAuth support
+const OAUTH_ENABLED_PLATFORMS = new Set(['instagram']);
+
 function SocialAccountsTab() {
+  const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+
+  // Fetch connected accounts on mount
+  useEffect(() => {
+    api
+      .get('/oauth/instagram/status')
+      .then(({ data }) => {
+        const acct = data.data;
+        if (acct?.connected) {
+          setConnectedAccounts([
+            {
+              platform: 'instagram',
+              accountName: acct.accountName ?? null,
+              accountId: acct.accountId ?? null,
+              connected: true,
+            },
+          ]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Handle OAuth callback params
+  useEffect(() => {
+    const oauthStatus = searchParams.get('oauth');
+    const platform = searchParams.get('platform');
+
+    if (oauthStatus === 'success' && platform) {
+      toast(
+        `${platform.charAt(0).toUpperCase() + platform.slice(1)} connected successfully!`,
+        'success',
+      );
+      // Refresh connected accounts
+      api
+        .get('/oauth/instagram/status')
+        .then(({ data }) => {
+          const acct = data.data;
+          if (acct?.connected) {
+            setConnectedAccounts([
+              {
+                platform: 'instagram',
+                accountName: acct.accountName ?? null,
+                accountId: acct.accountId ?? null,
+                connected: true,
+              },
+            ]);
+          }
+        })
+        .catch(() => {});
+      // Clean up URL params
+      searchParams.delete('oauth');
+      searchParams.delete('platform');
+      searchParams.delete('reason');
+      setSearchParams(searchParams, { replace: true });
+    } else if (oauthStatus === 'error' && platform) {
+      const reason = searchParams.get('reason');
+      const message = reason
+        ? `Failed to connect ${platform}: ${reason.replace(/_/g, ' ')}`
+        : `Failed to connect ${platform}. Please try again.`;
+      toast(message, 'error');
+      searchParams.delete('oauth');
+      searchParams.delete('platform');
+      searchParams.delete('reason');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const getConnected = (platformId: string) =>
+    connectedAccounts.find((a) => a.platform === platformId && a.connected);
+
+  const handleConnect = (platformId: string) => {
+    if (!OAUTH_ENABLED_PLATFORMS.has(platformId)) return;
+    window.location.href = `/api/oauth/${platformId}/connect`;
+  };
+
+  const handleDisconnect = async (platformId: string) => {
+    setDisconnecting(platformId);
+    try {
+      await api.post(`/oauth/${platformId}/disconnect`);
+      setConnectedAccounts((prev) => prev.filter((a) => a.platform !== platformId));
+      toast(`${platformId.charAt(0).toUpperCase() + platformId.slice(1)} disconnected.`, 'info');
+    } catch {
+      toast(`Failed to disconnect ${platformId}.`, 'error');
+    } finally {
+      setDisconnecting(null);
+    }
+  };
+
   return (
     <div>
       <div className="mb-4 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
         <p className="text-sm text-blue-400">
-          Connect your social media accounts to enable content scheduling and distribution. OAuth integration coming soon.
+          Connect your social media accounts to enable content scheduling and auto-publishing.
         </p>
       </div>
 
       <div className="space-y-3">
-        {SOCIAL_PLATFORMS.map((platform) => (
-          <div key={platform.id} className="flex items-center justify-between rounded-lg border border-border-default p-4">
-            <div className="flex items-center gap-3">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-lg text-white font-bold ${platform.color}`}>
-                {platform.icon}
+        {SOCIAL_PLATFORMS.map((platform) => {
+          const connected = getConnected(platform.id);
+          const isOAuthEnabled = OAUTH_ENABLED_PLATFORMS.has(platform.id);
+
+          return (
+            <div
+              key={platform.id}
+              className={`flex items-center justify-between rounded-lg border p-4 ${
+                connected ? 'border-green-500/30 bg-green-500/5' : 'border-border-default'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-lg text-white font-bold ${platform.color}`}
+                >
+                  {platform.icon}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-text-primary">{platform.name}</p>
+                    {connected && (
+                      <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400">
+                        Connected
+                      </span>
+                    )}
+                  </div>
+                  {connected ? (
+                    <p className="text-xs text-text-secondary">
+                      {connected.accountName ?? 'Account linked'}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-text-tertiary">
+                      {isOAuthEnabled ? 'Not connected' : 'Coming soon'}
+                    </p>
+                  )}
+                </div>
               </div>
               <div>
-                <p className="font-medium text-text-primary">{platform.name}</p>
-                <p className="text-xs text-text-tertiary">Not connected</p>
+                {connected ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleDisconnect(platform.id)}
+                    disabled={disconnecting === platform.id}
+                  >
+                    {disconnecting === platform.id ? 'Disconnecting...' : 'Disconnect'}
+                  </Button>
+                ) : (
+                  <div className="relative group">
+                    <Button
+                      size="sm"
+                      variant={isOAuthEnabled ? 'primary' : 'secondary'}
+                      onClick={() => handleConnect(platform.id)}
+                      disabled={!isOAuthEnabled}
+                    >
+                      Connect
+                    </Button>
+                    {!isOAuthEnabled && (
+                      <span className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-surface-4 px-2 py-1 text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                        Coming soon
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-            <Button size="sm" variant="secondary" disabled>
-              Connect
-            </Button>
-          </div>
-        ))}
+          );
+        })}
       </div>
-
-      <p className="mt-4 text-xs text-text-tertiary text-center">
-        Social account connections will be available when the Content Scheduler is launched.
-      </p>
     </div>
   );
 }

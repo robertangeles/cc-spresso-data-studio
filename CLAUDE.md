@@ -1,20 +1,20 @@
 # CLAUDE.md
 
-Project Rules for Claude Code Project: Content Pilot
+Project Rules for Claude Code Project: Spresso
 
 ---
 
 # Project Overview
 
-Content Pilot is a content operations platform built for creators, consultants, founders, and small teams who are tired of juggling disconnected tools just to stay visible online.
+Spresso is a content operations platform built for creators, consultants, founders, and small teams who are tired of juggling disconnected tools just to stay visible online.
 
-It combines the strategic clarity of a launch engine with the speed of a content repurposing system, giving users one place to plan, create, transform, schedule, and distribute content across multiple channels. Instead of forcing people to choose between "what should I say?" and "how do I get this everywhere?", Content Pilot handles both.
+It combines the strategic clarity of a launch engine with the speed of a content repurposing system, giving users one place to plan, create, transform, schedule, and distribute content across multiple channels. Instead of forcing people to choose between "what should I say?" and "how do I get this everywhere?", Spresso handles both.
 
-At its core, Content Pilot helps users turn a single idea into a complete content system. A long-form post, voice note, article, webinar, or product insight can be transformed into short-form posts, email copy, promotional snippets, captions, hooks, launch sequences, and platform-specific variations. It is designed to reduce the friction between ideation and execution, so content no longer gets stuck in drafts, scattered notes, or half-finished campaigns.
+At its core, Spresso helps users turn a single idea into a complete content system. A long-form post, voice note, article, webinar, or product insight can be transformed into short-form posts, email copy, promotional snippets, captions, hooks, launch sequences, and platform-specific variations. It is designed to reduce the friction between ideation and execution, so content no longer gets stuck in drafts, scattered notes, or half-finished campaigns.
 
-Where many tools focus only on publishing, Content Pilot is built around momentum. It does not just help users post more. It helps them move from idea to audience with intention. That means supporting the full workflow: content planning, repurposing, messaging refinement, campaign coordination, publishing cadence, and launch support. The result is a system that treats content as an asset, not a one-time activity.
+Where many tools focus only on publishing, Spresso is built around momentum. It does not just help users post more. It helps them move from idea to audience with intention. That means supporting the full workflow: content planning, repurposing, messaging refinement, campaign coordination, publishing cadence, and launch support. The result is a system that treats content as an asset, not a one-time activity.
 
-Content Pilot is especially useful for people building a brand, launching an offer, growing a newsletter, promoting a service, or maintaining a consistent presence without hiring a full content team. It gives users a way to create once, adapt intelligently, and distribute with purpose.
+Spresso is especially useful for people building a brand, launching an offer, growing a newsletter, promoting a service, or maintaining a consistent presence without hiring a full content team. It gives users a way to create once, adapt intelligently, and distribute with purpose.
 
 ---
 
