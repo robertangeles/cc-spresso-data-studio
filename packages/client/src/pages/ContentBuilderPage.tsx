@@ -173,13 +173,31 @@ export function ContentBuilderPage() {
         ? (builder.platformBodies[builder.activeTab] ?? '')
         : builder.mainBody;
 
+      // Build platform-aware instruction
+      const activeChannel = builder.activeTab
+        ? selectedChannelObjects.find((ch) => ch.id === builder.activeTab)
+        : null;
+
+      const charLimit = activeChannel ? (activeChannel.config?.charLimit as number) || 0 : 0;
+      const platformName = activeChannel?.name ?? 'general';
+
+      const enhancedInstruction = [
+        `You are a content writer. Return ONLY the post content — no preamble, no explanations, no separators, no quotation marks. Just the ready-to-publish text.`,
+        charLimit > 0
+          ? `STRICT CHARACTER LIMIT: ${charLimit} characters maximum for ${platformName}.`
+          : '',
+        instruction,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
       // Store previous content for undo
       builder.storePreviousContent();
       builder.setProcessing(true);
 
       try {
         const result = await chat.executeCommand(
-          instruction,
+          enhancedInstruction,
           currentContent,
           builder.activePromptBody,
         );
