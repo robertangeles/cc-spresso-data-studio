@@ -55,6 +55,16 @@ export async function storeTokens(userId: string, platform: string, tokens: OAut
   }
 }
 
+export async function getConnectedPlatforms(userId: string): Promise<string[]> {
+  const accounts = await db.query.socialAccounts.findMany({
+    where: and(
+      eq(schema.socialAccounts.userId, userId),
+      eq(schema.socialAccounts.isConnected, true),
+    ),
+  });
+  return accounts.map((a) => a.platform);
+}
+
 export async function getConnectedAccount(userId: string, platform: string) {
   return db.query.socialAccounts.findFirst({
     where: and(

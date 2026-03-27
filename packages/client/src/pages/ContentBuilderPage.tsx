@@ -57,7 +57,9 @@ export function ContentBuilderPage() {
 
   const userName = user?.name ?? 'User';
 
-  // Fetch available channels on mount
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+
+  // Fetch available channels and connected platforms on mount
   useEffect(() => {
     let cancelled = false;
     async function fetchChannels() {
@@ -70,7 +72,18 @@ export function ContentBuilderPage() {
         // Channels will remain empty
       }
     }
+    async function fetchConnected() {
+      try {
+        const { data } = await api.get('/oauth/connected');
+        if (!cancelled) {
+          setConnectedPlatforms(data.data ?? []);
+        }
+      } catch {
+        // Connected platforms will remain empty
+      }
+    }
     fetchChannels();
+    fetchConnected();
     return () => {
       cancelled = true;
     };
@@ -398,6 +411,7 @@ export function ContentBuilderPage() {
                 channels={channels}
                 selectedIds={builder.selectedChannels}
                 onToggle={builder.toggleChannel}
+                connectedPlatforms={connectedPlatforms}
               />
             </div>
 

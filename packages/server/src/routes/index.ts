@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import type { ApiResponse } from '@cc/shared';
+import { authenticate } from '../middleware/auth.middleware.js';
+import * as oauthService from '../services/oauth/oauth.service.js';
 import { authRoutes } from './auth.routes.js';
 import { flowRoutes } from './flow.routes.js';
 import { adminRoutes } from './admin.routes.js';
@@ -44,5 +46,19 @@ router.use('/system-prompts', systemPromptRoutes);
 router.use('/assistant', assistantRoutes);
 router.use('/oauth/instagram', instagramOAuthRoutes);
 router.use('/oauth/bluesky', blueskyOAuthRoutes);
+
+// Connected-platforms lookup (used by Content Builder for status dots + hint banner)
+router.get('/oauth/connected', authenticate, async (req, res, next) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, data: null });
+      return;
+    }
+    const platforms = await oauthService.getConnectedPlatforms(req.user.userId);
+    res.json({ success: true, data: platforms });
+  } catch (err) {
+    next(err);
+  }
+});
 
 export { router };

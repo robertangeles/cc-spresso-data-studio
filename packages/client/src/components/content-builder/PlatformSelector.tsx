@@ -220,7 +220,8 @@ export function PlatformSelector({
           <div className="grid grid-cols-4 gap-2 p-3 bg-surface-1 rounded-xl border border-border-subtle shadow-dark-lg backdrop-blur-glass">
             {sortedChannels.map((ch) => {
               const isSelected = selectedIds.includes(ch.id);
-              const isConnected = connectedPlatforms.includes(ch.slug);
+              const isConnected =
+                connectedPlatforms.includes(ch.slug) || ALWAYS_CONNECTED.includes(ch.slug);
               const color = getColor(ch.slug);
               const limit = formatCharLimit(ch.config?.charLimit as number | undefined | null);
 
@@ -282,25 +283,28 @@ export function PlatformSelector({
         </div>
       )}
 
-      {/* Connection hint — shown once when selecting unconnected platform */}
-      {showConnectHint && (
-        <div className="mt-2 flex items-center justify-between rounded-lg bg-accent/[0.06] border border-accent/15 px-3 py-2 animate-slide-up">
-          <p className="text-xs text-text-secondary">
-            <span className="text-accent font-medium">Tip:</span> Connect your social accounts in{' '}
-            <Link to="/profile" className="text-accent underline hover:text-accent-hover">
-              Profile → Social Accounts
-            </Link>{' '}
-            for auto-publishing. For now, content will be ready for manual posting.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowConnectHint(false)}
-            className="ml-3 text-text-tertiary hover:text-text-secondary text-xs shrink-0"
-          >
-            Got it
-          </button>
-        </div>
-      )}
+      {/* Connection hint — shown only when at least one selected platform is unconnected */}
+      {showConnectHint &&
+        selectedChannels.some(
+          (ch) => !connectedPlatforms.includes(ch.slug) && !ALWAYS_CONNECTED.includes(ch.slug),
+        ) && (
+          <div className="mt-2 flex items-center justify-between rounded-lg bg-accent/[0.06] border border-accent/15 px-3 py-2 animate-slide-up">
+            <p className="text-xs text-text-secondary">
+              <span className="text-accent font-medium">Tip:</span> Connect your social accounts in{' '}
+              <Link to="/profile" className="text-accent underline hover:text-accent-hover">
+                Profile → Social Accounts
+              </Link>{' '}
+              for auto-publishing. For now, content will be ready for manual posting.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowConnectHint(false)}
+              className="ml-3 text-text-tertiary hover:text-text-secondary text-xs shrink-0"
+            >
+              Got it
+            </button>
+          </div>
+        )}
     </div>
   );
 }
