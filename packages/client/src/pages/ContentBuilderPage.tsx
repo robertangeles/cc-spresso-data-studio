@@ -272,7 +272,21 @@ export function ContentBuilderPage() {
 
   // Schedule handlers
   const handleSchedule = async (date: string) => {
-    if (builder.selectedChannels.length === 0 || !builder.mainBody.trim()) return;
+    if (builder.selectedChannels.length === 0) {
+      toast('Select at least one platform first.', 'error');
+      return;
+    }
+    const content = builder.activeTab
+      ? (builder.platformBodies[builder.activeTab] ?? builder.mainBody)
+      : builder.mainBody;
+    if (!content.trim()) {
+      toast('Write some content before scheduling.', 'error');
+      return;
+    }
+    if (!date) {
+      toast('Pick a date and time to schedule.', 'error');
+      return;
+    }
     try {
       const { data: batchData } = await api.post('/content/batch', {
         userId: user?.id,
@@ -301,7 +315,32 @@ export function ContentBuilderPage() {
   };
 
   const handlePublishNow = async () => {
+    if (builder.selectedChannels.length === 0) {
+      toast('Select at least one platform first.', 'error');
+      return;
+    }
+    const content = builder.activeTab
+      ? (builder.platformBodies[builder.activeTab] ?? builder.mainBody)
+      : builder.mainBody;
+    if (!content.trim()) {
+      toast('Write some content before publishing.', 'error');
+      return;
+    }
+    toast('Publishing...', 'info');
     await handleSchedule(new Date().toISOString());
+  };
+
+  const handleSaveDraft = async () => {
+    if (!builder.mainBody.trim() && Object.keys(builder.platformBodies).length === 0) {
+      toast('Nothing to save — write some content first.', 'error');
+      return;
+    }
+    try {
+      await builder.saveAsDraft();
+      toast('Draft saved!', 'success');
+    } catch {
+      toast('Failed to save draft.', 'error');
+    }
   };
 
   return (
@@ -331,7 +370,7 @@ export function ContentBuilderPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={builder.saveAsDraft}
+              onClick={handleSaveDraft}
               disabled={builder.isSaving || !builder.isDirty}
               title="Save Draft (Ctrl+S)"
             >
@@ -522,7 +561,7 @@ export function ContentBuilderPage() {
                 <SchedulePanel
                   onSchedule={handleSchedule}
                   onPublishNow={handlePublishNow}
-                  onSaveDraft={builder.saveAsDraft}
+                  onSaveDraft={handleSaveDraft}
                   isSaving={builder.isSaving}
                   selectedChannelCount={builder.selectedChannels.length}
                   flowState={builder.flowState}
