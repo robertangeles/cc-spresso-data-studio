@@ -19,6 +19,7 @@ import { MediaSettingsPage } from './pages/settings/MediaSettingsPage';
 import { SiteSettingsPage } from './pages/settings/SiteSettingsPage';
 import UsageDashboardPage from './pages/settings/UsageDashboardPage';
 import { SystemPromptsPage } from './pages/settings/SystemPromptsPage';
+import { SocialMediaSettingsPage } from './pages/settings/SocialMediaSettingsPage';
 import { ContentLibraryPage } from './pages/ContentLibraryPage';
 import { ContentBuilderPage } from './pages/ContentBuilderPage';
 import { ChatPage } from './pages/ChatPage';
@@ -53,6 +54,7 @@ export function App() {
                   <Route path="integrations/database" element={<DatabaseSettingsPage />} />
                   <Route path="integrations/ai-models" element={<LLMSettingsPage />} />
                   <Route path="integrations/media" element={<MediaSettingsPage />} />
+                  <Route path="integrations/social-media" element={<SocialMediaSettingsPage />} />
                   <Route path="admin/roles" element={<RoleManagementPage />} />
                   <Route path="admin/site" element={<SiteSettingsPage />} />
                   <Route path="admin/usage" element={<UsageDashboardPage />} />
