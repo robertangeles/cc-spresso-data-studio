@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { AvatarUpload } from '../../components/ui/AvatarUpload';
-import { api } from '../../lib/api';
+import { api, getAccessToken } from '../../lib/api';
 import type { CreateRuleDTO } from '@cc/shared';
 
 type Tab = 'info' | 'rules' | 'brand' | 'preferences' | 'social';
@@ -750,7 +750,9 @@ function SocialAccountsTab() {
       return;
     }
     if (!OAUTH_ENABLED_PLATFORMS.has(platformId)) return;
-    window.location.href = `/api/oauth/${platformId}/connect`;
+    // Pass JWT token as query param since browser redirects don't send Authorization header
+    const token = getAccessToken();
+    window.location.href = `/api/oauth/${platformId}/connect${token ? `?token=${token}` : ''}`;
   };
 
   const handleCredentialConnect = async () => {

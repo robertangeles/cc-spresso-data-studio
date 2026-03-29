@@ -5,6 +5,7 @@ import { authenticate } from '../../middleware/auth.middleware.js';
 import { UnauthorizedError } from '../../utils/errors.js';
 import * as oauthService from '../../services/oauth/oauth.service.js';
 import { logger } from '../../config/logger.js';
+import { config } from '../../config/index.js';
 
 const router = Router();
 
@@ -28,18 +29,22 @@ router.get('/callback', async (req: Request, res: Response, _next: NextFunction)
 
     if (error) {
       logger.warn({ error }, 'Facebook OAuth denied by user');
-      return res.redirect('/profile?oauth=error&platform=facebook');
+      return res.redirect(`${config.clientUrl}/profile?oauth=error&platform=facebook`);
     }
 
     if (!code || !state) {
-      return res.redirect('/profile?oauth=error&platform=facebook&reason=missing_params');
+      return res.redirect(
+        `${config.clientUrl}/profile?oauth=error&platform=facebook&reason=missing_params`,
+      );
     }
 
     const stateData = JSON.parse(Buffer.from(state as string, 'base64url').toString());
     const userId = stateData.userId;
 
     if (!userId) {
-      return res.redirect('/profile?oauth=error&platform=facebook&reason=invalid_state');
+      return res.redirect(
+        `${config.clientUrl}/profile?oauth=error&platform=facebook&reason=invalid_state`,
+      );
     }
 
     const provider = oauthService.getOAuthProvider('facebook');
@@ -49,10 +54,12 @@ router.get('/callback', async (req: Request, res: Response, _next: NextFunction)
     await oauthService.storeTokens(userId, 'facebook', tokens);
 
     logger.info({ userId, accountName: tokens.accountName }, 'Facebook Page connected');
-    res.redirect('/profile?oauth=success&platform=facebook');
+    res.redirect(`${config.clientUrl}/profile?oauth=success&platform=facebook`);
   } catch (err) {
     logger.error({ err }, 'Facebook OAuth callback failed');
-    res.redirect('/profile?oauth=error&platform=facebook&reason=exchange_failed');
+    res.redirect(
+      `${config.clientUrl}/profile?oauth=error&platform=facebook&reason=exchange_failed`,
+    );
   }
 });
 

@@ -314,7 +314,7 @@ export function SocialMediaSettingsPage() {
             ) : (
               <>
                 {activePlatform.credentialKeys.map((key, i) => {
-                  const isSecret = key.toLowerCase().includes('secret');
+                  const isSecret = true; // all credential fields are sensitive
                   return (
                     <div key={key}>
                       <label className="block text-xs font-medium text-text-secondary mb-1.5">

@@ -5,6 +5,7 @@ import { authenticate } from '../../middleware/auth.middleware.js';
 import { UnauthorizedError } from '../../utils/errors.js';
 import * as oauthService from '../../services/oauth/oauth.service.js';
 import { logger } from '../../config/logger.js';
+import { config } from '../../config/index.js';
 
 const router = Router();
 
@@ -28,11 +29,13 @@ router.get('/callback', async (req: Request, res: Response, _next: NextFunction)
 
     if (error) {
       logger.warn({ error }, 'Instagram OAuth denied by user');
-      return res.redirect('/profile?oauth=error&platform=instagram');
+      return res.redirect(`${config.clientUrl}/profile?oauth=error&platform=instagram`);
     }
 
     if (!code || !state) {
-      return res.redirect('/profile?oauth=error&platform=instagram&reason=missing_params');
+      return res.redirect(
+        `${config.clientUrl}/profile?oauth=error&platform=instagram&reason=missing_params`,
+      );
     }
 
     // Decode state to get userId
@@ -40,7 +43,9 @@ router.get('/callback', async (req: Request, res: Response, _next: NextFunction)
     const userId = stateData.userId;
 
     if (!userId) {
-      return res.redirect('/profile?oauth=error&platform=instagram&reason=invalid_state');
+      return res.redirect(
+        `${config.clientUrl}/profile?oauth=error&platform=instagram&reason=invalid_state`,
+      );
     }
 
     const provider = oauthService.getOAuthProvider('instagram');
@@ -50,10 +55,12 @@ router.get('/callback', async (req: Request, res: Response, _next: NextFunction)
     await oauthService.storeTokens(userId, 'instagram', tokens);
 
     logger.info({ userId, accountName: tokens.accountName }, 'Instagram connected');
-    res.redirect('/profile?oauth=success&platform=instagram');
+    res.redirect(`${config.clientUrl}/profile?oauth=success&platform=instagram`);
   } catch (err) {
     logger.error({ err }, 'Instagram OAuth callback failed');
-    res.redirect('/profile?oauth=error&platform=instagram&reason=exchange_failed');
+    res.redirect(
+      `${config.clientUrl}/profile?oauth=error&platform=instagram&reason=exchange_failed`,
+    );
   }
 });
 

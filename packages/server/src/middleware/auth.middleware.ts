@@ -12,12 +12,20 @@ declare module 'express-serve-static-core' {
 
 export function authenticate(req: Request, _res: Response, next: NextFunction) {
   try {
+    // Check Authorization header first, then fall back to ?token= query param (for browser redirects)
     const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedError('Missing or invalid authorization header');
+    let token: string | undefined;
+
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else if (typeof req.query.token === 'string') {
+      token = req.query.token;
     }
 
-    const token = authHeader.substring(7);
+    if (!token) {
+      throw new UnauthorizedError('Missing or invalid authorization');
+    }
+
     req.user = verifyAccessToken(token);
     next();
   } catch {
