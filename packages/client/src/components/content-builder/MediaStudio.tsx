@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, X, RefreshCw, Loader2, Image, ChevronDown, ChevronUp } from 'lucide-react';
+import { api } from '../../lib/api';
 
 interface MediaStudioProps {
   imageUrl: string | null;
@@ -41,32 +42,49 @@ export default function MediaStudio({
   imageUrl,
   onImageChange,
   selectedChannels,
-  // flowState reserved for future per-state rendering
   nudge,
 }: MediaStudioProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [activePreset, setActivePreset] = useState<StylePresetId>('realistic');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const suggestedDims = getSuggestedDimensions(selectedChannels);
 
-  const handleFileSelect = useCallback(
-    (file: File) => {
-      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
-      const previewUrl = URL.createObjectURL(file);
-      onImageChange(previewUrl);
+  const uploadToServer = useCallback(
+    async (file: File) => {
+      setIsUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('image', file);
+        const { data } = await api.post('/upload/image', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        onImageChange(data.data.url);
+      } catch (err) {
+        console.error('Image upload failed:', err);
+      } finally {
+        setIsUploading(false);
+      }
     },
     [onImageChange],
+  );
+
+  const handleFileSelect = useCallback(
+    (file: File) => {
+      if (!file.type.startsWith('image/')) return;
+      uploadToServer(file);
+    },
+    [uploadToServer],
   );
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) handleFileSelect(file);
-      // Reset so the same file can be selected again
       e.target.value = '';
     },
     [handleFileSelect],
@@ -98,7 +116,6 @@ export default function MediaStudio({
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim()) return;
     setIsGenerating(true);
-    // Placeholder — backend endpoint not yet available
     setTimeout(() => {
       setIsGenerating(false);
       alert('AI image generation coming soon');
@@ -113,7 +130,7 @@ export default function MediaStudio({
     alert('AI regeneration coming soon');
   }, []);
 
-  /* ── Collapsed bar — slim toolbar link ──────────────────── */
+  /* ── Collapsed bar ──────────────────────────────────────── */
   if (isCollapsed && !imageUrl) {
     return (
       <button
@@ -130,14 +147,12 @@ export default function MediaStudio({
     );
   }
 
-  /* ── Image preview state ─────────────────────────────────── */
+  /* ── Image preview state ────────────────────────────────── */
   if (imageUrl) {
     return (
       <div className="rounded-xl border border-border-subtle bg-surface-1 p-3">
-        {/* Preview */}
         <div className="relative group rounded-lg overflow-hidden inline-block">
           <img src={imageUrl} alt="Media preview" className="h-20 w-auto object-cover rounded-lg" />
-          {/* Overlay buttons */}
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-3">
             <button
               type="button"
@@ -158,9 +173,8 @@ export default function MediaStudio({
           </div>
         </div>
 
-        {/* Per-platform dimension recommendations */}
         {selectedChannels.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mt-2">
             {selectedChannels.map((ch) => {
               const w = ch.config?.imageWidth as number | undefined;
               const h = ch.config?.imageHeight as number | undefined;
@@ -168,7 +182,7 @@ export default function MediaStudio({
               return (
                 <span
                   key={ch.id}
-                  className="inline-flex items-center gap-1 text-xs text-text-tertiary bg-surface-3 px-2 py-0.5 rounded-full"
+                  className="inline-flex items-center gap-1 text-xs text-text-secondary bg-surface-3 px-2 py-0.5 rounded-full"
                 >
                   <Image size={10} />
                   {ch.name}: {w}&times;{h}
@@ -181,10 +195,10 @@ export default function MediaStudio({
     );
   }
 
-  /* ── Empty / upload state ────────────────────────────────── */
+  /* ── Empty / upload state — two-column layout ──────────── */
   return (
-    <div className="rounded-xl border border-border-subtle bg-surface-1 p-4 space-y-4">
-      {/* Collapse toggle */}
+    <div className="rounded-xl border border-border-subtle bg-surface-1 p-4 space-y-3">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Image size={16} className="text-accent" />
@@ -204,107 +218,99 @@ export default function MediaStudio({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*,video/*"
+        accept="image/*"
         className="hidden"
         onChange={handleInputChange}
       />
 
-      {/* Drop zone */}
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`
-          w-full flex flex-col items-center justify-center gap-2 py-8
-          rounded-lg border-2 border-dashed transition-all duration-200 cursor-pointer
-          ${
-            isDragOver
-              ? 'border-accent bg-accent/5 scale-[1.01] shadow-[0_0_20px_rgba(99,102,241,0.1)]'
-              : 'border-border-default hover:border-border-hover hover:bg-surface-2/50'
-          }
-        `}
-        style={isDragOver ? { animation: 'pulse 1.5s ease-in-out infinite' } : undefined}
-      >
-        <div
-          className={`p-2.5 rounded-full transition-colors duration-200 ${
-            isDragOver ? 'bg-accent/10 text-accent' : 'bg-surface-3 text-text-tertiary'
-          }`}
+      {/* Two-column: Upload | AI Generate */}
+      <div className="flex gap-3">
+        {/* Left: Upload zone */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          disabled={isUploading}
+          className={`
+            flex-1 flex flex-col items-center justify-center gap-2 py-6
+            rounded-lg border-2 border-dashed transition-all duration-200 cursor-pointer
+            ${
+              isDragOver
+                ? 'border-accent bg-accent/5 scale-[1.01]'
+                : 'border-border-default hover:border-border-hover hover:bg-surface-2/50'
+            }
+            ${isUploading ? 'opacity-50 cursor-wait' : ''}
+          `}
         >
-          <Upload size={20} />
+          <div
+            className={`p-2 rounded-full transition-colors ${
+              isDragOver ? 'bg-accent/10 text-accent' : 'bg-surface-3 text-text-tertiary'
+            }`}
+          >
+            {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+          </div>
+          <span className="text-xs text-text-secondary">
+            {isUploading ? 'Uploading...' : 'Drop or click'}
+          </span>
+        </button>
+
+        {/* Vertical divider */}
+        <div className="flex flex-col items-center gap-1 py-4">
+          <div className="flex-1 w-px bg-border-subtle" />
+          <span className="text-[9px] text-text-tertiary uppercase">or</span>
+          <div className="flex-1 w-px bg-border-subtle" />
         </div>
-        <span className="text-sm text-text-tertiary">Drag &amp; drop or click to upload</span>
-      </button>
 
-      {/* Divider */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-border-subtle" />
-        <span className="text-xs text-text-tertiary whitespace-nowrap">or generate with AI</span>
-        <div className="flex-1 h-px bg-border-subtle" />
-      </div>
-
-      {/* Prompt input */}
-      <textarea
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        placeholder="Describe your image..."
-        rows={2}
-        className="w-full bg-surface-3 text-sm text-text-primary placeholder-text-tertiary rounded-lg border border-border-subtle focus:border-accent focus:ring-1 focus:ring-accent/30 px-3 py-2 resize-none transition-all duration-150 outline-none"
-      />
-
-      {/* Style presets */}
-      <div className="flex flex-wrap gap-2">
-        {STYLE_PRESETS.map((preset) => {
-          const isActive = activePreset === preset.id;
-          return (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => setActivePreset(preset.id)}
-              className={`
-                inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
-                border transition-all duration-150
-                ${
-                  isActive
-                    ? 'bg-accent-dim text-accent border-accent shadow-sm'
-                    : 'bg-surface-3 text-text-secondary border-border-subtle hover:border-border-hover hover:bg-surface-2'
-                }
-              `}
-            >
-              <span>{preset.icon}</span>
-              {preset.label}
-            </button>
-          );
-        })}
+        {/* Right: AI Generate */}
+        <div className="flex-1 flex flex-col gap-2">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe your image..."
+            rows={2}
+            className="w-full bg-surface-3 text-xs text-text-primary placeholder-text-tertiary rounded-lg border border-border-subtle focus:border-accent focus:ring-1 focus:ring-accent/30 px-2.5 py-2 resize-none transition-all duration-150 outline-none"
+          />
+          <div className="flex flex-wrap gap-1">
+            {STYLE_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => setActivePreset(preset.id)}
+                className={`
+                  inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium
+                  border transition-all duration-150
+                  ${
+                    activePreset === preset.id
+                      ? 'bg-accent-dim text-accent border-accent'
+                      : 'bg-surface-3 text-text-secondary border-border-subtle hover:border-border-hover'
+                  }
+                `}
+              >
+                <span>{preset.icon}</span>
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={isGenerating || !prompt.trim()}
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-text-inverse text-xs font-medium transition-all hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Image size={14} />}
+            Generate
+          </button>
+        </div>
       </div>
 
       {/* Suggested size */}
       {suggestedDims && (
-        <p className="text-xs text-text-tertiary">
+        <p className="text-xs text-text-secondary">
           Recommended: {suggestedDims.width}&times;{suggestedDims.height} ({suggestedDims.label})
         </p>
       )}
-
-      {/* Generate button */}
-      <button
-        type="button"
-        onClick={handleGenerate}
-        disabled={isGenerating || !prompt.trim()}
-        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-text-inverse text-sm font-medium transition-all duration-150 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {isGenerating ? (
-          <>
-            <Loader2 size={16} className="animate-spin" />
-            Generating...
-          </>
-        ) : (
-          <>
-            <Image size={16} />
-            Generate
-          </>
-        )}
-      </button>
     </div>
   );
 }

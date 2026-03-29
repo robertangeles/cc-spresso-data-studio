@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Check, Loader2, Wand2 } from 'lucide-react';
+import { Send, Check, Loader2, Wand2, RotateCcw } from 'lucide-react';
 import { useConfiguredModels } from '../../hooks/useConfiguredModels';
 import { PromptBadge } from './PromptBadge';
 
@@ -22,6 +22,7 @@ interface AICommandBarProps {
     category: string;
     defaultModel: string | null;
   }) => void;
+  onRegenerate?: (instruction: string) => void;
 }
 
 function relativeTime(timestamp: string): string {
@@ -47,6 +48,7 @@ export function AICommandBar({
   onClearPrompt,
   onCreateNewPrompt,
   onEditPrompt,
+  onRegenerate,
 }: AICommandBarProps) {
   const { models: configuredModels } = useConfiguredModels();
   const [input, setInput] = useState('');
@@ -64,8 +66,8 @@ export function AICommandBar({
   const handleSend = () => {
     if (!input.trim() || isProcessing) return;
     onCommand(input.trim());
-    setInput('');
-    if (inputRef.current) inputRef.current.style.height = 'auto';
+    // Don't clear input — keep it visible so user can see what they sent
+    // It clears when they start typing something new or on publish
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -95,18 +97,32 @@ export function AICommandBar({
       {/* Command history — collapsed list above the bar */}
       {visibleHistory.length > 0 && (
         <div className="max-h-[90px] overflow-y-auto space-y-0.5 scrollbar-thin">
-          {visibleHistory.map((cmd, i) => (
-            <div
-              key={`${cmd.timestamp}-${i}`}
-              className="flex items-center gap-2 text-xs text-text-tertiary px-1 py-0.5"
-            >
-              <Check className="h-3 w-3 text-green-400 shrink-0" />
-              <span className="truncate flex-1">{cmd.instruction}</span>
-              <span className="shrink-0 text-[10px] text-text-tertiary/60">
-                {relativeTime(cmd.timestamp)}
-              </span>
-            </div>
-          ))}
+          {visibleHistory.map((cmd, i) => {
+            const isLast = i === visibleHistory.length - 1;
+            return (
+              <div
+                key={`${cmd.timestamp}-${i}`}
+                className="flex items-center gap-2 text-xs text-text-secondary px-1 py-0.5"
+              >
+                <Check className="h-3 w-3 text-green-400 shrink-0" />
+                <span className="truncate flex-1">{cmd.instruction}</span>
+                {isLast && onRegenerate && !isProcessing && (
+                  <button
+                    type="button"
+                    onClick={() => onRegenerate(cmd.instruction)}
+                    className="shrink-0 flex items-center gap-1 text-[10px] text-accent hover:text-accent-hover transition-colors"
+                    title="Regenerate with this instruction"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Retry
+                  </button>
+                )}
+                <span className="shrink-0 text-[10px] text-text-tertiary/60">
+                  {relativeTime(cmd.timestamp)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 

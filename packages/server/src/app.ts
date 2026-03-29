@@ -15,9 +15,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
 // Security — relax CSP in production to allow inline styles from Vite build
-app.use(helmet({
-  contentSecurityPolicy: config.isDev ? undefined : false,
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: config.isDev ? undefined : false,
+  }),
+);
 app.use(
   cors({
     origin: config.clientUrl,
@@ -32,6 +34,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // Logging
 app.use(pinoHttp({ logger }));
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
 // API Routes
 app.use('/api', router);

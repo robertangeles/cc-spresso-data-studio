@@ -339,6 +339,7 @@ export function ContentBuilderPage() {
       }
       toast(`Scheduled ${items.length} post(s) for ${new Date(date).toLocaleString()}`, 'success');
       builder.resetContent();
+      chat.clearChat();
       setScheduleDate('');
       setCalendarRefreshKey((k) => k + 1);
     } catch (err) {
@@ -419,7 +420,7 @@ export function ContentBuilderPage() {
               <Save className="mr-1.5 h-4 w-4" />
               {builder.isSaving ? 'Saving...' : 'Save Draft'}
             </Button>
-            <span className="text-[9px] text-text-tertiary mt-0.5 hidden lg:block">
+            <span className="text-[10px] text-text-secondary mt-0.5 hidden lg:block">
               <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />
               Ctrl+S
             </span>
@@ -455,7 +456,7 @@ export function ContentBuilderPage() {
                     {builder.isAdapting ? 'Adapting...' : 'Adapt All'}
                   </Button>
                 )}
-                <span className="text-[9px] text-text-tertiary mt-0.5 hidden lg:block">
+                <span className="text-[10px] text-text-secondary mt-0.5 hidden lg:block">
                   <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />
                   Ctrl+Shift+A
                 </span>
@@ -538,6 +539,7 @@ export function ContentBuilderPage() {
               onClearPrompt={builder.clearPrompt}
               onCreateNewPrompt={handleCreateNewPrompt}
               onEditPrompt={handleEditPrompt}
+              onRegenerate={handleAICommand}
             />
           </div>
 

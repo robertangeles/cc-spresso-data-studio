@@ -39,3 +39,4 @@ coverage/
 
 # Turbo
 .turbo/
+packages/server/uploads/
