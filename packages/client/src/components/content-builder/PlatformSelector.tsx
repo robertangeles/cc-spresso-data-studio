@@ -203,9 +203,7 @@ export function PlatformSelector({
 
               {/* Selected checkmark */}
               {isSelected && (
-                <span
-                  className={`flex h-5 w-5 items-center justify-center rounded-full ${color.bg} shadow-md shrink-0`}
-                >
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500 shadow-md shrink-0">
                   <Check className="h-3 w-3 text-white" strokeWidth={3} />
                 </span>
               )}
@@ -326,9 +324,7 @@ export function PlatformSelector({
                 >
                   {/* Selected checkmark */}
                   {isSelected && (
-                    <span
-                      className={`absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full ${color.bg} shadow-md`}
-                    >
+                    <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-green-500 shadow-md">
                       <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
                     </span>
                   )}
