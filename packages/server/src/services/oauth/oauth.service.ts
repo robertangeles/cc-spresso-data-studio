@@ -17,14 +17,28 @@ export function getOAuthProvider(platform: string): OAuthProvider {
   return provider;
 }
 
+/**
+ * Store or update tokens for a social account.
+ * Upserts by (userId, platform, accountId) — supports multiple accounts per platform.
+ */
 export async function storeTokens(userId: string, platform: string, tokens: OAuthTokens) {
-  // Check if account already exists
-  const existing = await db.query.socialAccounts.findFirst({
-    where: and(
-      eq(schema.socialAccounts.userId, userId),
-      eq(schema.socialAccounts.platform, platform),
-    ),
-  });
+  const accountId = tokens.accountId ?? null;
+
+  // Find existing account by the natural key: userId + platform + accountId
+  const existing = accountId
+    ? await db.query.socialAccounts.findFirst({
+        where: and(
+          eq(schema.socialAccounts.userId, userId),
+          eq(schema.socialAccounts.platform, platform),
+          eq(schema.socialAccounts.accountId, accountId),
+        ),
+      })
+    : await db.query.socialAccounts.findFirst({
+        where: and(
+          eq(schema.socialAccounts.userId, userId),
+          eq(schema.socialAccounts.platform, platform),
+        ),
+      });
 
   if (existing) {
     await db
@@ -35,26 +49,38 @@ export async function storeTokens(userId: string, platform: string, tokens: OAut
         tokenExpiresAt: tokens.expiresAt ?? null,
         accountId: tokens.accountId ?? existing.accountId,
         accountName: tokens.accountName ?? existing.accountName,
+        accountType: tokens.accountType ?? existing.accountType,
+        label: existing.label ?? tokens.accountName ?? existing.accountName,
         isConnected: true,
         updatedAt: new Date(),
       })
       .where(eq(schema.socialAccounts.id, existing.id));
-    logger.info({ userId, platform }, 'OAuth tokens updated');
+    logger.info({ userId, platform, accountId }, 'OAuth tokens updated');
+    return existing.id;
   } else {
-    await db.insert(schema.socialAccounts).values({
-      userId,
-      platform,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken ?? null,
-      tokenExpiresAt: tokens.expiresAt ?? null,
-      accountId: tokens.accountId ?? null,
-      accountName: tokens.accountName ?? null,
-      isConnected: true,
-    });
-    logger.info({ userId, platform }, 'OAuth tokens stored');
+    const [row] = await db
+      .insert(schema.socialAccounts)
+      .values({
+        userId,
+        platform,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken ?? null,
+        tokenExpiresAt: tokens.expiresAt ?? null,
+        accountId: tokens.accountId ?? null,
+        accountName: tokens.accountName ?? null,
+        accountType: tokens.accountType ?? 'personal',
+        label: tokens.accountName ?? null,
+        isConnected: true,
+      })
+      .returning();
+    logger.info({ userId, platform, accountId }, 'OAuth tokens stored');
+    return row.id;
   }
 }
 
+/**
+ * Get all connected platforms for a user — returns full account details.
+ */
 export async function getConnectedPlatforms(userId: string): Promise<string[]> {
   const accounts = await db.query.socialAccounts.findMany({
     where: and(
@@ -65,6 +91,46 @@ export async function getConnectedPlatforms(userId: string): Promise<string[]> {
   return accounts.map((a) => a.platform);
 }
 
+/**
+ * Get all connected accounts for a user, grouped info.
+ */
+export async function getConnectedAccountsList(userId: string) {
+  return db.query.socialAccounts.findMany({
+    where: and(
+      eq(schema.socialAccounts.userId, userId),
+      eq(schema.socialAccounts.isConnected, true),
+    ),
+  });
+}
+
+/**
+ * Get all connected accounts for a specific platform.
+ */
+export async function getConnectedAccounts(userId: string, platform: string) {
+  return db.query.socialAccounts.findMany({
+    where: and(
+      eq(schema.socialAccounts.userId, userId),
+      eq(schema.socialAccounts.platform, platform),
+      eq(schema.socialAccounts.isConnected, true),
+    ),
+  });
+}
+
+/**
+ * Get a specific connected account by ID.
+ */
+export async function getConnectedAccountById(socialAccountId: string) {
+  return db.query.socialAccounts.findFirst({
+    where: and(
+      eq(schema.socialAccounts.id, socialAccountId),
+      eq(schema.socialAccounts.isConnected, true),
+    ),
+  });
+}
+
+/**
+ * Legacy: get first connected account for a platform (backward compat).
+ */
 export async function getConnectedAccount(userId: string, platform: string) {
   return db.query.socialAccounts.findFirst({
     where: and(
@@ -76,12 +142,10 @@ export async function getConnectedAccount(userId: string, platform: string) {
 }
 
 /**
- * Update access/refresh tokens for an existing connected account.
- * Used when tokens are refreshed during auto-publish.
+ * Update access/refresh tokens for a specific account by its PK.
  */
 export async function updateAccountTokens(
-  userId: string,
-  platform: string,
+  accountId: string,
   tokens: { accessToken: string; refreshToken: string },
 ) {
   await db
@@ -91,24 +155,45 @@ export async function updateAccountTokens(
       refreshToken: tokens.refreshToken,
       updatedAt: new Date(),
     })
-    .where(
-      and(eq(schema.socialAccounts.userId, userId), eq(schema.socialAccounts.platform, platform)),
-    );
-  logger.info({ platform }, 'Updated account tokens after refresh');
+    .where(eq(schema.socialAccounts.id, accountId));
+  logger.info({ accountId }, 'Updated account tokens after refresh');
 }
 
-export async function disconnectAccount(userId: string, platform: string) {
-  const account = await getConnectedAccount(userId, platform);
+/**
+ * Update the user-friendly label for an account.
+ */
+export async function updateAccountLabel(socialAccountId: string, userId: string, label: string) {
+  await db
+    .update(schema.socialAccounts)
+    .set({ label, updatedAt: new Date() })
+    .where(
+      and(eq(schema.socialAccounts.id, socialAccountId), eq(schema.socialAccounts.userId, userId)),
+    );
+}
+
+/**
+ * Disconnect a specific account by its PK.
+ */
+export async function disconnectAccount(socialAccountId: string, userId: string) {
+  const account = await db.query.socialAccounts.findFirst({
+    where: and(
+      eq(schema.socialAccounts.id, socialAccountId),
+      eq(schema.socialAccounts.userId, userId),
+    ),
+  });
   if (!account) return;
 
   // Try to revoke access on the platform side
   try {
-    const provider = getOAuthProvider(platform);
+    const provider = getOAuthProvider(account.platform);
     if (account.accessToken) {
       await provider.revokeAccess(account.accessToken);
     }
   } catch (err) {
-    logger.warn({ err, platform }, 'Failed to revoke OAuth access — removing locally anyway');
+    logger.warn(
+      { err, platform: account.platform },
+      'Failed to revoke OAuth access — removing locally anyway',
+    );
   }
 
   await db
@@ -116,7 +201,10 @@ export async function disconnectAccount(userId: string, platform: string) {
     .set({ isConnected: false, accessToken: null, refreshToken: null, updatedAt: new Date() })
     .where(eq(schema.socialAccounts.id, account.id));
 
-  logger.info({ userId, platform }, 'OAuth account disconnected');
+  logger.info(
+    { userId, platform: account.platform, accountId: account.accountId },
+    'OAuth account disconnected',
+  );
 }
 
 export async function getExpiringTokens(daysUntilExpiry: number = 7) {

@@ -2,7 +2,11 @@ import { eq, and, asc, lte, gte } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
-import { getConnectedAccount, updateAccountTokens } from './oauth/oauth.service.js';
+import {
+  getConnectedAccount,
+  getConnectedAccountById,
+  updateAccountTokens,
+} from './oauth/oauth.service.js';
 import { publishToInstagram } from './publishers/instagram.publisher.js';
 import { publishToBluesky } from './publishers/bluesky.publisher.js';
 
@@ -190,12 +194,19 @@ export async function processDuePosts(): Promise<number> {
         where: eq(schema.contentItems.id, post.contentItemId),
       });
 
-      // Attempt auto-publish to Instagram if channel matches
+      // Resolve the social account — prefer explicit socialAccountId, fall back to platform lookup
       let autoPublished = false;
       let publishError: string | null = null;
-      if (channelSlug === 'instagram' && contentItem) {
-        const account = await getConnectedAccount(post.userId, 'instagram');
-        if (account?.accessToken && account.accountId) {
+
+      const account = post.socialAccountId
+        ? await getConnectedAccountById(post.socialAccountId)
+        : channelSlug
+          ? await getConnectedAccount(post.userId, channelSlug)
+          : null;
+
+      if (channelSlug && contentItem && account?.accessToken && account.accountId) {
+        // Attempt auto-publish to Instagram
+        if (channelSlug === 'instagram') {
           const result = await publishToInstagram({
             accessToken: account.accessToken,
             igUserId: account.accountId,
@@ -213,15 +224,10 @@ export async function processDuePosts(): Promise<number> {
             publishError = result.error ?? 'Instagram publish failed';
             logger.warn({ postId: post.id, error: result.error }, 'Instagram auto-publish failed');
           }
-        } else {
-          publishError = 'No connected Instagram account found';
         }
-      }
 
-      // Attempt auto-publish to Bluesky if channel matches
-      if (channelSlug === 'bluesky' && contentItem) {
-        const account = await getConnectedAccount(post.userId, 'bluesky');
-        if (account?.accessToken && account.accountId) {
+        // Attempt auto-publish to Bluesky
+        if (channelSlug === 'bluesky') {
           const result = await publishToBluesky({
             accessToken: account.accessToken,
             did: account.accountId,
@@ -233,16 +239,16 @@ export async function processDuePosts(): Promise<number> {
           if (result.success) {
             autoPublished = true;
             if (result.newTokens) {
-              await updateAccountTokens(post.userId, 'bluesky', result.newTokens);
+              await updateAccountTokens(account.id, result.newTokens);
             }
             logger.info({ postId: post.id, bskyUri: result.postUri }, 'Auto-published to Bluesky');
           } else {
             publishError = result.error ?? 'Bluesky publish failed';
             logger.warn({ postId: post.id, error: result.error }, 'Bluesky auto-publish failed');
           }
-        } else {
-          publishError = 'No connected Bluesky account found';
         }
+      } else if (channelSlug) {
+        publishError = `No connected ${channelSlug} account found`;
       }
 
       // Only mark as published if the platform publish actually succeeded (or no platform targeted)

@@ -81,7 +81,14 @@ router.post(
   async (req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) => {
     try {
       if (!req.user) throw new UnauthorizedError('Authentication required');
-      await oauthService.disconnectAccount(req.user.userId, 'bluesky');
+      const { socialAccountId } = req.body;
+      if (socialAccountId) {
+        await oauthService.disconnectAccount(socialAccountId, req.user.userId);
+      } else {
+        // Legacy: disconnect first connected bluesky account
+        const account = await oauthService.getConnectedAccount(req.user.userId, 'bluesky');
+        if (account) await oauthService.disconnectAccount(account.id, req.user.userId);
+      }
       res.json({ success: true, data: null, message: 'Bluesky disconnected' });
     } catch (err) {
       next(err);

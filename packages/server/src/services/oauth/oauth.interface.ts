@@ -4,6 +4,7 @@ export interface OAuthTokens {
   expiresAt?: Date;
   accountId?: string;
   accountName?: string;
+  accountType?: string;
 }
 
 export interface OAuthProvider {
