@@ -20,6 +20,7 @@ import { instagramOAuthRoutes } from './oauth/instagram.routes.js';
 import { blueskyOAuthRoutes } from './oauth/bluesky.routes.js';
 import { facebookOAuthRoutes } from './oauth/facebook.routes.js';
 import { threadsOAuthRoutes } from './oauth/threads.routes.js';
+import { linkedinOAuthRoutes } from './oauth/linkedin.routes.js';
 import { uploadRoutes } from './upload.routes.js';
 
 const router = Router();
@@ -51,6 +52,7 @@ router.use('/oauth/instagram', instagramOAuthRoutes);
 router.use('/oauth/bluesky', blueskyOAuthRoutes);
 router.use('/oauth/facebook', facebookOAuthRoutes);
 router.use('/oauth/threads', threadsOAuthRoutes);
+router.use('/oauth/linkedin', linkedinOAuthRoutes);
 router.use('/upload', uploadRoutes);
 
 // Connected-platforms lookup (used by Content Builder for status dots + hint banner)

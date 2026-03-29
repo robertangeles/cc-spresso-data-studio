@@ -114,7 +114,7 @@ const PLATFORMS: PlatformInfo[] = [
       'Add "Share on LinkedIn" and "Sign In with LinkedIn" products',
       'Enter Client ID and Client Secret below',
     ],
-    status: 'coming-soon',
+    status: 'ready',
   },
   {
     slug: 'tiktok',

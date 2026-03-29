@@ -11,6 +11,7 @@ import { publishToInstagram } from './publishers/instagram.publisher.js';
 import { publishToBluesky } from './publishers/bluesky.publisher.js';
 import { publishToFacebook } from './publishers/facebook.publisher.js';
 import { publishToThreads } from './publishers/threads.publisher.js';
+import { publishToLinkedIn } from './publishers/linkedin.publisher.js';
 
 /**
  * List all scheduled posts for a user, ordered by scheduledAt asc, pending first.
@@ -286,6 +287,27 @@ export async function processDuePosts(): Promise<number> {
           } else {
             publishError = result.error ?? 'Threads publish failed';
             logger.warn({ postId: post.id, error: result.error }, 'Threads auto-publish failed');
+          }
+        }
+
+        // Attempt auto-publish to LinkedIn
+        if (channelSlug === 'linkedin') {
+          const result = await publishToLinkedIn({
+            accessToken: account.accessToken,
+            memberId: account.accountId,
+            text: contentItem.body,
+            imageUrl: contentItem.imageUrl ?? undefined,
+          });
+
+          if (result.success) {
+            autoPublished = true;
+            logger.info(
+              { postId: post.id, linkedinPostId: result.postId },
+              'Auto-published to LinkedIn',
+            );
+          } else {
+            publishError = result.error ?? 'LinkedIn publish failed';
+            logger.warn({ postId: post.id, error: result.error }, 'LinkedIn auto-publish failed');
           }
         }
       } else if (channelSlug) {

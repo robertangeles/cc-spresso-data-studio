@@ -6,6 +6,7 @@ import { InstagramOAuthProvider } from './instagram.oauth.js';
 import { BlueskyOAuthProvider } from './bluesky.oauth.js';
 import { FacebookOAuthProvider } from './facebook.oauth.js';
 import { ThreadsOAuthProvider } from './threads.oauth.js';
+import { LinkedInOAuthProvider } from './linkedin.oauth.js';
 
 // Registry of OAuth providers
 const providers: Record<string, OAuthProvider> = {
@@ -13,6 +14,7 @@ const providers: Record<string, OAuthProvider> = {
   bluesky: new BlueskyOAuthProvider(),
   facebook: new FacebookOAuthProvider(),
   threads: new ThreadsOAuthProvider(),
+  linkedin: new LinkedInOAuthProvider(),
 };
 
 export function getOAuthProvider(platform: string): OAuthProvider {
