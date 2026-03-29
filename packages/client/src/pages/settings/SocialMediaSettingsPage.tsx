@@ -329,6 +329,7 @@ export function SocialMediaSettingsPage() {
               <>
                 {activePlatform.credentialKeys.map((key, i) => {
                   const isSecret = true; // all credential fields are sensitive
+                  const isSavedMask = credentials[key] === '••••••••';
                   return (
                     <div key={key}>
                       <label className="block text-xs font-medium text-text-secondary mb-1.5">
@@ -347,7 +348,7 @@ export function SocialMediaSettingsPage() {
                           placeholder={`Enter ${activePlatform.credentialLabels[i]}...`}
                           className="w-full bg-surface-3 border border-border-subtle rounded-lg px-3 py-2 pr-10 text-text-primary text-sm focus:border-accent focus:ring-1 focus:ring-accent/30 focus:outline-none transition-colors placeholder:text-text-tertiary font-mono"
                         />
-                        {isSecret && (
+                        {isSecret && !isSavedMask && (
                           <button
                             type="button"
                             onClick={() =>
