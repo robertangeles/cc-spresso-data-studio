@@ -75,6 +75,28 @@ export async function getConnectedAccount(userId: string, platform: string) {
   });
 }
 
+/**
+ * Update access/refresh tokens for an existing connected account.
+ * Used when tokens are refreshed during auto-publish.
+ */
+export async function updateAccountTokens(
+  userId: string,
+  platform: string,
+  tokens: { accessToken: string; refreshToken: string },
+) {
+  await db
+    .update(schema.socialAccounts)
+    .set({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(eq(schema.socialAccounts.userId, userId), eq(schema.socialAccounts.platform, platform)),
+    );
+  logger.info({ platform }, 'Updated account tokens after refresh');
+}
+
 export async function disconnectAccount(userId: string, platform: string) {
   const account = await getConnectedAccount(userId, platform);
   if (!account) return;

@@ -7,6 +7,7 @@ import { seedAIProviders, seedRoles } from './services/admin.service.js';
 import { providerRegistry } from './services/ai/provider.registry.js';
 import { seedChannels } from './services/content.service.js';
 import { seedDefaultPrompts } from './services/system-prompt.service.js';
+import { startSchedulerCron } from './services/scheduler.cron.js';
 
 async function start() {
   await verifyConnection();
@@ -16,6 +17,8 @@ async function start() {
   await seedChannels();
   await seedDefaultPrompts();
   await providerRegistry.loadFromDatabase();
+
+  startSchedulerCron();
 
   app.listen(config.port, () => {
     logger.info(`Server running on port ${config.port} in ${config.nodeEnv} mode`);

@@ -9,7 +9,6 @@ import {
   Zap,
   PenTool,
   Library,
-  CalendarDays,
   Settings,
   User,
   LogOut,
@@ -33,7 +32,6 @@ const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/skills', label: 'Skills', icon: Zap },
   { to: '/content', label: 'Content Builder', icon: PenTool },
   { to: '/content/library', label: 'Content Library', icon: Library },
-  { to: '/content/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 

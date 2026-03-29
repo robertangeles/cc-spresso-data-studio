@@ -11,7 +11,7 @@ import {
 import { PlatformSelector } from '../components/content-builder/PlatformSelector';
 import { PostComposer } from '../components/content-builder/PostComposer';
 import { AICommandBar } from '../components/content-builder/AICommandBar';
-import { PlatformPreview } from '../components/content-builder/PlatformPreview';
+import { CharacterCountBar } from '../components/content-builder/CharacterCountBar';
 import { SchedulePanel } from '../components/content-builder/SchedulePanel';
 import { BuilderEmptyState } from '../components/content-builder/BuilderEmptyState';
 import MediaStudio from '../components/content-builder/MediaStudio';
@@ -53,10 +53,9 @@ export function ContentBuilderPage() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const userName = user?.name ?? 'User';
-
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
   const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
 
   // Fetch available channels and connected platforms on mount
   useEffect(() => {
@@ -320,7 +319,7 @@ export function ContentBuilderPage() {
     try {
       const { data: batchData } = await api.post('/content/batch', {
         userId: user?.id,
-        title: builder.title || 'Untitled Post',
+        title: builder.title || builder.mainBody.slice(0, 60).trim() || 'Untitled Post',
         mainBody: builder.mainBody,
         platformBodies:
           Object.keys(builder.platformBodies).length > 0
@@ -338,6 +337,8 @@ export function ContentBuilderPage() {
         });
       }
       toast(`Scheduled ${items.length} post(s) for ${new Date(date).toLocaleString()}`, 'success');
+      builder.resetContent();
+      setScheduleDate('');
     } catch (err) {
       console.error('Schedule failed:', err);
       toast('Failed to schedule. Please try again.', 'error');
@@ -579,6 +580,17 @@ export function ContentBuilderPage() {
                     onAdaptAll={builder.adaptAll}
                     flowState={builder.flowState}
                   />
+                  {builder.activeTab && (
+                    <div className="mt-1.5 flex justify-end px-1">
+                      <CharacterCountBar
+                        text={builder.platformBodies[builder.activeTab] ?? builder.mainBody}
+                        platformSlug={
+                          selectedChannelObjects.find((ch) => ch.id === builder.activeTab)?.slug ??
+                          null
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Media Studio — compact */}
@@ -596,7 +608,7 @@ export function ContentBuilderPage() {
           </div>
         </div>
 
-        {/* ─── RIGHT COLUMN: Preview + Schedule ─── */}
+        {/* ─── RIGHT COLUMN: Schedule ─── */}
         <div
           className={`hidden lg:flex flex-shrink-0 flex-col border-l border-border-subtle bg-surface-1 transition-all duration-300 ease-in-out overflow-hidden ${
             rightOpen ? 'w-[320px]' : 'w-0'
@@ -604,27 +616,19 @@ export function ContentBuilderPage() {
         >
           <div className="flex h-full w-[320px] flex-col">
             <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
-              <span className="text-sm font-medium text-text-secondary">Preview & Schedule</span>
+              <span className="text-sm font-medium text-text-secondary">Schedule</span>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              <PlatformPreview
-                selectedChannels={selectedChannelObjects}
-                title={builder.title}
-                mainBody={builder.mainBody}
-                platformBodies={builder.platformBodies}
-                imageUrl={builder.imageUrl}
-                userName={userName}
+            <div className="flex-1 overflow-y-auto p-4">
+              <SchedulePanel
+                onSchedule={handleSchedule}
+                onPublishNow={handlePublishNow}
+                onSaveDraft={handleSaveDraft}
+                isSaving={builder.isSaving}
+                selectedChannelCount={builder.selectedChannels.length}
+                flowState={builder.flowState}
+                scheduleDate={scheduleDate}
+                onScheduleDateChange={setScheduleDate}
               />
-              <div className="border-t border-border-subtle" data-tour="schedule">
-                <SchedulePanel
-                  onSchedule={handleSchedule}
-                  onPublishNow={handlePublishNow}
-                  onSaveDraft={handleSaveDraft}
-                  isSaving={builder.isSaving}
-                  selectedChannelCount={builder.selectedChannels.length}
-                  flowState={builder.flowState}
-                />
-              </div>
             </div>
           </div>
         </div>

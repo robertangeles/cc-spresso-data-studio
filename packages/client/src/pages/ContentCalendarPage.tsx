@@ -1,13 +1,24 @@
 import { useState, useEffect, useMemo } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, Check } from 'lucide-react';
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Check,
+  AlertTriangle,
+  Trash2,
+  RotateCcw,
+} from 'lucide-react';
 import { api } from '../lib/api';
+import { useToast } from '../components/ui/Toast';
 
 interface ScheduledPost {
   id: string;
   title: string;
   platform: string;
   scheduledAt: string;
-  status: 'scheduled' | 'published';
+  status: 'pending' | 'published' | 'failed' | 'cancelled';
+  error?: string | null;
 }
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -18,6 +29,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   facebook: 'bg-indigo-500',
   youtube: 'bg-red-500',
   tiktok: 'bg-fuchsia-500',
+  bluesky: 'bg-sky-500',
   newsletter: 'bg-amber-500',
   blog: 'bg-emerald-500',
   default: 'bg-text-tertiary',
@@ -76,12 +88,65 @@ function getWeekGrid(current: Date): Date[] {
   return days;
 }
 
+function StatusBadge({
+  status,
+  error,
+  onRetry,
+}: {
+  status: ScheduledPost['status'];
+  error?: string | null;
+  onRetry?: () => void;
+}) {
+  switch (status) {
+    case 'published':
+      return (
+        <span className="flex items-center gap-0.5 rounded-full bg-status-success-dim px-1.5 py-0.5 text-[9px] font-medium text-status-success">
+          <Check className="h-2.5 w-2.5" />
+          Published
+        </span>
+      );
+    case 'failed':
+      return (
+        <span className="flex items-center gap-1">
+          <span
+            className="flex items-center gap-0.5 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[9px] font-medium text-red-400 cursor-help"
+            title={error || 'Publishing failed'}
+          >
+            <AlertTriangle className="h-2.5 w-2.5" />
+            Failed
+          </span>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRetry();
+              }}
+              className="flex items-center gap-0.5 rounded-full bg-accent-dim px-1.5 py-0.5 text-[9px] font-medium text-accent hover:bg-accent/20 transition-colors"
+            >
+              <RotateCcw className="h-2.5 w-2.5" />
+              Retry
+            </button>
+          )}
+        </span>
+      );
+    case 'pending':
+    default:
+      return (
+        <span className="rounded-full bg-status-warning-dim px-1.5 py-0.5 text-[9px] font-medium text-status-warning">
+          Pending
+        </span>
+      );
+  }
+}
+
 export function ContentCalendarPage() {
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const today = useMemo(() => new Date(), []);
 
@@ -98,25 +163,54 @@ export function ContentCalendarPage() {
     [gridDays],
   );
 
+  const fetchPosts = useMemo(
+    () => () => {
+      if (!startStr || !endStr) return;
+      api
+        .get(`/schedule/calendar?start=${startStr}&end=${endStr}`)
+        .then(({ data }) => setPosts(data.data ?? []))
+        .catch(() => {});
+    },
+    [startStr, endStr],
+  );
+
+  // Initial fetch
   useEffect(() => {
     if (!startStr || !endStr) return;
-    let cancelled = false;
     setLoading(true);
-    api
-      .get(`/schedule/calendar?start=${startStr}&end=${endStr}`)
-      .then(({ data }) => {
-        if (!cancelled) setPosts(data.data ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setPosts([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [startStr, endStr]);
+    fetchPosts();
+    setLoading(false);
+  }, [fetchPosts, startStr, endStr]);
+
+  // Poll every 30s when there are pending posts
+  useEffect(() => {
+    const hasPending = posts.some((p) => p.status === 'pending');
+    if (!hasPending) return;
+    const interval = setInterval(fetchPosts, 30_000);
+    return () => clearInterval(interval);
+  }, [posts, fetchPosts]);
+
+  async function handleDelete(postId: string) {
+    try {
+      await api.delete(`/schedule/${postId}`);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      toast('Post deleted', 'success');
+    } catch {
+      toast('Failed to delete post', 'error');
+    }
+  }
+
+  async function handleRetry(postId: string) {
+    try {
+      await api.post(`/schedule/${postId}/retry`);
+      setPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, status: 'pending' as const, error: null } : p)),
+      );
+      toast('Retrying publish...', 'info');
+    } catch {
+      toast('Failed to retry', 'error');
+    }
+  }
 
   const postsByDate = useMemo(() => {
     const map = new Map<string, ScheduledPost[]>();
@@ -253,85 +347,101 @@ export function ContentCalendarPage() {
                   <div
                     key={dayKey}
                     className={`relative rounded-lg border transition-all duration-200 ${
-                      viewMode === 'week' ? 'min-h-[300px]' : 'min-h-[90px]'
+                      viewMode === 'week' ? 'min-h-[300px]' : 'min-h-[100px]'
                     } ${isToday ? 'border-accent ring-1 ring-accent/30' : 'border-border-subtle'} ${
                       hasPosts ? 'bg-surface-2' : 'bg-surface-1'
                     } ${!inMonth ? 'opacity-40' : ''}`}
                   >
-                    {/* Day number + dots */}
+                    {/* Day number */}
                     <button
                       type="button"
                       onClick={() => hasPosts && toggleDay(dayKey)}
-                      className="w-full p-2 text-left"
+                      className="w-full p-1.5 text-left"
                     >
-                      <div className="flex items-center justify-between">
-                        <span
-                          className={`text-xs font-medium ${
-                            isToday
-                              ? 'flex h-6 w-6 items-center justify-center rounded-full bg-accent text-text-inverse'
-                              : 'text-text-secondary'
-                          }`}
-                        >
-                          {day.getDate()}
-                        </span>
-                        {viewMode === 'month' && dayPosts.length > 0 && (
-                          <div className="flex gap-0.5">
-                            {dayPosts.slice(0, 4).map((p, i) => (
-                              <span
-                                key={i}
-                                className={`h-1.5 w-1.5 rounded-full ${getPlatformColor(p.platform)}`}
-                              />
-                            ))}
-                            {dayPosts.length > 4 && (
-                              <span className="text-[9px] text-text-tertiary ml-0.5">
-                                +{dayPosts.length - 4}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      <span
+                        className={`text-xs font-medium ${
+                          isToday
+                            ? 'flex h-6 w-6 items-center justify-center rounded-full bg-accent text-text-inverse'
+                            : 'text-text-secondary'
+                        }`}
+                      >
+                        {day.getDate()}
+                      </span>
                     </button>
+
+                    {/* Month view: compact time cards */}
+                    {viewMode === 'month' && dayPosts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleDay(dayKey)}
+                        className="w-full space-y-0.5 px-1 pb-1 text-left"
+                      >
+                        {dayPosts.slice(0, 3).map((p) => (
+                          <div
+                            key={p.id}
+                            className="flex items-center gap-1 rounded bg-surface-3/60 px-1 py-0.5"
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPlatformColor(p.platform)}`}
+                            />
+                            <span className="truncate text-[9px] text-text-tertiary">
+                              {formatTime(p.scheduledAt)}
+                            </span>
+                          </div>
+                        ))}
+                        {dayPosts.length > 3 && (
+                          <span className="block text-center text-[9px] text-text-tertiary">
+                            +{dayPosts.length - 3} more
+                          </span>
+                        )}
+                      </button>
+                    )}
 
                     {/* Week view: show post details inline */}
                     {viewMode === 'week' && dayPosts.length > 0 && (
                       <div className="space-y-1 px-2 pb-2">
-                        {dayPosts.map((post) => {
-                          const isPast = new Date(post.scheduledAt) < today;
-                          return (
-                            <div
-                              key={post.id}
-                              className="rounded-md bg-surface-3 p-1.5 transition-colors hover:bg-surface-3/80"
-                            >
-                              <div className="flex items-center gap-1.5 mb-0.5">
-                                <span
-                                  className={`h-2 w-2 rounded-full shrink-0 ${getPlatformColor(post.platform)}`}
-                                />
-                                <span className="truncate text-[11px] font-medium text-text-primary">
-                                  {post.title}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 pl-3.5">
-                                <span className="text-[10px] text-text-tertiary capitalize">
-                                  {post.platform}
-                                </span>
-                                <span className="flex items-center gap-0.5 text-[10px] text-text-tertiary">
-                                  <Clock className="h-2.5 w-2.5" />
-                                  {formatTime(post.scheduledAt)}
-                                </span>
-                                {isPast ? (
-                                  <span className="flex items-center gap-0.5 rounded-full bg-status-success-dim px-1.5 py-0.5 text-[9px] font-medium text-status-success">
-                                    <Check className="h-2.5 w-2.5" />
-                                    Published
-                                  </span>
-                                ) : (
-                                  <span className="rounded-full bg-status-warning-dim px-1.5 py-0.5 text-[9px] font-medium text-status-warning">
-                                    Scheduled
-                                  </span>
-                                )}
-                              </div>
+                        {dayPosts.map((post) => (
+                          <div
+                            key={post.id}
+                            className="group rounded-md bg-surface-3 p-1.5 transition-colors hover:bg-surface-3/80"
+                          >
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span
+                                className={`h-2 w-2 rounded-full shrink-0 ${getPlatformColor(post.platform)}`}
+                              />
+                              <span className="truncate text-[11px] font-medium text-text-primary flex-1">
+                                {post.title}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(post.id);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-text-tertiary hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
                             </div>
-                          );
-                        })}
+                            <div className="flex items-center gap-2 pl-3.5">
+                              <span className="text-[10px] text-text-tertiary capitalize">
+                                {post.platform}
+                              </span>
+                              <span className="flex items-center gap-0.5 text-[10px] text-text-tertiary">
+                                <Clock className="h-2.5 w-2.5" />
+                                {formatTime(post.scheduledAt)}
+                              </span>
+                              <StatusBadge
+                                status={post.status}
+                                error={post.error}
+                                onRetry={
+                                  post.status === 'failed' ? () => handleRetry(post.id) : undefined
+                                }
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
 
@@ -346,43 +456,50 @@ export function ContentCalendarPage() {
                           })}
                         </p>
                         <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                          {dayPosts.map((post) => {
-                            const isPast = new Date(post.scheduledAt) < today;
-                            return (
-                              <div
-                                key={post.id}
-                                className="rounded-md bg-surface-3 p-2 transition-colors hover:bg-surface-3/80"
-                              >
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span
-                                    className={`h-2 w-2 rounded-full shrink-0 ${getPlatformColor(post.platform)}`}
-                                  />
-                                  <span className="truncate text-[11px] font-medium text-text-primary">
-                                    {post.title}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 pl-3.5">
-                                  <span className="text-[10px] text-text-tertiary capitalize">
-                                    {post.platform}
-                                  </span>
-                                  <span className="flex items-center gap-0.5 text-[10px] text-text-tertiary">
-                                    <Clock className="h-2.5 w-2.5" />
-                                    {formatTime(post.scheduledAt)}
-                                  </span>
-                                  {isPast ? (
-                                    <span className="flex items-center gap-0.5 rounded-full bg-status-success-dim px-1.5 py-0.5 text-[9px] font-medium text-status-success">
-                                      <Check className="h-2.5 w-2.5" />
-                                      Published
-                                    </span>
-                                  ) : (
-                                    <span className="rounded-full bg-status-warning-dim px-1.5 py-0.5 text-[9px] font-medium text-status-warning">
-                                      Scheduled
-                                    </span>
-                                  )}
-                                </div>
+                          {dayPosts.map((post) => (
+                            <div
+                              key={post.id}
+                              className="group rounded-md bg-surface-3 p-2 transition-colors hover:bg-surface-3/80"
+                            >
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span
+                                  className={`h-2 w-2 rounded-full shrink-0 ${getPlatformColor(post.platform)}`}
+                                />
+                                <span className="truncate text-[11px] font-medium text-text-primary flex-1">
+                                  {post.title}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(post.id);
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-text-tertiary hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
                               </div>
-                            );
-                          })}
+                              <div className="flex items-center gap-2 pl-3.5">
+                                <span className="text-[10px] text-text-tertiary capitalize">
+                                  {post.platform}
+                                </span>
+                                <span className="flex items-center gap-0.5 text-[10px] text-text-tertiary">
+                                  <Clock className="h-2.5 w-2.5" />
+                                  {formatTime(post.scheduledAt)}
+                                </span>
+                                <StatusBadge
+                                  status={post.status}
+                                  error={post.error}
+                                  onRetry={
+                                    post.status === 'failed'
+                                      ? () => handleRetry(post.id)
+                                      : undefined
+                                  }
+                                />
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}

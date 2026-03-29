@@ -301,6 +301,19 @@ export function useContentBuilder() {
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 
+  /** Clear content after publish/schedule, preserving channels, active tab, and prompt */
+  const resetContent = useCallback(() => {
+    setState((prev) => ({
+      ...initialState,
+      selectedChannels: prev.selectedChannels,
+      activeTab: prev.activeTab,
+      activePromptId: prev.activePromptId,
+      activePromptName: prev.activePromptName,
+      activePromptBody: prev.activePromptBody,
+    }));
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
+
   const flowState = useMemo((): FlowState => {
     const hasChannels = state.selectedChannels.length > 0;
     const hasAdapted = hasChannels && Object.keys(state.platformBodies).length > 0;
@@ -335,6 +348,7 @@ export function useContentBuilder() {
     addCommand,
     undoLastAI,
     reset,
+    resetContent,
     flowState,
 
     // AI Command helpers

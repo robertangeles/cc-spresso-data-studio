@@ -23,7 +23,7 @@ import { SocialMediaSettingsPage } from './pages/settings/SocialMediaSettingsPag
 import { ContentLibraryPage } from './pages/ContentLibraryPage';
 import { ContentBuilderPage } from './pages/ContentBuilderPage';
 import { ChatPage } from './pages/ChatPage';
-import { ContentCalendarPage } from './pages/ContentCalendarPage';
+// ContentCalendarPage removed — calendar is now inline in Content Builder
 
 export function App() {
   return (
@@ -47,7 +47,7 @@ export function App() {
                 <Route path="/skills/:id/edit" element={<SkillCreatorPage />} />
                 <Route path="/content" element={<ContentBuilderPage />} />
                 <Route path="/content/library" element={<ContentLibraryPage />} />
-                <Route path="/content/calendar" element={<ContentCalendarPage />} />
+                <Route path="/content/calendar" element={<Navigate to="/content" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/settings" element={<SettingsLayout />}>
                   <Route index element={<Navigate to="integrations/database" replace />} />

@@ -847,16 +847,27 @@ function SocialAccountsTab() {
                   )}
                 </div>
               </div>
-              <div>
+              <div className="flex items-center gap-2">
                 {connected ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleDisconnect(platform.id)}
-                    disabled={disconnecting === platform.id}
-                  >
-                    {disconnecting === platform.id ? 'Disconnecting...' : 'Disconnect'}
-                  </Button>
+                  <>
+                    {isConnectable && (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => handleConnect(platform.id)}
+                      >
+                        Reconnect
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleDisconnect(platform.id)}
+                      disabled={disconnecting === platform.id}
+                    >
+                      {disconnecting === platform.id ? 'Disconnecting...' : 'Disconnect'}
+                    </Button>
+                  </>
                 ) : (
                   <div className="relative group">
                     <Button

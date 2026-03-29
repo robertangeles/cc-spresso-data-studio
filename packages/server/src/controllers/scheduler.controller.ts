@@ -3,7 +3,11 @@ import type { ApiResponse } from '@cc/shared';
 import { UnauthorizedError } from '../utils/errors.js';
 import * as schedulerService from '../services/scheduler.service.js';
 
-export async function listScheduled(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function listScheduled(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const posts = await schedulerService.listScheduledPosts(req.user.userId);
@@ -13,7 +17,11 @@ export async function listScheduled(req: Request, res: Response<ApiResponse<unkn
   }
 }
 
-export async function createScheduled(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function createScheduled(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { contentItemId, channelId, scheduledAt } = req.body;
@@ -29,27 +37,57 @@ export async function createScheduled(req: Request, res: Response<ApiResponse<un
   }
 }
 
-export async function cancelScheduled(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function deleteScheduled(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
-    const post = await schedulerService.cancelScheduledPost(req.params.id, req.user.userId);
+    await schedulerService.deleteScheduledPost(req.params.id, req.user.userId);
+    res.json({ success: true, data: { deleted: true } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function rescheduleScheduled(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const post = await schedulerService.reschedulePost(
+      req.params.id,
+      req.body.scheduledAt,
+      req.user.userId,
+    );
     res.json({ success: true, data: post });
   } catch (err) {
     next(err);
   }
 }
 
-export async function rescheduleScheduled(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function retryScheduled(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
-    const post = await schedulerService.reschedulePost(req.params.id, req.body.scheduledAt, req.user.userId);
+    const post = await schedulerService.retryScheduledPost(req.params.id, req.user.userId);
     res.json({ success: true, data: post });
   } catch (err) {
     next(err);
   }
 }
 
-export async function getCalendar(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function getCalendar(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { start, end } = req.query;

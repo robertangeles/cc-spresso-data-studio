@@ -2,7 +2,7 @@ import { eq, and, asc, lte, gte } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
-import { getConnectedAccount } from './oauth/oauth.service.js';
+import { getConnectedAccount, updateAccountTokens } from './oauth/oauth.service.js';
 import { publishToInstagram } from './publishers/instagram.publisher.js';
 import { publishToBluesky } from './publishers/bluesky.publisher.js';
 
@@ -45,9 +45,9 @@ export async function schedulePost(data: {
 }
 
 /**
- * Cancel a scheduled post. Checks ownership before updating.
+ * Delete a scheduled post. Checks ownership before removing.
  */
-export async function cancelScheduledPost(id: string, userId: string) {
+export async function deleteScheduledPost(id: string, userId: string) {
   const post = await db.query.scheduledPosts.findFirst({
     where: eq(schema.scheduledPosts.id, id),
   });
@@ -55,13 +55,9 @@ export async function cancelScheduledPost(id: string, userId: string) {
   if (!post) throw new NotFoundError('Scheduled post not found');
   if (post.userId !== userId) throw new ForbiddenError('Access denied');
 
-  const [updated] = await db
-    .update(schema.scheduledPosts)
-    .set({ status: 'cancelled', updatedAt: new Date() })
-    .where(eq(schema.scheduledPosts.id, id))
-    .returning();
+  await db.delete(schema.scheduledPosts).where(eq(schema.scheduledPosts.id, id));
 
-  return updated;
+  return { deleted: true };
 }
 
 /**
@@ -90,17 +86,65 @@ export async function reschedulePost(id: string, scheduledAt: string, userId: st
 }
 
 /**
+ * Retry a failed scheduled post. Resets status to pending and schedules 30s in the future.
+ */
+export async function retryScheduledPost(id: string, userId: string) {
+  const post = await db.query.scheduledPosts.findFirst({
+    where: eq(schema.scheduledPosts.id, id),
+  });
+
+  if (!post) throw new NotFoundError('Scheduled post not found');
+  if (post.userId !== userId) throw new ForbiddenError('Access denied');
+  if (post.status !== 'failed') throw new Error('Only failed posts can be retried');
+
+  const [updated] = await db
+    .update(schema.scheduledPosts)
+    .set({
+      status: 'pending',
+      scheduledAt: new Date(Date.now() + 30_000),
+      error: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.scheduledPosts.id, id))
+    .returning();
+
+  return updated;
+}
+
+/**
  * Get scheduled posts within a date range for calendar view.
+ * Joins contentItems and channels to provide title and platform for the UI.
  */
 export async function getCalendarPosts(userId: string, startDate: string, endDate: string) {
-  return db.query.scheduledPosts.findMany({
-    where: and(
-      eq(schema.scheduledPosts.userId, userId),
-      gte(schema.scheduledPosts.scheduledAt, new Date(startDate)),
-      lte(schema.scheduledPosts.scheduledAt, new Date(endDate)),
-    ),
-    orderBy: [asc(schema.scheduledPosts.scheduledAt)],
-  });
+  const rows = await db
+    .select({
+      id: schema.scheduledPosts.id,
+      scheduledAt: schema.scheduledPosts.scheduledAt,
+      status: schema.scheduledPosts.status,
+      error: schema.scheduledPosts.error,
+      title: schema.contentItems.title,
+      platform: schema.channels.slug,
+    })
+    .from(schema.scheduledPosts)
+    .leftJoin(schema.contentItems, eq(schema.scheduledPosts.contentItemId, schema.contentItems.id))
+    .leftJoin(schema.channels, eq(schema.scheduledPosts.channelId, schema.channels.id))
+    .where(
+      and(
+        eq(schema.scheduledPosts.userId, userId),
+        gte(schema.scheduledPosts.scheduledAt, new Date(startDate)),
+        lte(schema.scheduledPosts.scheduledAt, new Date(endDate)),
+      ),
+    )
+    .orderBy(asc(schema.scheduledPosts.scheduledAt));
+
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title ?? 'Untitled',
+    platform: r.platform ?? 'unknown',
+    scheduledAt: r.scheduledAt.toISOString(),
+    status: r.status,
+    error: r.error,
+  }));
 }
 
 /**
@@ -138,6 +182,7 @@ export async function processDuePosts(): Promise<number> {
 
       // Attempt auto-publish to Instagram if channel matches
       let autoPublished = false;
+      let publishError: string | null = null;
       if (channelSlug === 'instagram' && contentItem) {
         const account = await getConnectedAccount(post.userId, 'instagram');
         if (account?.accessToken && account.accountId) {
@@ -155,11 +200,11 @@ export async function processDuePosts(): Promise<number> {
               'Auto-published to Instagram',
             );
           } else {
-            logger.warn(
-              { postId: post.id, error: result.error },
-              'Instagram auto-publish failed — marking as published locally',
-            );
+            publishError = result.error ?? 'Instagram publish failed';
+            logger.warn({ postId: post.id, error: result.error }, 'Instagram auto-publish failed');
           }
+        } else {
+          publishError = 'No connected Instagram account found';
         }
       }
 
@@ -172,31 +217,42 @@ export async function processDuePosts(): Promise<number> {
             did: account.accountId,
             text: contentItem.body,
             refreshToken: account.refreshToken ?? undefined,
+            imageUrl: contentItem.imageUrl ?? undefined,
           });
 
           if (result.success) {
             autoPublished = true;
+            if (result.newTokens) {
+              await updateAccountTokens(post.userId, 'bluesky', result.newTokens);
+            }
             logger.info({ postId: post.id, bskyUri: result.postUri }, 'Auto-published to Bluesky');
           } else {
-            logger.warn(
-              { postId: post.id, error: result.error },
-              'Bluesky auto-publish failed — marking as published locally',
-            );
+            publishError = result.error ?? 'Bluesky publish failed';
+            logger.warn({ postId: post.id, error: result.error }, 'Bluesky auto-publish failed');
           }
+        } else {
+          publishError = 'No connected Bluesky account found';
         }
       }
 
-      // Mark scheduled post as published
-      await db
-        .update(schema.scheduledPosts)
-        .set({ status: 'published', publishedAt: now, updatedAt: now })
-        .where(eq(schema.scheduledPosts.id, post.id));
+      // Only mark as published if the platform publish actually succeeded (or no platform targeted)
+      if (autoPublished || !channelSlug) {
+        await db
+          .update(schema.scheduledPosts)
+          .set({ status: 'published', publishedAt: now, updatedAt: now })
+          .where(eq(schema.scheduledPosts.id, post.id));
 
-      // Update the corresponding content item status
-      await db
-        .update(schema.contentItems)
-        .set({ status: 'published', updatedAt: now })
-        .where(eq(schema.contentItems.id, post.contentItemId));
+        await db
+          .update(schema.contentItems)
+          .set({ status: 'published', updatedAt: now })
+          .where(eq(schema.contentItems.id, post.contentItemId));
+      } else {
+        // Platform publish failed — mark as failed so it can be retried
+        await db
+          .update(schema.scheduledPosts)
+          .set({ status: 'failed', error: publishError, updatedAt: now })
+          .where(eq(schema.scheduledPosts.id, post.id));
+      }
 
       logger.info(
         { postId: post.id, contentItemId: post.contentItemId, autoPublished },

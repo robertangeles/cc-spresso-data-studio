@@ -10,6 +10,7 @@ router.get('/', schedulerController.listScheduled);
 router.post('/', schedulerController.createScheduled);
 router.get('/calendar', schedulerController.getCalendar);
 router.put('/:id', schedulerController.rescheduleScheduled);
-router.delete('/:id', schedulerController.cancelScheduled);
+router.post('/:id/retry', schedulerController.retryScheduled);
+router.delete('/:id', schedulerController.deleteScheduled);
 
 export { router as schedulerRoutes };
