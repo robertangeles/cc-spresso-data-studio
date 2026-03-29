@@ -46,7 +46,10 @@ const SOCIAL_PLATFORMS = [
 ];
 
 export function ProfilePage() {
-  const [activeTab, setActiveTab] = useState<Tab>('info');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('oauth') ? 'social' : 'info';
+  });
   const {
     profile,
     isLoading: profileLoading,
@@ -667,7 +670,7 @@ function SocialAccountsTab() {
   // Fetch connected accounts on mount
   useEffect(() => {
     const fetchStatuses = async () => {
-      const platforms = ['instagram', 'bluesky'];
+      const platforms = ['instagram', 'bluesky', 'facebook', 'threads'];
       const accounts: ConnectedAccount[] = [];
 
       for (const platform of platforms) {

@@ -56,9 +56,11 @@ router.get('/callback', async (req: Request, res: Response, _next: NextFunction)
     logger.info({ userId, accountName: tokens.accountName }, 'Facebook Page connected');
     res.redirect(`${config.clientUrl}/profile?oauth=success&platform=facebook`);
   } catch (err) {
-    logger.error({ err }, 'Facebook OAuth callback failed');
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logger.error({ err, message: errMsg }, 'Facebook OAuth callback failed');
+    console.error('FACEBOOK OAUTH ERROR:', errMsg);
     res.redirect(
-      `${config.clientUrl}/profile?oauth=error&platform=facebook&reason=exchange_failed`,
+      `${config.clientUrl}/profile?oauth=error&platform=facebook&reason=${encodeURIComponent(errMsg)}`,
     );
   }
 });
