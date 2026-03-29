@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '../lib/api';
 import type { ScheduledPost } from '../utils/calendar';
 
-export function useScheduledPosts(currentMonth: Date) {
+export function useScheduledPosts(currentMonth: Date, refreshKey = 0) {
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -31,12 +31,12 @@ export function useScheduledPosts(currentMonth: Date) {
       .catch(() => {});
   }, [startStr, endStr]);
 
-  // Initial fetch
+  // Initial fetch + refresh on key change
   useEffect(() => {
     setLoading(true);
     fetchPosts();
     setLoading(false);
-  }, [fetchPosts]);
+  }, [fetchPosts, refreshKey]);
 
   // Poll every 30s when there are pending posts (only when tab is visible)
   useEffect(() => {

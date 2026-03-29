@@ -133,14 +133,10 @@ export default function MediaStudio({
   /* ── Image preview state ─────────────────────────────────── */
   if (imageUrl) {
     return (
-      <div className="rounded-xl border border-border-subtle bg-surface-1 p-4 space-y-3">
+      <div className="rounded-xl border border-border-subtle bg-surface-1 p-3">
         {/* Preview */}
-        <div className="relative group rounded-lg overflow-hidden">
-          <img
-            src={imageUrl}
-            alt="Media preview"
-            className="w-full max-h-72 object-cover rounded-lg"
-          />
+        <div className="relative group rounded-lg overflow-hidden inline-block">
+          <img src={imageUrl} alt="Media preview" className="h-20 w-auto object-cover rounded-lg" />
           {/* Overlay buttons */}
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-3">
             <button

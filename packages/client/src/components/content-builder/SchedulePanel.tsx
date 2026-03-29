@@ -10,6 +10,7 @@ interface SchedulePanelProps {
   flowState?: string;
   scheduleDate: string;
   onScheduleDateChange: (date: string) => void;
+  refreshKey?: number;
 }
 
 export function SchedulePanel({
@@ -21,6 +22,7 @@ export function SchedulePanel({
   flowState,
   scheduleDate,
   onScheduleDateChange,
+  refreshKey = 0,
 }: SchedulePanelProps) {
   const handleSchedule = () => {
     if (!scheduleDate || selectedChannelCount === 0) return;
@@ -58,7 +60,7 @@ export function SchedulePanel({
             Create your content first, then schedule it here.
           </p>
         </div>
-        <MiniCalendar onSelectDate={onScheduleDateChange} />
+        <MiniCalendar onSelectDate={onScheduleDateChange} refreshKey={refreshKey} />
       </div>
     );
   }
@@ -172,7 +174,7 @@ export function SchedulePanel({
       </div>
 
       {/* Mini Calendar */}
-      <MiniCalendar onSelectDate={onScheduleDateChange} />
+      <MiniCalendar onSelectDate={onScheduleDateChange} refreshKey={refreshKey} />
     </div>
   );
 }

@@ -56,6 +56,7 @@ export function ContentBuilderPage() {
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
   const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
+  const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
 
   // Fetch available channels and connected platforms on mount
   useEffect(() => {
@@ -319,7 +320,7 @@ export function ContentBuilderPage() {
     try {
       const { data: batchData } = await api.post('/content/batch', {
         userId: user?.id,
-        title: builder.title || builder.mainBody.slice(0, 60).trim() || 'Untitled Post',
+        title: builder.title || content.slice(0, 60).trim() || 'Untitled Post',
         mainBody: builder.mainBody,
         platformBodies:
           Object.keys(builder.platformBodies).length > 0
@@ -339,6 +340,7 @@ export function ContentBuilderPage() {
       toast(`Scheduled ${items.length} post(s) for ${new Date(date).toLocaleString()}`, 'success');
       builder.resetContent();
       setScheduleDate('');
+      setCalendarRefreshKey((k) => k + 1);
     } catch (err) {
       console.error('Schedule failed:', err);
       toast('Failed to schedule. Please try again.', 'error');
@@ -628,6 +630,7 @@ export function ContentBuilderPage() {
                 flowState={builder.flowState}
                 scheduleDate={scheduleDate}
                 onScheduleDateChange={setScheduleDate}
+                refreshKey={calendarRefreshKey}
               />
             </div>
           </div>

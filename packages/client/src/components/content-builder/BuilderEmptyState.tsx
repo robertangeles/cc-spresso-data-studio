@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Rocket,
   Camera,
@@ -9,6 +9,127 @@ import {
   RefreshCw,
   Loader2,
 } from 'lucide-react';
+
+// ─── Neural Network Background Animation ───
+interface Node {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  pulse: number;
+}
+
+function NeuralNetworkBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const nodesRef = useRef<Node[]>([]);
+  const animRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const resize = () => {
+      const rect = canvas.parentElement?.getBoundingClientRect();
+      if (rect) {
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+      }
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Initialize nodes
+    const nodeCount = 18;
+    nodesRef.current = Array.from({ length: nodeCount }, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.4,
+      radius: 2 + Math.random() * 2,
+      pulse: Math.random() * Math.PI * 2,
+    }));
+
+    const connectionDist = 160;
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const nodes = nodesRef.current;
+      const t = Date.now() * 0.001;
+
+      // Update positions
+      for (const node of nodes) {
+        node.x += node.vx;
+        node.y += node.vy;
+        node.pulse += 0.02;
+
+        // Bounce off edges
+        if (node.x < 0 || node.x > canvas.width) node.vx *= -1;
+        if (node.y < 0 || node.y > canvas.height) node.vy *= -1;
+        node.x = Math.max(0, Math.min(canvas.width, node.x));
+        node.y = Math.max(0, Math.min(canvas.height, node.y));
+      }
+
+      // Draw connections
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < connectionDist) {
+            const alpha = (1 - dist / connectionDist) * 0.25;
+            // Pulse effect along the connection
+            const pulseAlpha = Math.sin(t * 2 + i + j) * 0.5 + 0.5;
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.strokeStyle = `rgba(255, 214, 10, ${alpha * pulseAlpha})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Draw nodes
+      for (const node of nodes) {
+        const glow = Math.sin(node.pulse) * 0.3 + 0.7;
+        const r = node.radius * glow;
+
+        // Outer glow
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r * 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 214, 10, ${0.04 * glow})`;
+        ctx.fill();
+
+        // Node
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 214, 10, ${0.4 * glow})`;
+        ctx.fill();
+      }
+
+      animRef.current = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 pointer-events-none"
+      style={{ opacity: 0.6 }}
+    />
+  );
+}
 
 interface BuilderEmptyStateProps {
   onStartScratch: () => void;
@@ -111,7 +232,10 @@ export function BuilderEmptyState({
   };
 
   return (
-    <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+    <div className="relative flex flex-col items-center justify-center px-4 py-10 text-center overflow-hidden">
+      {/* Neural network animated background */}
+      <NeuralNetworkBg />
+
       {/* Headline */}
       <h2 className="text-xl font-bold text-text-primary mb-1.5 animate-slide-up">
         What are you creating today?

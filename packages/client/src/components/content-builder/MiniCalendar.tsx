@@ -73,13 +73,14 @@ function StatusBadge({
 
 interface MiniCalendarProps {
   onSelectDate: (date: string) => void;
+  refreshKey?: number;
 }
 
-export function MiniCalendar({ onSelectDate }: MiniCalendarProps) {
+export function MiniCalendar({ onSelectDate, refreshKey = 0 }: MiniCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string>(() => new Date().toDateString());
 
-  const { postsByDate, handleDelete, handleRetry } = useScheduledPosts(currentMonth);
+  const { postsByDate, handleDelete, handleRetry } = useScheduledPosts(currentMonth, refreshKey);
 
   const today = useMemo(() => new Date(), []);
 
