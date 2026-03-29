@@ -104,38 +104,45 @@ export function ChatInput({
 
         {/* Knight Rider scanning border animation */}
         <style>{`
-          @keyframes knight-rider {
-            0%   { background-position: -200% 0, 0 -200%, 200% 0, 0 200%; }
-            25%  { background-position: 200% 0, 0 -200%, 200% 0, 0 200%; }
-            50%  { background-position: 200% 0, 0 200%, 200% 0, 0 200%; }
-            75%  { background-position: 200% 0, 0 200%, -200% 0, 0 200%; }
-            100% { background-position: 200% 0, 0 200%, -200% 0, 0 -200%; }
+          @keyframes kr-scan {
+            0% { left: -35%; }
+            50% { left: 100%; }
+            100% { left: -35%; }
+          }
+          .kr-idle::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: -35%;
+            width: 35%;
+            height: 3px;
+            background: radial-gradient(ellipse, rgba(255,214,10,1) 0%, rgba(255,214,10,0.5) 40%, transparent 70%);
+            animation: kr-scan 5s ease-in-out infinite;
+            z-index: 20;
+            filter: drop-shadow(0 0 4px rgba(255,214,10,0.4));
+          }
+          .kr-idle::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 100%;
+            width: 35%;
+            height: 2px;
+            background: radial-gradient(ellipse, rgba(255,214,10,0.7) 0%, rgba(255,214,10,0.3) 40%, transparent 70%);
+            animation: kr-scan 5s ease-in-out infinite;
+            animation-delay: -2.5s;
+            z-index: 20;
+            filter: drop-shadow(0 0 6px rgba(255,214,10,0.7));
           }
         `}</style>
 
         {/* Input box */}
         <div
-          className={`relative rounded-2xl border bg-surface-2 transition-all duration-300 ease-spring ${
+          className={`relative rounded-2xl border bg-surface-2 overflow-hidden transition-all duration-300 ease-spring ${
             hasContent
               ? 'border-accent/40 shadow-glow-accent'
               : 'border-border-default focus-within:border-accent/40 focus-within:shadow-glow-accent'
-          }`}
-          style={
-            !hasContent
-              ? {
-                  backgroundImage: [
-                    'linear-gradient(90deg, transparent 30%, rgba(255,214,10,0.5) 50%, transparent 70%)',
-                    'linear-gradient(180deg, transparent 30%, rgba(255,214,10,0.5) 50%, transparent 70%)',
-                    'linear-gradient(270deg, transparent 30%, rgba(255,214,10,0.5) 50%, transparent 70%)',
-                    'linear-gradient(0deg, transparent 30%, rgba(255,214,10,0.5) 50%, transparent 70%)',
-                  ].join(','),
-                  backgroundSize: '200% 1px, 1px 200%, 200% 1px, 1px 200%',
-                  backgroundPosition: '-200% 0, 0 -200%, 200% 0, 0 200%',
-                  backgroundRepeat: 'no-repeat',
-                  animation: 'knight-rider 4s linear infinite',
-                }
-              : undefined
-          }
+          } ${!hasContent ? 'kr-idle' : ''}`}
         >
           <textarea
             ref={textareaRef}
