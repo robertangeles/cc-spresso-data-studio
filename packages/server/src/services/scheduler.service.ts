@@ -297,6 +297,7 @@ export async function processDuePosts(): Promise<number> {
             memberId: account.accountId,
             text: contentItem.body,
             imageUrl: contentItem.imageUrl ?? undefined,
+            accountType: account.accountType,
           });
 
           if (result.success) {

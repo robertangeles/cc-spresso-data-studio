@@ -900,6 +900,18 @@ function SocialAccountsTab() {
                       {hasAccounts ? 'Add Account' : 'Connect'}
                     </Button>
                   )}
+                  {platform.id === 'linkedin' && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        const token = getAccessToken();
+                        window.location.href = `/api/oauth/linkedin/connect-page${token ? `?token=${token}` : ''}`;
+                      }}
+                    >
+                      Connect Page
+                    </Button>
+                  )}
                   {!isConnectable && !hasAccounts && (
                     <div className="relative group">
                       <Button size="sm" variant="secondary" disabled>

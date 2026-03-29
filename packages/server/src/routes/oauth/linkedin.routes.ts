@@ -4,6 +4,7 @@ import type { ApiResponse } from '@cc/shared';
 import { authenticate } from '../../middleware/auth.middleware.js';
 import { UnauthorizedError } from '../../utils/errors.js';
 import * as oauthService from '../../services/oauth/oauth.service.js';
+import type { LinkedInOAuthProvider } from '../../services/oauth/linkedin.oauth.js';
 import { logger } from '../../config/logger.js';
 import { config } from '../../config/index.js';
 
@@ -83,6 +84,83 @@ router.get(
     }
   },
 );
+
+// GET /oauth/linkedin/connect-page — redirect to LinkedIn OAuth for Company Pages
+router.get(
+  '/connect-page',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new UnauthorizedError('Authentication required');
+      const provider = oauthService.getOAuthProvider('linkedin') as LinkedInOAuthProvider;
+      const redirectBase = `${req.protocol}://${req.get('host')}`;
+      const authUrl = await provider.getOrgAuthUrl(req.user.userId, redirectBase);
+      res.redirect(authUrl);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /oauth/linkedin/callback-page — handle LinkedIn Company Page OAuth callback
+router.get('/callback-page', async (req: Request, res: Response, _next: NextFunction) => {
+  try {
+    const { code, state, error } = req.query;
+
+    if (error) {
+      logger.warn({ error }, 'LinkedIn Page OAuth denied by user');
+      return res.redirect(`${config.clientUrl}/profile?oauth=error&platform=linkedin`);
+    }
+
+    if (!code || !state) {
+      return res.redirect(
+        `${config.clientUrl}/profile?oauth=error&platform=linkedin&reason=missing_params`,
+      );
+    }
+
+    const stateData = JSON.parse(Buffer.from(state as string, 'base64url').toString());
+    const userId = stateData.userId;
+
+    if (!userId) {
+      return res.redirect(
+        `${config.clientUrl}/profile?oauth=error&platform=linkedin&reason=invalid_state`,
+      );
+    }
+
+    const provider = oauthService.getOAuthProvider('linkedin') as LinkedInOAuthProvider;
+    const redirectBase = `${req.protocol}://${req.get('host')}`;
+    const tokens = await provider.exchangeOrgCode(code as string, redirectBase);
+
+    // Get admin organizations and connect each one
+    const orgs = await provider.getAdminOrganizations(tokens.accessToken);
+
+    if (orgs.length === 0) {
+      return res.redirect(
+        `${config.clientUrl}/profile?oauth=error&platform=linkedin&reason=No%20LinkedIn%20Company%20Pages%20found`,
+      );
+    }
+
+    for (const org of orgs) {
+      await oauthService.storeTokens(userId, 'linkedin', {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt,
+        accountId: org.orgId,
+        accountName: org.orgName,
+        accountType: 'page',
+      });
+    }
+
+    logger.info({ userId, orgCount: orgs.length }, 'LinkedIn Company Pages connected');
+    res.redirect(`${config.clientUrl}/profile?oauth=success&platform=linkedin`);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logger.error({ err, message: errMsg }, 'LinkedIn Page OAuth callback failed');
+    res.redirect(
+      `${config.clientUrl}/profile?oauth=error&platform=linkedin&reason=${encodeURIComponent(errMsg)}`,
+    );
+  }
+});
 
 // POST /oauth/linkedin/disconnect
 router.post(

@@ -81,12 +81,16 @@ export async function publishToLinkedIn(params: {
   memberId: string;
   text: string;
   imageUrl?: string;
+  accountType?: string;
 }): Promise<PublishResult> {
-  const { accessToken, memberId, text, imageUrl } = params;
+  const { accessToken, memberId, text, imageUrl, accountType } = params;
 
   try {
+    const author =
+      accountType === 'page' ? `urn:li:organization:${memberId}` : `urn:li:person:${memberId}`;
+
     const postBody: Record<string, unknown> = {
-      author: `urn:li:person:${memberId}`,
+      author,
       commentary: text,
       visibility: 'PUBLIC',
       distribution: {
