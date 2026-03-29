@@ -652,7 +652,13 @@ interface ConnectedAccount {
 }
 
 // Platforms with live OAuth support (redirect-based)
-const OAUTH_ENABLED_PLATFORMS = new Set(['instagram', 'facebook', 'threads', 'linkedin']);
+const OAUTH_ENABLED_PLATFORMS = new Set([
+  'instagram',
+  'facebook',
+  'threads',
+  'linkedin',
+  'pinterest',
+]);
 
 // Platforms that use credential-based auth (handle + app password)
 const CREDENTIAL_AUTH_PLATFORMS = new Set(['bluesky']);
@@ -680,7 +686,7 @@ function SocialAccountsTab() {
   // Fetch connected accounts on mount
   useEffect(() => {
     const fetchStatuses = async () => {
-      const platforms = ['instagram', 'bluesky', 'facebook', 'threads', 'linkedin'];
+      const platforms = ['instagram', 'bluesky', 'facebook', 'threads', 'linkedin', 'pinterest'];
       const accounts: ConnectedAccount[] = [];
 
       for (const platform of platforms) {
@@ -1032,7 +1038,14 @@ function SocialAccountsTab() {
             toast('Accounts connected successfully!', 'success');
             setPagePicker(null);
             // Refresh connected accounts
-            const platforms = ['instagram', 'bluesky', 'facebook', 'threads', 'linkedin'];
+            const platforms = [
+              'instagram',
+              'bluesky',
+              'facebook',
+              'threads',
+              'linkedin',
+              'pinterest',
+            ];
             const accounts: ConnectedAccount[] = [];
             for (const platform of platforms) {
               try {

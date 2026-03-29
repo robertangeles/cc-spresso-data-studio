@@ -154,7 +154,7 @@ const PLATFORMS: PlatformInfo[] = [
       'Go to developers.pinterest.com and create an app',
       'Enter App ID and App Secret below',
     ],
-    status: 'coming-soon',
+    status: 'ready',
   },
   {
     slug: 'youtube',
