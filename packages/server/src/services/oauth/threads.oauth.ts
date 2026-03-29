@@ -7,17 +7,32 @@ export class ThreadsOAuthProvider implements OAuthProvider {
   platform = 'threads';
 
   private async getCredentials(): Promise<{ appId: string; appSecret: string }> {
-    const appIdSetting = await db.query.settings.findFirst({
-      where: eq(schema.settings.key, 'META_APP_ID'),
+    // Try Threads-specific credentials first, fall back to shared Meta credentials
+    let appIdSetting = await db.query.settings.findFirst({
+      where: eq(schema.settings.key, 'THREADS_APP_ID'),
     });
-    const appSecretSetting = await db.query.settings.findFirst({
-      where: eq(schema.settings.key, 'META_APP_SECRET'),
+    if (!appIdSetting?.value) {
+      appIdSetting = await db.query.settings.findFirst({
+        where: eq(schema.settings.key, 'META_APP_ID'),
+      });
+    }
+    let appSecretSetting = await db.query.settings.findFirst({
+      where: eq(schema.settings.key, 'THREADS_APP_SECRET'),
     });
+    if (!appSecretSetting?.value) {
+      appSecretSetting = await db.query.settings.findFirst({
+        where: eq(schema.settings.key, 'META_APP_SECRET'),
+      });
+    }
     if (!appIdSetting?.value || !appSecretSetting?.value) {
       throw new Error(
-        'Meta App credentials not configured. Add META_APP_ID and META_APP_SECRET in Settings.',
+        'Threads App credentials not configured. Add THREADS_APP_ID and THREADS_APP_SECRET in Settings → Social Media → Threads.',
       );
     }
+    logger.info(
+      { appId: appIdSetting.value.substring(0, 6) + '...' },
+      'Threads credentials loaded',
+    );
     return { appId: appIdSetting.value, appSecret: appSecretSetting.value };
   }
 
@@ -26,7 +41,7 @@ export class ThreadsOAuthProvider implements OAuthProvider {
     const redirectUri = `${redirectBase}/api/oauth/threads/callback`;
     const state = Buffer.from(JSON.stringify({ userId })).toString('base64url');
     const scopes = 'threads_basic,threads_content_publish,threads_manage_insights';
-    return `https://threads.net/oauth/authorize?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${state}&response_type=code`;
+    return `https://www.threads.net/oauth/authorize?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${state}&response_type=code`;
   }
 
   async exchangeCode(code: string, redirectBase: string): Promise<OAuthTokens> {
