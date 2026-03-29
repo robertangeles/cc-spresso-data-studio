@@ -35,8 +35,15 @@ app.use(express.urlencoded({ extended: true }));
 // Logging
 app.use(pinoHttp({ logger }));
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
+// Serve uploaded files (cross-origin allowed for dev client on different port)
+app.use(
+  '/uploads',
+  (_req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  },
+  express.static(path.resolve(__dirname, '../uploads')),
+);
 
 // API Routes
 app.use('/api', router);

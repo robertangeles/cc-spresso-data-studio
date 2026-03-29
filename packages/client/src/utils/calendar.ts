@@ -3,6 +3,7 @@ export interface ScheduledPost {
   id: string;
   title: string;
   platform: string;
+  accountName?: string | null;
   scheduledAt: string;
   status: 'pending' | 'published' | 'failed' | 'cancelled';
   error?: string | null;

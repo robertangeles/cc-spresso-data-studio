@@ -263,6 +263,13 @@ export function MiniCalendar({ onSelectDate, refreshKey = 0 }: MiniCalendarProps
                     onRetry={post.status === 'failed' ? () => handleRetry(post.id) : undefined}
                   />
                 </div>
+                {post.accountName && (
+                  <div className="pl-3.5 -mt-0.5">
+                    <span className="text-[10px] text-text-secondary leading-tight">
+                      @{post.accountName}
+                    </span>
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -1,6 +1,8 @@
+import sharp from 'sharp';
 import { logger } from '../../config/logger.js';
 
 const BLUESKY_API = 'https://bsky.social/xrpc';
+const BLUESKY_BLOB_MAX = 976_000; // ~950KB safe limit under Bluesky's 1MB cap
 
 interface PublishResult {
   success: boolean;
@@ -11,7 +13,43 @@ interface PublishResult {
 }
 
 /**
+ * Compress an image buffer to fit within Bluesky's 1MB blob limit.
+ * Progressively reduces quality and dimensions until under the limit.
+ */
+async function compressForBluesky(buffer: Buffer): Promise<{ data: Buffer; mimeType: string }> {
+  // Already small enough
+  if (buffer.length <= BLUESKY_BLOB_MAX) {
+    return { data: buffer, mimeType: 'image/jpeg' };
+  }
+
+  let quality = 85;
+  let width = 1600;
+  let compressed = buffer;
+
+  while (compressed.length > BLUESKY_BLOB_MAX && quality >= 30) {
+    compressed = await sharp(buffer)
+      .resize({ width, withoutEnlargement: true })
+      .jpeg({ quality })
+      .toBuffer();
+
+    if (compressed.length <= BLUESKY_BLOB_MAX) break;
+
+    // Reduce quality and dimensions progressively
+    quality -= 10;
+    width = Math.round(width * 0.8);
+  }
+
+  logger.info(
+    { originalSize: buffer.length, compressedSize: compressed.length, quality, width },
+    'Compressed image for Bluesky',
+  );
+
+  return { data: compressed, mimeType: 'image/jpeg' };
+}
+
+/**
  * Upload an image blob to Bluesky and return the blob reference for embedding.
+ * Automatically compresses images that exceed Bluesky's 1MB limit.
  */
 async function uploadImageBlob(
   token: string,
@@ -25,8 +63,8 @@ async function uploadImageBlob(
       return null;
     }
 
-    const mimeType = imgRes.headers.get('content-type') ?? 'image/jpeg';
-    const buffer = Buffer.from(await imgRes.arrayBuffer());
+    const rawBuffer = Buffer.from(await imgRes.arrayBuffer());
+    const { data: buffer, mimeType } = await compressForBluesky(rawBuffer);
 
     // Upload to Bluesky
     const uploadRes = await fetch(`${BLUESKY_API}/com.atproto.repo.uploadBlob`, {

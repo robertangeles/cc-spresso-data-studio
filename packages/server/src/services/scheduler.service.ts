@@ -124,10 +124,19 @@ export async function getCalendarPosts(userId: string, startDate: string, endDat
       error: schema.scheduledPosts.error,
       title: schema.contentItems.title,
       platform: schema.channels.slug,
+      accountName: schema.socialAccounts.accountName,
     })
     .from(schema.scheduledPosts)
     .leftJoin(schema.contentItems, eq(schema.scheduledPosts.contentItemId, schema.contentItems.id))
     .leftJoin(schema.channels, eq(schema.scheduledPosts.channelId, schema.channels.id))
+    .leftJoin(
+      schema.socialAccounts,
+      and(
+        eq(schema.socialAccounts.userId, schema.scheduledPosts.userId),
+        eq(schema.socialAccounts.platform, schema.channels.slug),
+        eq(schema.socialAccounts.isConnected, true),
+      ),
+    )
     .where(
       and(
         eq(schema.scheduledPosts.userId, userId),
@@ -141,6 +150,7 @@ export async function getCalendarPosts(userId: string, startDate: string, endDat
     id: r.id,
     title: r.title ?? 'Untitled',
     platform: r.platform ?? 'unknown',
+    accountName: r.accountName ?? null,
     scheduledAt: r.scheduledAt.toISOString(),
     status: r.status,
     error: r.error,
