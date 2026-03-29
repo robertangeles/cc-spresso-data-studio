@@ -15,15 +15,15 @@ const tabs: { id: string; label: string; icon: LucideIcon }[] = [
 
 export function FlowTabs({ activeTab, onTabChange }: FlowTabsProps) {
   return (
-    <div className="flex border-b border-gray-200">
+    <div className="flex border-b border-border-subtle">
       {tabs.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onTabChange(tab.id)}
           className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
             activeTab === tab.id
-              ? 'border-b-2 border-brand-600 text-brand-600'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'border-b-2 border-accent text-accent'
+              : 'text-text-tertiary hover:text-text-secondary'
           }`}
         >
           <tab.icon className="h-4 w-4" />

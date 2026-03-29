@@ -76,13 +76,25 @@ export function AICommandBar({
   };
 
   const hasContent = input.trim().length > 0;
-  const visibleHistory = commandHistory.slice(-5);
+  const visibleHistory = commandHistory.slice(-3);
+  const showWelcome = visibleHistory.length === 0 && !isProcessing;
 
   return (
     <div className="space-y-2">
+      {/* Welcome hint — shown when no commands yet */}
+      {showWelcome && (
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-accent/[0.04] border border-accent/10 animate-slide-up">
+          <Wand2 className="h-3.5 w-3.5 text-accent/60 shrink-0" />
+          <p className="text-[11px] text-text-tertiary">
+            <span className="text-accent/80 font-medium">AI Co-pilot ready.</span> Try: &ldquo;Write
+            a launch post for my product&rdquo; or &ldquo;Make this more conversational&rdquo;
+          </p>
+        </div>
+      )}
+
       {/* Command history — collapsed list above the bar */}
       {visibleHistory.length > 0 && (
-        <div className="max-h-[120px] overflow-y-auto space-y-0.5 scrollbar-thin">
+        <div className="max-h-[90px] overflow-y-auto space-y-0.5 scrollbar-thin">
           {visibleHistory.map((cmd, i) => (
             <div
               key={`${cmd.timestamp}-${i}`}

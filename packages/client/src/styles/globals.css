@@ -47,6 +47,12 @@
   body {
     background-color: var(--surface-0);
     color: var(--text-primary);
+    font-family:
+      'Inter',
+      system-ui,
+      -apple-system,
+      sans-serif;
+    font-weight: 400;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';

@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   PenTool,
-  ChevronLeft,
   Sparkles,
   Save,
-  PanelRightClose,
   Keyboard,
   Check,
+  PanelLeftClose,
+  PanelRightClose,
 } from 'lucide-react';
 import { PlatformSelector } from '../components/content-builder/PlatformSelector';
 import { PostComposer } from '../components/content-builder/PostComposer';
@@ -16,6 +16,7 @@ import { SchedulePanel } from '../components/content-builder/SchedulePanel';
 import { BuilderEmptyState } from '../components/content-builder/BuilderEmptyState';
 import MediaStudio from '../components/content-builder/MediaStudio';
 import { PromptEditorModal } from '../components/content-builder/PromptEditorModal';
+import { StepIndicator } from '../components/content-builder/StepIndicator';
 import { useContentBuilder } from '../hooks/useContentBuilder';
 import { usePrompts } from '../hooks/usePrompts';
 import { useContentChat } from '../hooks/useContentChat';
@@ -33,6 +34,7 @@ interface Channel {
 }
 
 export function ContentBuilderPage() {
+  const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [promptModalOpen, setPromptModalOpen] = useState(false);
@@ -54,6 +56,7 @@ export function ContentBuilderPage() {
   const userName = user?.name ?? 'User';
 
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+  const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
 
   // Fetch available channels and connected platforms on mount
   useEffect(() => {
@@ -238,7 +241,7 @@ export function ContentBuilderPage() {
         builder.setProcessing(false);
       }
     },
-    [builder, chat, toast],
+    [builder, chat, toast, selectedChannelObjects],
   );
 
   // Whether to show the empty state
@@ -252,7 +255,6 @@ export function ContentBuilderPage() {
   };
 
   const handleOpenPrompts = () => {
-    // Focus the prompt badge in the command bar
     const promptBtn = document.querySelector<HTMLButtonElement>(
       '[data-tour="ai-assistant"] button',
     );
@@ -262,6 +264,34 @@ export function ContentBuilderPage() {
   const handleRepurpose = () => {
     // TODO: navigate to content library
   };
+
+  const handleQuickStart = useCallback(
+    async (category: string) => {
+      if (isGeneratingTemplate) return;
+      setIsGeneratingTemplate(true);
+      try {
+        const { data } = await api.post<{
+          success: boolean;
+          data: { title: string; body: string; source: 'ai' | 'fallback' };
+        }>('/content/templates', { category });
+
+        const result = data.data;
+        builder.setTitle(result.title);
+        builder.setMainBody(result.body);
+
+        if (result.source === 'ai') {
+          toast('AI template generated! Edit it and make it yours.', 'success');
+        } else {
+          toast('Template loaded (AI unavailable — using starter skeleton).', 'info');
+        }
+      } catch {
+        toast('Failed to generate template. Please try again.', 'error');
+      } finally {
+        setIsGeneratingTemplate(false);
+      }
+    },
+    [builder, toast, isGeneratingTemplate],
+  );
 
   // Image click handler
   const handleImageClick = () => {
@@ -327,7 +357,9 @@ export function ContentBuilderPage() {
       return;
     }
     toast('Publishing...', 'info');
-    await handleSchedule(new Date().toISOString());
+    // Schedule 30 seconds in the future to pass server-side validation
+    const publishDate = new Date(Date.now() + 30_000).toISOString();
+    await handleSchedule(publishDate);
   };
 
   const handleSaveDraft = async () => {
@@ -345,27 +377,34 @@ export function ContentBuilderPage() {
 
   return (
     <div className="flex h-full flex-col -m-6">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-accent/10 bg-gradient-to-r from-surface-2 to-surface-1 px-6 py-3">
-        <div className="flex items-center gap-2.5">
+      {/* ─── Header ─── */}
+      <div className="flex items-center justify-between border-b border-accent/10 bg-gradient-to-r from-surface-2 to-surface-1 px-4 py-2.5">
+        <div className="flex items-center gap-3">
           <PenTool className="h-5 w-5 text-accent" />
-          <h1 className="text-lg font-semibold text-text-primary">Content Builder</h1>
-          <div className="flex items-center gap-1 ml-3">
-            {['WRITING', 'PLATFORMS_SELECTED', 'ADAPTED'].map((state, i) => {
-              const states = ['WRITING', 'PLATFORMS_SELECTED', 'ADAPTED', 'MEDIA_ADDED', 'READY'];
-              const stateIndex = states.indexOf(builder.flowState);
-              const isActive = i <= stateIndex && stateIndex >= 0;
-              return (
-                <div
-                  key={state}
-                  className={`h-1.5 w-1.5 rounded-full transition-colors ${isActive ? 'bg-accent' : 'bg-surface-3'}`}
-                />
-              );
-            })}
+          <h1 className="text-lg font-semibold text-text-primary hidden lg:block">
+            Content Builder
+          </h1>
+          <h1 className="text-lg font-semibold text-text-primary lg:hidden">CB</h1>
+
+          {/* Step indicator */}
+          <div className="hidden md:flex ml-2">
+            <StepIndicator flowState={builder.flowState} />
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Panel toggles — visible at xl breakpoint */}
+          <button
+            onClick={() => setLeftOpen((v) => !v)}
+            className="hidden xl:flex items-center justify-center rounded-lg p-1.5 text-text-tertiary bg-surface-2/50 border border-white/5 hover:bg-surface-3 hover:text-text-secondary transition-all duration-200"
+            aria-label={leftOpen ? 'Collapse platforms panel' : 'Expand platforms panel'}
+            title="Toggle platforms panel"
+          >
+            <PanelLeftClose
+              className={`h-4 w-4 transition-transform ${!leftOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
           <div className="flex flex-col items-center">
             <Button
               variant="ghost"
@@ -419,29 +458,59 @@ export function ContentBuilderPage() {
                 </span>
               </div>
             )}
+
+          <button
+            onClick={() => setRightOpen((v) => !v)}
+            className="hidden xl:flex items-center justify-center rounded-lg p-1.5 text-text-tertiary bg-surface-2/50 border border-white/5 hover:bg-surface-3 hover:text-text-secondary transition-all duration-200"
+            aria-label={rightOpen ? 'Collapse preview panel' : 'Expand preview panel'}
+            title="Toggle preview panel"
+          >
+            <PanelRightClose
+              className={`h-4 w-4 transition-transform ${!rightOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
         </div>
       </div>
 
-      {/* Contextual flow hint */}
-      {builder.flowState !== 'READY' && (
-        <div className="px-6 py-1.5 bg-accent/[0.03] border-b border-border-subtle">
-          <p className="text-xs text-text-tertiary text-center">
-            {builder.flowState === 'IDLE' &&
-              'Start writing your content below, or pick a prompt from the AI bar'}
-            {builder.flowState === 'WRITING' &&
-              'Next: Select platforms above to target your content'}
-            {builder.flowState === 'PLATFORMS_SELECTED' &&
-              'Looking good! Click "Adapt All" to generate versions for each platform'}
-            {builder.flowState === 'ADAPTED' && 'Optional: Add media, then schedule when ready'}
-            {builder.flowState === 'MEDIA_ADDED' &&
-              'Ready to go! Schedule your posts or publish now'}
-          </p>
-        </div>
-      )}
+      {/* ─── Mobile step indicator (below header) ─── */}
+      <div className="flex md:hidden items-center justify-center border-b border-border-subtle px-4 py-2 bg-surface-1/50">
+        <StepIndicator flowState={builder.flowState} />
+      </div>
 
-      {/* Two-panel layout */}
+      {/* ─── 3-Column Layout ─── */}
+      {/*
+       * Responsive breakpoints:
+       *   xl (1280px+): 3 columns — left(260) + center(flex) + right(320)
+       *   lg (1024-1280px): 2 columns — center(flex) + right(320), platforms inline
+       *   below 1024px: 1 column, platforms inline, preview collapsed
+       */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Main panel: Editor + AI Command Bar */}
+        {/* ─── LEFT COLUMN: Platform Selector (xl only) ─── */}
+        <div
+          className={`hidden xl:flex flex-shrink-0 flex-col border-r border-border-subtle bg-surface-1/50 transition-all duration-300 ease-in-out overflow-hidden ${
+            leftOpen ? 'w-[260px]' : 'w-0'
+          }`}
+        >
+          <div className="flex h-full w-[260px] flex-col">
+            <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
+              <span className="text-sm font-medium text-text-secondary">Platforms</span>
+              <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full font-medium">
+                {builder.selectedChannels.length}
+              </span>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              <PlatformSelector
+                channels={channels}
+                selectedIds={builder.selectedChannels}
+                onToggle={builder.toggleChannel}
+                connectedPlatforms={connectedPlatforms}
+                layout="vertical"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ─── CENTER COLUMN: AI Co-pilot + Editor + Media ─── */}
         <div
           className="flex flex-1 flex-col overflow-hidden bg-surface-0"
           style={{
@@ -449,14 +518,36 @@ export function ContentBuilderPage() {
               'radial-gradient(ellipse at center 40%, rgba(255,255,255,0.015) 0%, transparent 60%)',
           }}
         >
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            {/* Platform chip selector */}
-            <div data-tour="platform-selector">
+          {/* AI Command Bar — promoted to top (co-pilot position) */}
+          <div
+            className="border-b border-border-subtle px-4 py-3 bg-surface-1/30 backdrop-blur-sm"
+            data-tour="ai-assistant"
+          >
+            <AICommandBar
+              onCommand={handleAICommand}
+              isProcessing={builder.isProcessing}
+              commandHistory={builder.commandHistory}
+              model={chat.model}
+              onModelChange={chat.setModel}
+              activePromptId={builder.activePromptId}
+              activePromptName={builder.activePromptName}
+              onSelectPrompt={handleSelectPrompt}
+              onClearPrompt={builder.clearPrompt}
+              onCreateNewPrompt={handleCreateNewPrompt}
+              onEditPrompt={handleEditPrompt}
+            />
+          </div>
+
+          {/* Scrollable editor area */}
+          <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4">
+            {/* Inline platform selector — visible below xl */}
+            <div className="xl:hidden mb-4" data-tour="platform-selector">
               <PlatformSelector
                 channels={channels}
                 selectedIds={builder.selectedChannels}
                 onToggle={builder.toggleChannel}
                 connectedPlatforms={connectedPlatforms}
+                layout="horizontal"
               />
             </div>
 
@@ -465,6 +556,8 @@ export function ContentBuilderPage() {
                 onStartScratch={handleStartScratch}
                 onOpenPrompts={handleOpenPrompts}
                 onRepurpose={handleRepurpose}
+                onQuickStart={handleQuickStart}
+                isGenerating={isGeneratingTemplate}
               />
             ) : (
               <>
@@ -488,7 +581,7 @@ export function ContentBuilderPage() {
                   />
                 </div>
 
-                {/* Media Studio */}
+                {/* Media Studio — compact */}
                 <div className="mt-3">
                   <MediaStudio
                     imageUrl={builder.imageUrl}
@@ -501,52 +594,17 @@ export function ContentBuilderPage() {
               </>
             )}
           </div>
-
-          {/* AI Command Bar — pinned at bottom */}
-          <div className="border-t border-border-subtle px-6 py-3" data-tour="ai-assistant">
-            <AICommandBar
-              onCommand={handleAICommand}
-              isProcessing={builder.isProcessing}
-              commandHistory={builder.commandHistory}
-              model={chat.model}
-              onModelChange={chat.setModel}
-              activePromptId={builder.activePromptId}
-              activePromptName={builder.activePromptName}
-              onSelectPrompt={handleSelectPrompt}
-              onClearPrompt={builder.clearPrompt}
-              onCreateNewPrompt={handleCreateNewPrompt}
-              onEditPrompt={handleEditPrompt}
-            />
-          </div>
         </div>
 
-        {/* Right collapse toggle (visible when collapsed) */}
-        {!rightOpen && (
-          <button
-            onClick={() => setRightOpen(true)}
-            className="flex-shrink-0 border-l border-border-subtle bg-surface-1 px-1.5 text-text-tertiary hover:bg-surface-2 hover:text-text-secondary transition-all duration-200 shadow-[0_0_8px_rgba(255,214,10,0.06)]"
-            aria-label="Expand preview panel"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-        )}
-
-        {/* Right Panel: Preview + Schedule */}
+        {/* ─── RIGHT COLUMN: Preview + Schedule ─── */}
         <div
-          className={`relative flex-shrink-0 border-l border-border-subtle bg-surface-1 transition-all duration-300 ease-in-out ${
-            rightOpen ? 'w-[280px]' : 'w-0'
-          } overflow-hidden`}
+          className={`hidden lg:flex flex-shrink-0 flex-col border-l border-border-subtle bg-surface-1 transition-all duration-300 ease-in-out overflow-hidden ${
+            rightOpen ? 'w-[320px]' : 'w-0'
+          }`}
         >
-          <div className="flex h-full w-[280px] flex-col">
+          <div className="flex h-full w-[320px] flex-col">
             <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
               <span className="text-sm font-medium text-text-secondary">Preview & Schedule</span>
-              <button
-                onClick={() => setRightOpen(false)}
-                className="rounded-lg p-1.5 text-text-tertiary bg-surface-2/50 backdrop-blur-sm border border-white/5 hover:bg-surface-3 hover:text-text-secondary transition-all duration-200"
-                aria-label="Collapse preview panel"
-              >
-                <PanelRightClose className="h-4 w-4" />
-              </button>
             </div>
             <div className="flex-1 overflow-y-auto">
               <PlatformPreview

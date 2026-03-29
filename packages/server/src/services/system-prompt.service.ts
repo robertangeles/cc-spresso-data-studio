@@ -112,4 +112,82 @@ export async function seedDefaultPrompts(): Promise<void> {
     });
     logger.info('Seeded APEX system prompt');
   }
+
+  // --- Content Audit prompt ---
+  const auditExists = await db.query.systemPrompts.findFirst({
+    where: eq(schema.systemPrompts.slug, 'content-audit'),
+  });
+
+  if (!auditExists) {
+    await db.insert(schema.systemPrompts).values({
+      slug: 'content-audit',
+      name: 'Content Quality Auditor',
+      description:
+        'Evaluates content against subjective writing rules. Used by the Orchestration audit feature to catch style violations that programmatic checks miss.',
+      body: `You are a content quality auditor. Check the following text against the rules below. Return ONLY a JSON array of violations found. If no violations, return [].
+
+Each violation object:
+{"rule": "rule name", "sentence": "the exact sentence that violates", "explanation": "why this violates the rule"}
+
+Focus on SUBJECTIVE rules only — things that require judgment:
+- Narrator thesis statements (narrator directly stating a cultural insight)
+- Decorative metaphors (not grounded in physical reality)
+- Polished wrap-ups (tidy lessons, rhythmic callbacks, inspirational reframes)
+- Lyrical balance (sentences that feel rhythmically "pretty")
+- Setup-and-pivot patterns ("Most people think... but actually...")
+- Mirrored sentences (A then B then restate in reverse)
+
+RULES:
+{{rules}}
+
+TEXT:
+{{content}}
+
+Return ONLY the JSON array. No explanation outside the array.`,
+      category: 'content-ops',
+    });
+    logger.info('Seeded Content Audit system prompt');
+  }
+
+  // --- Content Auto-Fix (Rework) prompt ---
+  const reworkExists = await db.query.systemPrompts.findFirst({
+    where: eq(schema.systemPrompts.slug, 'content-rework'),
+  });
+
+  if (!reworkExists) {
+    await db.insert(schema.systemPrompts).values({
+      slug: 'content-rework',
+      name: 'Content Auto-Fix (Rework)',
+      description:
+        'Surgical text editor that fixes specific violations while preserving word count and structure. Used by the Orchestration auto-fix feature.',
+      body: `You are a surgical text editor. Fix ONLY the listed violations below. This is a {{wordCount}}-word text. Your output MUST be between {{minWords}} and {{maxWords}} words.
+
+CRITICAL RULES:
+- Do NOT rewrite paragraphs. Make the smallest possible change to fix each violation.
+- Do NOT remove sentences, paragraphs, or sections unless a violation specifically requires it.
+- Do NOT add new content, commentary, or transitions.
+- Preserve all facts, names, dates, quotes, and structure exactly.
+- Return the COMPLETE text with fixes applied — not just the changed parts.
+
+FIX INSTRUCTIONS BY VIOLATION TYPE:
+- Banned word: Remove the word or restructure only that clause. Do not rewrite the whole sentence.
+- Sentence too long: Split into two shorter sentences (each under 35 words). Keep all information from the original.
+- Triad (3-item list): Cut one item or combine two into one phrase. Maximum two items.
+- Passive voice: Rewrite with the actor as subject. If actor is unknown, describe through physical evidence.
+- Consecutive same openers: Change the opening word of the second sentence only. Keep meaning identical.
+- Semicolon: Replace with a period. Capitalize the next word.
+- "There is/are": Rewrite with a concrete subject performing an action.
+- Similar-length sentences: Vary one sentence — shorten it or combine with its neighbor.
+
+VIOLATIONS TO FIX:
+{{violationList}}
+
+TEXT ({{wordCount}} words — preserve this count):
+{{content}}
+
+Return the full revised text. No commentary, no explanation, no word count — just the text.`,
+      category: 'content-ops',
+    });
+    logger.info('Seeded Content Rework system prompt');
+  }
 }

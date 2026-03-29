@@ -1,5 +1,6 @@
 import { providerRegistry } from './ai/index.js';
 import { getActiveRules } from './profile.service.js';
+import { getSystemPromptBySlug } from './system-prompt.service.js';
 import { stripThinkingBlocks } from './flow-executor.service.js';
 import { logger } from '../config/logger.js';
 
@@ -62,7 +63,10 @@ function countWords(text: string): number {
 
 // --- Programmatic Checks ---
 
-function checkBannedWords(sentences: Array<{ text: string; line: number }>, bannedWords: string[]): Violation[] {
+function checkBannedWords(
+  sentences: Array<{ text: string; line: number }>,
+  bannedWords: string[],
+): Violation[] {
   const violations: Violation[] = [];
 
   for (const s of sentences) {
@@ -86,7 +90,10 @@ function checkBannedWords(sentences: Array<{ text: string; line: number }>, bann
   return violations;
 }
 
-function checkSentenceLength(sentences: Array<{ text: string; line: number }>, maxWords = 40): Violation[] {
+function checkSentenceLength(
+  sentences: Array<{ text: string; line: number }>,
+  maxWords = 40,
+): Violation[] {
   const violations: Violation[] = [];
 
   for (const s of sentences) {
@@ -110,8 +117,9 @@ function checkTriads(sentences: Array<{ text: string; line: number }>): Violatio
   const violations: Violation[] = [];
 
   // Skip sentences with dialogue attribution — characters can speak in triads
-  const isDialogue = (text: string) => /\b(?:she|he|they)\s+(?:says?|said|tells?|told|asks?|asked)\b/i.test(text)
-    || /^[""\u201C]/.test(text.trim());
+  const isDialogue = (text: string) =>
+    /\b(?:she|he|they)\s+(?:says?|said|tells?|told|asks?|asked)\b/i.test(text) ||
+    /^[""\u201C]/.test(text.trim());
 
   // Pattern 1: "X, Y, and Z" or "X, Y, or Z"
   const commaAndTriad = /\b\w+(?:\s\w+)*,\s+\w+(?:\s\w+)*,\s+(?:and|or)\s+\w+/i;
@@ -164,13 +172,22 @@ function checkConsecutiveOpeners(sentences: Array<{ text: string; line: number }
   const violations: Violation[] = [];
 
   for (let i = 0; i < sentences.length - 1; i++) {
-    const word1 = sentences[i].text.split(/\s/)[0].toLowerCase().replace(/[^a-z]/g, '');
-    const word2 = sentences[i + 1].text.split(/\s/)[0].toLowerCase().replace(/[^a-z]/g, '');
+    const word1 = sentences[i].text
+      .split(/\s/)[0]
+      .toLowerCase()
+      .replace(/[^a-z]/g, '');
+    const word2 = sentences[i + 1].text
+      .split(/\s/)[0]
+      .toLowerCase()
+      .replace(/[^a-z]/g, '');
 
     if (word1 === word2 && word1.length > 1) {
       // Check for 3 in a row (hard ban)
       if (i + 2 < sentences.length) {
-        const word3 = sentences[i + 2].text.split(/\s/)[0].toLowerCase().replace(/[^a-z]/g, '');
+        const word3 = sentences[i + 2].text
+          .split(/\s/)[0]
+          .toLowerCase()
+          .replace(/[^a-z]/g, '');
         if (word1 === word3) {
           violations.push({
             type: 'mechanical',
@@ -218,7 +235,8 @@ function checkSemicolons(sentences: Array<{ text: string; line: number }>): Viol
 
 function checkPassiveVoice(sentences: Array<{ text: string; line: number }>): Violation[] {
   const violations: Violation[] = [];
-  const passiveRegex = /\b(?:is|are|was|were|been|being)\s+(?:\w+ly\s+)?(?:\w+ed|written|made|done|given|taken|known|seen|shown|found|told|thought|built|held|kept|left|meant|put|run|set|understood)\b/i;
+  const passiveRegex =
+    /\b(?:is|are|was|were|been|being)\s+(?:\w+ly\s+)?(?:\w+ed|written|made|done|given|taken|known|seen|shown|found|told|thought|built|held|kept|left|meant|put|run|set|understood)\b/i;
 
   for (const s of sentences) {
     if (passiveRegex.test(s.text)) {
@@ -286,7 +304,9 @@ function checkThereIsAre(sentences: Array<{ text: string; line: number }>): Viol
 
 function extractBannedWords(rulesText: string): string[] {
   // Look for "Banned words:" or "**Banned words:**" followed by a comma-separated list
-  const match = rulesText.match(/\*?\*?[Bb]anned\s+words\*?\*?:?\s*\n?([\s\S]*?)(?:\n\n|\n\*|\n#|$)/);
+  const match = rulesText.match(
+    /\*?\*?[Bb]anned\s+words\*?\*?:?\s*\n?([\s\S]*?)(?:\n\n|\n\*|\n#|$)/,
+  );
   if (!match) return [];
 
   return match[1]
@@ -341,26 +361,20 @@ export async function aiAudit(content: string, userId: string): Promise<Violatio
 
   if (!rulesText.trim()) return [];
 
-  const prompt = `You are a content quality auditor. Check the following text against the rules below. Return ONLY a JSON array of violations found. If no violations, return [].
+  // Load audit prompt from DB (Settings > System Prompts)
+  let promptTemplate: string;
+  try {
+    const systemPrompt = await getSystemPromptBySlug('content-audit');
+    promptTemplate = systemPrompt.body;
+  } catch {
+    logger.warn(
+      'content-audit system prompt not found in DB — run seed or add via Settings > System Prompts',
+    );
+    return [];
+  }
 
-Each violation object:
-{"rule": "rule name", "sentence": "the exact sentence that violates", "explanation": "why this violates the rule"}
-
-Focus on SUBJECTIVE rules only — things that require judgment:
-- Narrator thesis statements (narrator directly stating a cultural insight)
-- Decorative metaphors (not grounded in physical reality)
-- Polished wrap-ups (tidy lessons, rhythmic callbacks, inspirational reframes)
-- Lyrical balance (sentences that feel rhythmically "pretty")
-- Setup-and-pivot patterns ("Most people think... but actually...")
-- Mirrored sentences (A then B then restate in reverse)
-
-RULES:
-${rulesText}
-
-TEXT:
-${content}
-
-Return ONLY the JSON array. No explanation outside the array.`;
+  // Hydrate template variables
+  const prompt = promptTemplate.replace('{{rules}}', rulesText).replace('{{content}}', content);
 
   try {
     const response = await providerRegistry.complete({
@@ -376,7 +390,11 @@ Return ONLY the JSON array. No explanation outside the array.`;
     const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
 
-    const parsed = JSON.parse(jsonMatch[0]) as Array<{ rule: string; sentence: string; explanation: string }>;
+    const parsed = JSON.parse(jsonMatch[0]) as Array<{
+      rule: string;
+      sentence: string;
+      explanation: string;
+    }>;
 
     return parsed.map((v) => ({
       type: 'subjective' as const,
@@ -433,33 +451,28 @@ export async function reworkViolations(
     .join('\n');
 
   const wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;
+  const minWords = Math.floor(wordCount * 0.95);
+  const maxWords = Math.ceil(wordCount * 1.05);
 
-  const prompt = `You are a surgical text editor. Fix ONLY the listed violations below. This is a ${wordCount}-word text. Your output MUST be between ${Math.floor(wordCount * 0.95)} and ${Math.ceil(wordCount * 1.05)} words.
+  // Load rework prompt from DB (Settings > System Prompts)
+  let promptTemplate: string;
+  try {
+    const systemPrompt = await getSystemPromptBySlug('content-rework');
+    promptTemplate = systemPrompt.body;
+  } catch {
+    logger.warn(
+      'content-rework system prompt not found in DB — run seed or add via Settings > System Prompts',
+    );
+    return content;
+  }
 
-CRITICAL RULES:
-- Do NOT rewrite paragraphs. Make the smallest possible change to fix each violation.
-- Do NOT remove sentences, paragraphs, or sections unless a violation specifically requires it.
-- Do NOT add new content, commentary, or transitions.
-- Preserve all facts, names, dates, quotes, and structure exactly.
-- Return the COMPLETE text with fixes applied — not just the changed parts.
-
-FIX INSTRUCTIONS BY VIOLATION TYPE:
-- Banned word: Remove the word or restructure only that clause. Do not rewrite the whole sentence.
-- Sentence too long: Split into two shorter sentences (each under 35 words). Keep all information from the original.
-- Triad (3-item list): Cut one item or combine two into one phrase. Maximum two items.
-- Passive voice: Rewrite with the actor as subject. If actor is unknown, describe through physical evidence.
-- Consecutive same openers: Change the opening word of the second sentence only. Keep meaning identical.
-- Semicolon: Replace with a period. Capitalize the next word.
-- "There is/are": Rewrite with a concrete subject performing an action.
-- Similar-length sentences: Vary one sentence — shorten it or combine with its neighbor.
-
-VIOLATIONS TO FIX:
-${violationList}
-
-TEXT (${wordCount} words — preserve this count):
-${content}
-
-Return the full revised text. No commentary, no explanation, no word count — just the text.`;
+  // Hydrate template variables
+  const prompt = promptTemplate
+    .replace(/\{\{wordCount\}\}/g, String(wordCount))
+    .replace('{{minWords}}', String(minWords))
+    .replace('{{maxWords}}', String(maxWords))
+    .replace('{{violationList}}', violationList)
+    .replace('{{content}}', content);
 
   const response = await providerRegistry.complete({
     model,
@@ -474,7 +487,11 @@ Return the full revised text. No commentary, no explanation, no word count — j
   const resultWordCount = result.split(/\s+/).filter((w) => w.length > 0).length;
   if (resultWordCount < wordCount * 0.9) {
     logger.warn(
-      { original: wordCount, result: resultWordCount, drop: `${Math.round((1 - resultWordCount / wordCount) * 100)}%` },
+      {
+        original: wordCount,
+        result: resultWordCount,
+        drop: `${Math.round((1 - resultWordCount / wordCount) * 100)}%`,
+      },
       'Rework dropped too many words — keeping original',
     );
     return content;

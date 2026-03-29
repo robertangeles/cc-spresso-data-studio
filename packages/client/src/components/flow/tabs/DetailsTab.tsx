@@ -30,26 +30,28 @@ export function DetailsTab({ flow, updateFlow, onDelete }: DetailsTabProps) {
   return (
     <div className="space-y-6">
       <Card padding="lg">
-        <h4 className="mb-4 font-medium text-gray-900">Details</h4>
+        <h4 className="mb-4 font-medium text-text-primary">Details</h4>
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">
+              Description
+            </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onBlur={handleDescriptionBlur}
               placeholder="Describe what this orchestration does..."
               rows={3}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+              className="w-full rounded-lg border border-border-default px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/30 focus:ring-offset-2"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">Status</label>
             <select
               value={status}
               onChange={(e) => handleStatusChange(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+              className="w-full rounded-lg border border-border-default px-3 py-2 text-sm focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/30 focus:ring-offset-2"
             >
               <option value="draft">Draft</option>
               <option value="published">Published</option>
@@ -57,36 +59,36 @@ export function DetailsTab({ flow, updateFlow, onDelete }: DetailsTabProps) {
             </select>
           </div>
 
-          {isSaving && <p className="text-xs text-gray-400">Saving...</p>}
+          {isSaving && <p className="text-xs text-text-tertiary">Saving...</p>}
         </div>
       </Card>
 
       <Card padding="lg">
-        <h4 className="mb-4 font-medium text-gray-900">Information</h4>
+        <h4 className="mb-4 font-medium text-text-primary">Information</h4>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-gray-500">Created</p>
+            <p className="text-text-tertiary">Created</p>
             <p className="font-medium">{new Date(flow.createdAt).toLocaleDateString()}</p>
           </div>
           <div>
-            <p className="text-gray-500">Last Updated</p>
+            <p className="text-text-tertiary">Last Updated</p>
             <p className="font-medium">{new Date(flow.updatedAt).toLocaleDateString()}</p>
           </div>
           <div>
-            <p className="text-gray-500">Fields</p>
+            <p className="text-text-tertiary">Fields</p>
             <p className="font-medium">{flow.config.fields.length}</p>
           </div>
           <div>
-            <p className="text-gray-500">Steps</p>
+            <p className="text-text-tertiary">Steps</p>
             <p className="font-medium">{flow.config.steps.length}</p>
           </div>
         </div>
       </Card>
 
       <Card padding="lg">
-        <div className="rounded-lg border border-red-200 p-4">
-          <h4 className="mb-2 font-medium text-red-700">Danger Zone</h4>
-          <p className="mb-3 text-sm text-gray-500">
+        <div className="rounded-lg border border-red-500/30 p-4">
+          <h4 className="mb-2 font-medium text-red-400">Danger Zone</h4>
+          <p className="mb-3 text-sm text-text-tertiary">
             Permanently delete this orchestration and all its configuration. This cannot be undone.
           </p>
           <Button variant="danger" size="sm" onClick={onDelete}>

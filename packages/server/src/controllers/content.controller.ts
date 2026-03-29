@@ -3,7 +3,11 @@ import type { ApiResponse } from '@cc/shared';
 import { UnauthorizedError } from '../utils/errors.js';
 import * as contentService from '../services/content.service.js';
 
-export async function listContent(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function listContent(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { channelId, status, search } = req.query;
@@ -19,7 +23,11 @@ export async function listContent(req: Request, res: Response<ApiResponse<unknow
   }
 }
 
-export async function getContent(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function getContent(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const item = await contentService.getContentItem(req.params.id, req.user.userId);
@@ -29,7 +37,11 @@ export async function getContent(req: Request, res: Response<ApiResponse<unknown
   }
 }
 
-export async function updateContent(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function updateContent(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const item = await contentService.updateContentItem(req.params.id, req.body, req.user.userId);
@@ -39,7 +51,11 @@ export async function updateContent(req: Request, res: Response<ApiResponse<unkn
   }
 }
 
-export async function deleteContent(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function deleteContent(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     await contentService.deleteContentItem(req.params.id, req.user.userId);
@@ -49,7 +65,11 @@ export async function deleteContent(req: Request, res: Response<ApiResponse<unkn
   }
 }
 
-export async function createBatch(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function createBatch(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const items = await contentService.createMultiPlatformContent({
@@ -62,7 +82,11 @@ export async function createBatch(req: Request, res: Response<ApiResponse<unknow
   }
 }
 
-export async function generateMulti(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function generateMulti(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const result = await contentService.generateMultiPlatformContent({
@@ -75,7 +99,48 @@ export async function generateMulti(req: Request, res: Response<ApiResponse<unkn
   }
 }
 
-export async function listChannels(_req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function generateTemplate(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const { category, model, context } = req.body;
+    if (!category || typeof category !== 'string') {
+      res
+        .status(400)
+        .json({
+          success: false,
+          error: 'category is required (string)',
+        } as unknown as ApiResponse<unknown>);
+      return;
+    }
+    const validCategories = [
+      'product-launch',
+      'behind-the-scenes',
+      'tips-and-tricks',
+      'announcement',
+    ];
+    if (!validCategories.includes(category)) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid category. Valid: ${validCategories.join(', ')}`,
+      } as unknown as ApiResponse<unknown>);
+      return;
+    }
+    const result = await contentService.generateTemplate({ category, model, context });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function listChannels(
+  _req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     const channels = await contentService.listChannels();
     res.json({ success: true, data: channels });

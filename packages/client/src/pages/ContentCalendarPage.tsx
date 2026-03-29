@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock, Check } from 'lucide-react';
 import { api } from '../lib/api';
 
@@ -25,12 +25,17 @@ const PLATFORM_COLORS: Record<string, string> = {
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-function getPlatformColor(platform: string): string {
+function getPlatformColor(platform: string | undefined | null): string {
+  if (!platform) return PLATFORM_COLORS.default;
   return PLATFORM_COLORS[platform.toLowerCase()] ?? PLATFORM_COLORS.default;
 }
 
 function isSameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 function formatTime(dateStr: string): string {
@@ -87,29 +92,31 @@ export function ContentCalendarPage() {
     return getWeekGrid(currentMonth);
   }, [currentMonth, viewMode]);
 
-  const dateRange = useMemo(() => {
-    const start = gridDays[0];
-    const end = gridDays[gridDays.length - 1];
-    return { start, end };
-  }, [gridDays]);
-
-  const fetchPosts = useCallback(async () => {
-    setLoading(true);
-    try {
-      const startStr = dateRange.start.toISOString().split('T')[0];
-      const endStr = dateRange.end.toISOString().split('T')[0];
-      const { data } = await api.get(`/schedule/calendar?start=${startStr}&end=${endStr}`);
-      setPosts(data.data ?? []);
-    } catch {
-      setPosts([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [dateRange]);
+  const startStr = useMemo(() => gridDays[0]?.toISOString().split('T')[0] ?? '', [gridDays]);
+  const endStr = useMemo(
+    () => gridDays[gridDays.length - 1]?.toISOString().split('T')[0] ?? '',
+    [gridDays],
+  );
 
   useEffect(() => {
-    fetchPosts();
-  }, [fetchPosts]);
+    if (!startStr || !endStr) return;
+    let cancelled = false;
+    setLoading(true);
+    api
+      .get(`/schedule/calendar?start=${startStr}&end=${endStr}`)
+      .then(({ data }) => {
+        if (!cancelled) setPosts(data.data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setPosts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [startStr, endStr]);
 
   const postsByDate = useMemo(() => {
     const map = new Map<string, ScheduledPost[]>();
@@ -152,7 +159,7 @@ export function ContentCalendarPage() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-surface-0">
+    <div className="-m-6">
       {/* Header */}
       <header className="flex items-center justify-between border-b border-border-subtle px-6 py-4">
         <div className="flex items-center gap-3">
@@ -215,11 +222,11 @@ export function ContentCalendarPage() {
       {/* Calendar grid */}
       <div className="flex-1 overflow-auto p-6">
         {loading && posts.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
+          <div className="flex items-center justify-center py-20">
             <p className="text-sm text-text-tertiary">Loading calendar...</p>
           </div>
         ) : (
-          <div className="h-full">
+          <div>
             {/* Day headers */}
             <div className="grid grid-cols-7 gap-px mb-px">
               {DAY_LABELS.map((label) => (
@@ -296,13 +303,17 @@ export function ContentCalendarPage() {
                               className="rounded-md bg-surface-3 p-1.5 transition-colors hover:bg-surface-3/80"
                             >
                               <div className="flex items-center gap-1.5 mb-0.5">
-                                <span className={`h-2 w-2 rounded-full shrink-0 ${getPlatformColor(post.platform)}`} />
+                                <span
+                                  className={`h-2 w-2 rounded-full shrink-0 ${getPlatformColor(post.platform)}`}
+                                />
                                 <span className="truncate text-[11px] font-medium text-text-primary">
                                   {post.title}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 pl-3.5">
-                                <span className="text-[10px] text-text-tertiary capitalize">{post.platform}</span>
+                                <span className="text-[10px] text-text-tertiary capitalize">
+                                  {post.platform}
+                                </span>
                                 <span className="flex items-center gap-0.5 text-[10px] text-text-tertiary">
                                   <Clock className="h-2.5 w-2.5" />
                                   {formatTime(post.scheduledAt)}
@@ -328,7 +339,11 @@ export function ContentCalendarPage() {
                     {viewMode === 'month' && isExpanded && dayPosts.length > 0 && (
                       <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-lg border border-border-default bg-surface-2 p-2 shadow-dark-lg backdrop-blur-glass animate-scale-in">
                         <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                          {day.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' })}
+                          {day.toLocaleDateString('default', {
+                            weekday: 'long',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
                         </p>
                         <div className="space-y-1.5 max-h-48 overflow-y-auto">
                           {dayPosts.map((post) => {
@@ -339,13 +354,17 @@ export function ContentCalendarPage() {
                                 className="rounded-md bg-surface-3 p-2 transition-colors hover:bg-surface-3/80"
                               >
                                 <div className="flex items-center gap-1.5 mb-1">
-                                  <span className={`h-2 w-2 rounded-full shrink-0 ${getPlatformColor(post.platform)}`} />
+                                  <span
+                                    className={`h-2 w-2 rounded-full shrink-0 ${getPlatformColor(post.platform)}`}
+                                  />
                                   <span className="truncate text-[11px] font-medium text-text-primary">
                                     {post.title}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2 pl-3.5">
-                                  <span className="text-[10px] text-text-tertiary capitalize">{post.platform}</span>
+                                  <span className="text-[10px] text-text-tertiary capitalize">
+                                    {post.platform}
+                                  </span>
                                   <span className="flex items-center gap-0.5 text-[10px] text-text-tertiary">
                                     <Clock className="h-2.5 w-2.5" />
                                     {formatTime(post.scheduledAt)}

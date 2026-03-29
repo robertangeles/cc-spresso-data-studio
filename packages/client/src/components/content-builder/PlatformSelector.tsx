@@ -15,6 +15,8 @@ interface PlatformSelectorProps {
   selectedIds: string[];
   onToggle: (channelId: string) => void;
   connectedPlatforms?: string[];
+  /** 'horizontal' = collapsible dropdown (default), 'vertical' = always-visible card stack */
+  layout?: 'horizontal' | 'vertical';
 }
 
 function formatCharLimit(limit: number | undefined | null): string {
@@ -141,6 +143,7 @@ export function PlatformSelector({
   selectedIds,
   onToggle,
   connectedPlatforms = [],
+  layout = 'horizontal',
 }: PlatformSelectorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showConnectHint, setShowConnectHint] = useState(false);
@@ -154,6 +157,81 @@ export function PlatformSelector({
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
   });
 
+  // ─── Vertical layout (left panel sidebar) ───
+  if (layout === 'vertical') {
+    return (
+      <div className="space-y-2">
+        {sortedChannels.map((ch) => {
+          const isSelected = selectedIds.includes(ch.id);
+          const isConnected =
+            connectedPlatforms.includes(ch.slug) || ALWAYS_CONNECTED.includes(ch.slug);
+          const color = getColor(ch.slug);
+          const limit = formatCharLimit(ch.config?.charLimit as number | undefined | null);
+
+          return (
+            <button
+              key={ch.id}
+              type="button"
+              onClick={() => onToggle(ch.id)}
+              className={`relative w-full flex items-center gap-3 rounded-xl p-2.5 transition-all duration-200 ease-spring cursor-pointer group ${
+                isSelected
+                  ? `bg-gradient-to-r ${color.cardBg} ${color.border} border ${color.glow}`
+                  : `bg-surface-2/20 border border-transparent hover:bg-gradient-to-r hover:${color.cardBg} hover:border-border-subtle hover:shadow-md active:scale-[0.97]`
+              }`}
+            >
+              {/* Platform icon */}
+              <span
+                className={`text-xl leading-none transition-transform duration-200 ${isSelected ? 'scale-110' : 'group-hover:scale-110'}`}
+              >
+                {ch.icon}
+              </span>
+
+              {/* Name + meta */}
+              <div className="flex-1 text-left min-w-0">
+                <span
+                  className={`text-xs font-medium block truncate transition-colors duration-200 ${isSelected ? color.text : 'text-text-secondary'}`}
+                >
+                  {ch.name}
+                </span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-text-tertiary/30'}`}
+                  />
+                  <span className="text-[9px] text-text-tertiary">{limit} chars</span>
+                </div>
+              </div>
+
+              {/* Selected checkmark */}
+              {isSelected && (
+                <span
+                  className={`flex h-5 w-5 items-center justify-center rounded-full ${color.bg} shadow-md shrink-0`}
+                >
+                  <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                </span>
+              )}
+            </button>
+          );
+        })}
+
+        {/* Connection hint */}
+        {selectedChannels.some(
+          (ch) => !connectedPlatforms.includes(ch.slug) && !ALWAYS_CONNECTED.includes(ch.slug),
+        ) && (
+          <div className="mt-3 rounded-lg bg-accent/[0.06] border border-accent/15 px-3 py-2">
+            <p className="text-[10px] text-text-tertiary leading-relaxed">
+              <span className="text-accent font-medium">Tip:</span> Connect accounts in{' '}
+              <Link to="/profile" className="text-accent underline hover:text-accent-hover">
+                Settings
+              </Link>{' '}
+              for auto-publishing.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── Horizontal layout (collapsible dropdown — original) ───
   return (
     <div className="relative">
       {/* Click-outside dismiss */}

@@ -62,8 +62,8 @@ export function FormBuilderTab({ fields, onFieldsChange }: FormBuilderTabProps) 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-medium text-gray-900">Form Fields</h3>
-          <p className="text-sm text-gray-500">Design the input form users will fill out.</p>
+          <h3 className="font-medium text-text-primary">Form Fields</h3>
+          <p className="text-sm text-text-tertiary">Design the input form users will fill out.</p>
         </div>
         <Button size="sm" onClick={addField}>
           + Add Field
@@ -71,21 +71,21 @@ export function FormBuilderTab({ fields, onFieldsChange }: FormBuilderTabProps) 
       </div>
 
       {localFields.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center">
-          <p className="text-gray-500">No fields yet. Click &quot;Add Field&quot; to start.</p>
+        <div className="rounded-lg border border-dashed border-border-default py-8 text-center">
+          <p className="text-text-tertiary">No fields yet. Click &quot;Add Field&quot; to start.</p>
         </div>
       ) : (
         localFields.map((field, index) => (
           <Card key={field.id} padding="md">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-gray-400">Field {index + 1}</span>
+                <span className="text-xs font-medium text-text-tertiary">Field {index + 1}</span>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => moveField(index, -1)}
                     disabled={index === 0}
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 disabled:opacity-30"
+                    className="rounded p-1 text-text-tertiary hover:bg-surface-3 disabled:opacity-30"
                   >
                     ↑
                   </button>
@@ -93,14 +93,14 @@ export function FormBuilderTab({ fields, onFieldsChange }: FormBuilderTabProps) 
                     type="button"
                     onClick={() => moveField(index, 1)}
                     disabled={index === localFields.length - 1}
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 disabled:opacity-30"
+                    className="rounded p-1 text-text-tertiary hover:bg-surface-3 disabled:opacity-30"
                   >
                     ↓
                   </button>
                   <button
                     type="button"
                     onClick={() => removeField(index)}
-                    className="rounded p-1 text-red-400 hover:bg-red-50"
+                    className="rounded p-1 text-red-400 hover:bg-red-500/10"
                   >
                     ✕
                   </button>
@@ -109,13 +109,13 @@ export function FormBuilderTab({ fields, onFieldsChange }: FormBuilderTabProps) 
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Type</label>
+                  <label className="mb-1 block text-sm font-medium text-text-secondary">Type</label>
                   <select
                     value={field.type}
                     onChange={(e) =>
                       updateField(index, { type: e.target.value as FlowField['type'] })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+                    className="w-full rounded-lg border border-border-default px-3 py-2 text-sm focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/30 focus:ring-offset-2"
                   >
                     {FIELD_TYPES.map((ft) => (
                       <option key={ft.value} value={ft.value}>
@@ -151,7 +151,7 @@ export function FormBuilderTab({ fields, onFieldsChange }: FormBuilderTabProps) 
                   type="checkbox"
                   checked={field.required ?? false}
                   onChange={(e) => updateField(index, { required: e.target.checked })}
-                  className="rounded border-gray-300"
+                  className="rounded border-border-default"
                 />
                 Required
               </label>
@@ -160,7 +160,7 @@ export function FormBuilderTab({ fields, onFieldsChange }: FormBuilderTabProps) 
         ))
       )}
 
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-text-tertiary">
         {localFields.length} field{localFields.length !== 1 ? 's' : ''}
       </p>
     </div>

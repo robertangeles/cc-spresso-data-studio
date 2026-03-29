@@ -7,17 +7,136 @@ import { logger } from '../config/logger.js';
 // --- Channel seed ---
 
 const DEFAULT_CHANNELS = [
-  { name: 'Twitter / X', slug: 'twitter', type: 'twitter', icon: '🐦', config: { charLimit: 25000, optimalCharLimit: 280, format: 'short-form', imageWidth: 1200, imageHeight: 675, aspectRatio: '1.91:1' } },
-  { name: 'LinkedIn', slug: 'linkedin', type: 'linkedin', icon: '💼', config: { charLimit: 3000, optimalCharLimit: 1500, format: 'professional', imageWidth: 1200, imageHeight: 627, aspectRatio: '1.91:1' } },
-  { name: 'Email', slug: 'email', type: 'email', icon: '📧', config: { charLimit: 0, format: 'html', imageWidth: 600 } },
-  { name: 'Blog', slug: 'blog', type: 'blog', icon: '📝', config: { charLimit: 0, format: 'long-form' } },
-  { name: 'Instagram', slug: 'instagram', type: 'instagram', icon: '📸', config: { charLimit: 2200, optimalCharLimit: 125, format: 'visual', imageWidth: 1080, imageHeight: 1080, aspectRatio: '1:1' } },
-  { name: 'Facebook', slug: 'facebook', type: 'facebook', icon: '📘', config: { charLimit: 63000, optimalCharLimit: 80, format: 'social', imageWidth: 1200, imageHeight: 630, aspectRatio: '1.91:1' } },
-  { name: 'Pinterest', slug: 'pinterest', type: 'pinterest', icon: '📌', config: { charLimit: 500, format: 'visual', imageWidth: 1000, imageHeight: 1500, aspectRatio: '2:3' } },
-  { name: 'TikTok', slug: 'tiktok', type: 'tiktok', icon: '🎵', config: { charLimit: 4000, format: 'video-caption', imageWidth: 1080, imageHeight: 1920, aspectRatio: '9:16' } },
-  { name: 'Threads', slug: 'threads', type: 'threads', icon: '🧵', config: { charLimit: 500, format: 'short-form', imageWidth: 1200, imageHeight: 600, aspectRatio: '2:1' } },
-  { name: 'Bluesky', slug: 'bluesky', type: 'bluesky', icon: '🦋', config: { charLimit: 300, format: 'short-form', maxImages: 4, maxImageSizeMb: 1 } },
-  { name: 'YouTube', slug: 'youtube', type: 'youtube', icon: '▶️', config: { charLimit: 5000, titleCharLimit: 100, format: 'video-description', imageWidth: 1280, imageHeight: 720, aspectRatio: '16:9' } },
+  {
+    name: 'Twitter / X',
+    slug: 'twitter',
+    type: 'twitter',
+    icon: '🐦',
+    config: {
+      charLimit: 25000,
+      optimalCharLimit: 280,
+      format: 'short-form',
+      imageWidth: 1200,
+      imageHeight: 675,
+      aspectRatio: '1.91:1',
+    },
+  },
+  {
+    name: 'LinkedIn',
+    slug: 'linkedin',
+    type: 'linkedin',
+    icon: '💼',
+    config: {
+      charLimit: 3000,
+      optimalCharLimit: 1500,
+      format: 'professional',
+      imageWidth: 1200,
+      imageHeight: 627,
+      aspectRatio: '1.91:1',
+    },
+  },
+  {
+    name: 'Email',
+    slug: 'email',
+    type: 'email',
+    icon: '📧',
+    config: { charLimit: 0, format: 'html', imageWidth: 600 },
+  },
+  {
+    name: 'Blog',
+    slug: 'blog',
+    type: 'blog',
+    icon: '📝',
+    config: { charLimit: 0, format: 'long-form' },
+  },
+  {
+    name: 'Instagram',
+    slug: 'instagram',
+    type: 'instagram',
+    icon: '📸',
+    config: {
+      charLimit: 2200,
+      optimalCharLimit: 125,
+      format: 'visual',
+      imageWidth: 1080,
+      imageHeight: 1080,
+      aspectRatio: '1:1',
+    },
+  },
+  {
+    name: 'Facebook',
+    slug: 'facebook',
+    type: 'facebook',
+    icon: '📘',
+    config: {
+      charLimit: 63000,
+      optimalCharLimit: 80,
+      format: 'social',
+      imageWidth: 1200,
+      imageHeight: 630,
+      aspectRatio: '1.91:1',
+    },
+  },
+  {
+    name: 'Pinterest',
+    slug: 'pinterest',
+    type: 'pinterest',
+    icon: '📌',
+    config: {
+      charLimit: 500,
+      format: 'visual',
+      imageWidth: 1000,
+      imageHeight: 1500,
+      aspectRatio: '2:3',
+    },
+  },
+  {
+    name: 'TikTok',
+    slug: 'tiktok',
+    type: 'tiktok',
+    icon: '🎵',
+    config: {
+      charLimit: 4000,
+      format: 'video-caption',
+      imageWidth: 1080,
+      imageHeight: 1920,
+      aspectRatio: '9:16',
+    },
+  },
+  {
+    name: 'Threads',
+    slug: 'threads',
+    type: 'threads',
+    icon: '🧵',
+    config: {
+      charLimit: 500,
+      format: 'short-form',
+      imageWidth: 1200,
+      imageHeight: 600,
+      aspectRatio: '2:1',
+    },
+  },
+  {
+    name: 'Bluesky',
+    slug: 'bluesky',
+    type: 'bluesky',
+    icon: '🦋',
+    config: { charLimit: 300, format: 'short-form', maxImages: 4, maxImageSizeMb: 1 },
+  },
+  {
+    name: 'YouTube',
+    slug: 'youtube',
+    type: 'youtube',
+    icon: '▶️',
+    config: {
+      charLimit: 5000,
+      titleCharLimit: 100,
+      format: 'video-description',
+      imageWidth: 1280,
+      imageHeight: 720,
+      aspectRatio: '16:9',
+    },
+  },
 ];
 
 export async function seedChannels(): Promise<void> {
@@ -202,6 +321,119 @@ export async function deleteContentItem(id: string, userId: string) {
   await db.delete(schema.contentItems).where(eq(schema.contentItems.id, id));
 }
 
+// --- Quick-start template generation ---
+
+const TEMPLATE_CATEGORIES = [
+  'product-launch',
+  'behind-the-scenes',
+  'tips-and-tricks',
+  'announcement',
+] as const;
+type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
+
+/** Hardcoded fallback skeletons — used when AI fails */
+const FALLBACK_SKELETONS: Record<TemplateCategory, { title: string; body: string }> = {
+  'product-launch': {
+    title: 'New Feature Announcement',
+    body: "We're excited to announce [FEATURE NAME] — designed to help you [KEY BENEFIT].\n\nHere's what's new:\n- [Feature 1]\n- [Feature 2]\n- [Feature 3]\n\nTry it today and let us know what you think!",
+  },
+  'behind-the-scenes': {
+    title: 'Behind the Scenes',
+    body: "Here's something most people don't see — the real work behind [PROJECT/PRODUCT].\n\nThis week I've been working on [TASK]. What surprised me most was [INSIGHT].\n\nThe lesson? [TAKEAWAY]\n\nWhat does your behind-the-scenes look like?",
+  },
+  'tips-and-tricks': {
+    title: 'Quick Tips',
+    body: '3 things I wish I knew earlier about [TOPIC]:\n\n1. [TIP 1] — This alone saved me [TIME/MONEY/EFFORT].\n\n2. [TIP 2] — Most people overlook this, but it makes a huge difference.\n\n3. [TIP 3] — Simple to implement, high impact.\n\nWhich one resonates most? Drop a comment below.',
+  },
+  announcement: {
+    title: 'Big News',
+    body: "Big news — [ANNOUNCEMENT]!\n\nAfter [TIMEFRAME] of [EFFORT], we're thrilled to share that [DETAILS].\n\nWhat this means for you: [BENEFIT]\n\nStay tuned for more updates. We're just getting started.",
+  },
+};
+
+function isValidTemplateCategory(category: string): category is TemplateCategory {
+  return TEMPLATE_CATEGORIES.includes(category as TemplateCategory);
+}
+
+/**
+ * Generate a quick-start content template using AI.
+ * Falls back to a hardcoded skeleton if AI fails.
+ */
+export async function generateTemplate(data: {
+  category: string;
+  model?: string;
+  context?: string;
+}): Promise<{ title: string; body: string; source: 'ai' | 'fallback' }> {
+  if (!isValidTemplateCategory(data.category)) {
+    throw new Error(
+      `Invalid template category: ${data.category}. Valid: ${TEMPLATE_CATEGORIES.join(', ')}`,
+    );
+  }
+
+  const fallback = FALLBACK_SKELETONS[data.category];
+
+  const systemPrompt =
+    'You are a content strategist and copywriter. Generate a ready-to-edit content draft based on the requested template type. ' +
+    'Return ONLY a JSON object with "title" (string, max 80 chars) and "body" (string, the full post content, 150-400 words). ' +
+    'The content should be engaging, specific, and feel like a real post — not generic filler. ' +
+    'Do not include markdown code fences, explanation, or anything outside the JSON object.';
+
+  const categoryDescriptions: Record<TemplateCategory, string> = {
+    'product-launch':
+      'A product launch or feature announcement post. Exciting, benefit-driven, with a clear CTA.',
+    'behind-the-scenes':
+      'A behind-the-scenes look at the work, process, or journey. Authentic, personal, builds trust.',
+    'tips-and-tricks':
+      'A practical tips post sharing lessons learned or actionable advice. Numbered, scannable, valuable.',
+    announcement:
+      'A company or personal announcement — milestone, news, or update. Celebratory yet professional.',
+  };
+
+  const userMessage = [
+    `Generate a "${data.category}" template.`,
+    `Style: ${categoryDescriptions[data.category]}`,
+    data.context ? `Additional context from the user: ${data.context}` : '',
+    'Make it feel real and specific — avoid generic placeholder text where possible.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  try {
+    const startTime = Date.now();
+    const response = await providerRegistry.complete({
+      model: data.model || 'claude-haiku-4-5-20251001',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      temperature: 0.8,
+      maxTokens: 1000,
+    });
+
+    const content = response.content.trim();
+    const jsonStr = content.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+    const parsed = JSON.parse(jsonStr) as { title: string; body: string };
+
+    if (!parsed.title || !parsed.body) {
+      throw new Error('AI response missing title or body');
+    }
+
+    const latencyMs = Date.now() - startTime;
+    logger.info(
+      { category: data.category, model: data.model || 'claude-haiku-4-5-20251001', latencyMs },
+      'Template generated via AI',
+    );
+
+    return { title: parsed.title, body: parsed.body, source: 'ai' };
+  } catch (err) {
+    logger.error(
+      { err, category: data.category },
+      'AI template generation failed, returning fallback skeleton',
+    );
+    return { ...fallback, source: 'fallback' };
+  }
+}
+
 /**
  * Generate platform-adapted content using AI.
  * Takes a main body and adapts it for multiple channels via the AI provider registry.
@@ -248,43 +480,46 @@ export async function generateMultiPlatformContent(data: {
     'Do not include any other text, markdown formatting, or code fences.';
 
   // 3. Build user message with channel details
-  const channelDescriptions = channels.map((ch) => {
-    const cfg = ch.config;
-    const charLimit = typeof cfg.charLimit === 'number' ? cfg.charLimit : 'unlimited';
-    const optimalCharLimit = typeof cfg.optimalCharLimit === 'number' ? cfg.optimalCharLimit : null;
-    const format = typeof cfg.format === 'string' ? cfg.format : 'general';
+  const channelDescriptions = channels
+    .map((ch) => {
+      const cfg = ch.config;
+      const charLimit = typeof cfg.charLimit === 'number' ? cfg.charLimit : 'unlimited';
+      const optimalCharLimit =
+        typeof cfg.optimalCharLimit === 'number' ? cfg.optimalCharLimit : null;
+      const format = typeof cfg.format === 'string' ? cfg.format : 'general';
 
-    let desc = `Channel ${ch.id} (${ch.name}): Max ${charLimit} chars`;
-    if (optimalCharLimit) desc += `, optimal ${optimalCharLimit}`;
-    desc += `, format: ${format}`;
+      let desc = `Channel ${ch.id} (${ch.name}): Max ${charLimit} chars`;
+      if (optimalCharLimit) desc += `, optimal ${optimalCharLimit}`;
+      desc += `, format: ${format}`;
 
-    // Platform-specific hints
-    if (ch.name.toLowerCase().includes('twitter') || ch.name.toLowerCase().includes('x')) {
-      desc += '. Use hashtags, be punchy.';
-    } else if (ch.name.toLowerCase().includes('linkedin')) {
-      desc += '. Professional tone, use line breaks for readability.';
-    } else if (ch.name.toLowerCase().includes('instagram')) {
-      desc += '. Use emojis, hashtags at the end, engaging caption style.';
-    } else if (ch.name.toLowerCase().includes('email')) {
-      desc += '. Clear subject-worthy opening, conversational but professional.';
-    } else if (ch.name.toLowerCase().includes('blog')) {
-      desc += '. Long-form, well-structured with headers if appropriate.';
-    } else if (ch.name.toLowerCase().includes('tiktok')) {
-      desc += '. Casual, hook-driven, Gen-Z friendly tone.';
-    } else if (ch.name.toLowerCase().includes('facebook')) {
-      desc += '. Conversational, encourage engagement.';
-    } else if (ch.name.toLowerCase().includes('threads')) {
-      desc += '. Concise, conversational, thread-friendly.';
-    } else if (ch.name.toLowerCase().includes('bluesky')) {
-      desc += '. Short and conversational, no hashtags.';
-    } else if (ch.name.toLowerCase().includes('pinterest')) {
-      desc += '. Descriptive, keyword-rich for search.';
-    } else if (ch.name.toLowerCase().includes('youtube')) {
-      desc += '. SEO-friendly description with keywords.';
-    }
+      // Platform-specific hints
+      if (ch.name.toLowerCase().includes('twitter') || ch.name.toLowerCase().includes('x')) {
+        desc += '. Use hashtags, be punchy.';
+      } else if (ch.name.toLowerCase().includes('linkedin')) {
+        desc += '. Professional tone, use line breaks for readability.';
+      } else if (ch.name.toLowerCase().includes('instagram')) {
+        desc += '. Use emojis, hashtags at the end, engaging caption style.';
+      } else if (ch.name.toLowerCase().includes('email')) {
+        desc += '. Clear subject-worthy opening, conversational but professional.';
+      } else if (ch.name.toLowerCase().includes('blog')) {
+        desc += '. Long-form, well-structured with headers if appropriate.';
+      } else if (ch.name.toLowerCase().includes('tiktok')) {
+        desc += '. Casual, hook-driven, Gen-Z friendly tone.';
+      } else if (ch.name.toLowerCase().includes('facebook')) {
+        desc += '. Conversational, encourage engagement.';
+      } else if (ch.name.toLowerCase().includes('threads')) {
+        desc += '. Concise, conversational, thread-friendly.';
+      } else if (ch.name.toLowerCase().includes('bluesky')) {
+        desc += '. Short and conversational, no hashtags.';
+      } else if (ch.name.toLowerCase().includes('pinterest')) {
+        desc += '. Descriptive, keyword-rich for search.';
+      } else if (ch.name.toLowerCase().includes('youtube')) {
+        desc += '. SEO-friendly description with keywords.';
+      }
 
-    return desc;
-  }).join('\n');
+      return desc;
+    })
+    .join('\n');
 
   const userMessage =
     `Original content:\n\n${data.mainBody}\n\n` +

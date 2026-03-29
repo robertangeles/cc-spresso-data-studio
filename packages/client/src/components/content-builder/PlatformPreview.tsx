@@ -1,4 +1,13 @@
-import { Monitor, Heart, MessageCircle, Repeat2, Share, ThumbsUp, Bookmark } from 'lucide-react';
+import {
+  Monitor,
+  Heart,
+  MessageCircle,
+  Repeat2,
+  Share,
+  ThumbsUp,
+  Bookmark,
+  Sparkles,
+} from 'lucide-react';
 
 interface Channel {
   id: string;
@@ -354,7 +363,7 @@ export function PlatformPreview({
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
               </svg>
-              <p className="text-xs font-medium text-text-secondary">Select platforms above</p>
+              <p className="text-xs font-medium text-text-secondary">Select platforms to preview</p>
             </div>
           </div>
         </div>
@@ -364,17 +373,23 @@ export function PlatformPreview({
 
   return (
     <div className="space-y-3 overflow-y-auto scrollbar-thin p-3">
-      {selectedChannels.map((channel) => {
+      {selectedChannels.map((channel, index) => {
         const body = getBody(channel.slug, platformBodies, mainBody);
         const limit = CHAR_LIMITS[channel.slug] ?? 5000;
         const charCount = body.length;
         const topBorderColor = PLATFORM_TOP_BORDER[channel.slug] ?? 'bg-accent';
         const iconColor = PLATFORM_ICON_COLOR[channel.slug] ?? 'text-accent';
+        const hasAdaptedContent = !!platformBodies[channel.id];
 
         return (
           <div
             key={channel.id}
-            className="bg-surface-2 rounded-xl border border-border-subtle overflow-hidden transition-all duration-200 hover:-translate-y-[2px] hover:shadow-dark-lg"
+            className={`bg-surface-2 rounded-xl border border-border-subtle overflow-hidden transition-all duration-300 hover:-translate-y-[2px] hover:shadow-dark-lg animate-slide-up ${
+              hasAdaptedContent
+                ? 'ring-1 ring-accent/10 shadow-[0_0_12px_rgba(255,214,10,0.06)]'
+                : ''
+            }`}
+            style={{ animationDelay: `${index * 80}ms`, animationFillMode: 'both' }}
           >
             {/* Colored top border bar */}
             <div className={`h-[3px] ${topBorderColor}`} />
@@ -385,15 +400,27 @@ export function PlatformPreview({
                 <span className={`text-base ${iconColor}`}>{channel.icon}</span>
                 <span className="text-xs font-medium text-text-primary">{channel.name}</span>
               </div>
-              <span
-                className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                  charCount > limit
-                    ? 'bg-status-error-dim text-status-error'
-                    : 'bg-surface-3 text-text-tertiary'
-                }`}
-              >
-                {charCount}/{limit}
-              </span>
+              <div className="flex items-center gap-1.5">
+                {hasAdaptedContent && (
+                  <span className="flex items-center gap-0.5 text-[9px] text-accent/70 font-medium">
+                    <Sparkles className="h-2.5 w-2.5" />
+                    AI
+                  </span>
+                )}
+                <span
+                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors duration-300 ${
+                    charCount > limit
+                      ? 'bg-red-500/15 text-red-400'
+                      : charCount > limit * 0.8
+                        ? 'bg-amber-400/15 text-amber-400'
+                        : charCount > 0
+                          ? 'bg-green-400/10 text-green-400'
+                          : 'bg-surface-3 text-text-tertiary'
+                  }`}
+                >
+                  {charCount}/{limit}
+                </span>
+              </div>
             </div>
 
             {/* Platform-specific content */}

@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Flow, FlowField, SSEStepStart, SSEStepComplete, SSEStepError, SSEEditorRound, SSEEditorApprovalNeeded, SSEDone, AuditViolation } from '@cc/shared';
+import type {
+  Flow,
+  FlowField,
+  SSEStepStart,
+  SSEStepComplete,
+  SSEStepError,
+  SSEEditorRound,
+  SSEEditorApprovalNeeded,
+  SSEDone,
+  AuditViolation,
+} from '@cc/shared';
 import Markdown from 'react-markdown';
 import { Card } from '../../ui/Card';
 import { Button } from '../../ui/Button';
@@ -81,18 +91,29 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
       const { data } = await api.get(`/flows/${flow.id}/executions/${runId}`);
       const run = data.data;
       setInputs(run.inputs as Record<string, string>);
-      const results = run.stepResults as Array<{ stepIndex: number; skillName: string; model: string; output: Record<string, string>; duration: number; tokens: { input: number; output: number }; status: string; error?: string }>;
-      setLiveSteps(results.map((r) => ({
-        index: r.stepIndex,
-        skillName: r.skillName,
-        model: r.model,
-        state: (r.status === 'success' ? 'done' : 'error') as StepState,
-        output: r.output,
-        duration: r.duration,
-        tokens: r.tokens,
-        error: r.error,
-        editorRounds: [],
-      })));
+      const results = run.stepResults as Array<{
+        stepIndex: number;
+        skillName: string;
+        model: string;
+        output: Record<string, string>;
+        duration: number;
+        tokens: { input: number; output: number };
+        status: string;
+        error?: string;
+      }>;
+      setLiveSteps(
+        results.map((r) => ({
+          index: r.stepIndex,
+          skillName: r.skillName,
+          model: r.model,
+          state: (r.status === 'success' ? 'done' : 'error') as StepState,
+          output: r.output,
+          duration: r.duration,
+          tokens: r.tokens,
+          error: r.error,
+          editorRounds: [],
+        })),
+      );
       setTotalDuration(run.totalDuration);
       setIsDone(true);
       setShowHistory(false);
@@ -167,7 +188,14 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
         setLiveSteps((prev) =>
           prev.map((s) =>
             s.index === data.stepIndex
-              ? { ...s, state: 'done' as StepState, output: data.output, duration: data.duration, tokens: data.tokens, model: data.model }
+              ? {
+                  ...s,
+                  state: 'done' as StepState,
+                  output: data.output,
+                  duration: data.duration,
+                  tokens: data.tokens,
+                  model: data.model,
+                }
               : s,
           ),
         );
@@ -200,7 +228,14 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
         setLiveSteps((prev) =>
           prev.map((s) =>
             s.index === data.stepIndex
-              ? { ...s, awaitingApproval: { generatorOutput: data.generatorOutput, editorFeedback: data.editorFeedback, round: data.round } }
+              ? {
+                  ...s,
+                  awaitingApproval: {
+                    generatorOutput: data.generatorOutput,
+                    editorFeedback: data.editorFeedback,
+                    round: data.round,
+                  },
+                }
               : s,
           ),
         );
@@ -221,7 +256,7 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
           setReconnecting(true);
           // Clear any pending approvals — stream is dead
           setLiveSteps((prev) =>
-            prev.map((s) => s.awaitingApproval ? { ...s, awaitingApproval: undefined } : s),
+            prev.map((s) => (s.awaitingApproval ? { ...s, awaitingApproval: undefined } : s)),
           );
           setTimeout(() => {
             setReconnecting(false);
@@ -246,13 +281,15 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
     }
   }, [flow.id, inputs, fields, steps, isDone]);
 
-  const handleApproval = async (stepIndex: number, action: 'approve' | 'revise', feedback?: string) => {
+  const handleApproval = async (
+    stepIndex: number,
+    action: 'approve' | 'revise',
+    feedback?: string,
+  ) => {
     try {
       await api.post(`/flows/${flow.id}/execute/approve`, { stepIndex, action, feedback });
       setLiveSteps((prev) =>
-        prev.map((s) =>
-          s.index === stepIndex ? { ...s, awaitingApproval: undefined } : s,
-        ),
+        prev.map((s) => (s.index === stepIndex ? { ...s, awaitingApproval: undefined } : s)),
       );
     } catch {
       setError('Failed to send approval — your session may have expired. Try logging in again.');
@@ -262,9 +299,7 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
   const handleOutputEdit = (stepIndex: number, key: string, value: string) => {
     setLiveSteps((prev) =>
       prev.map((s) =>
-        s.index === stepIndex
-          ? { ...s, output: { ...s.output, [key]: value } }
-          : s,
+        s.index === stepIndex ? { ...s, output: { ...s.output, [key]: value } } : s,
       ),
     );
   };
@@ -298,7 +333,7 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
           s.index === stepIndex
             ? {
                 ...s,
-                state: result.status === 'success' ? 'done' as StepState : 'error' as StepState,
+                state: result.status === 'success' ? ('done' as StepState) : ('error' as StepState),
                 output: result.outputs,
                 duration: result.durationMs,
                 tokens: { input: result.usage.inputTokens, output: result.usage.outputTokens },
@@ -310,7 +345,9 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
         ),
       );
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Refresh failed';
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        'Refresh failed';
       setLiveSteps((prev) =>
         prev.map((s) =>
           s.index === stepIndex ? { ...s, state: 'error' as StepState, error: msg } : s,
@@ -337,25 +374,27 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
       {/* Left panel — Inputs */}
       <div className="w-1/3 shrink-0 space-y-4 overflow-y-auto">
         <div>
-          <h3 className="font-medium text-gray-900">Run Orchestration</h3>
-          <p className="text-sm text-gray-500">Fill in the inputs and execute.</p>
+          <h3 className="font-medium text-text-primary">Run Orchestration</h3>
+          <p className="text-sm text-text-tertiary">Fill in the inputs and execute.</p>
         </div>
 
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
             {error}
           </div>
         )}
 
         {reconnecting && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-400">
             Reconnecting...
           </div>
         )}
 
         <Card padding="lg">
           {fields.length === 0 ? (
-            <p className="text-sm text-gray-500">No input fields configured. Add fields in the Form Builder tab.</p>
+            <p className="text-sm text-text-tertiary">
+              No input fields configured. Add fields in the Form Builder tab.
+            </p>
           ) : (
             <div className="space-y-3">
               {fields.map((field) => (
@@ -389,7 +428,7 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
               <button
                 type="button"
                 onClick={() => setShowHistory(!showHistory)}
-                className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700"
+                className="flex items-center gap-1 text-xs font-medium text-text-tertiary hover:text-text-secondary"
               >
                 <span>{showHistory ? '▾' : '▸'}</span>
                 History ({history.length})
@@ -398,7 +437,7 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
                 <button
                   type="button"
                   onClick={() => setShowClearHistoryModal(true)}
-                  className="text-[10px] text-red-500 hover:text-red-700"
+                  className="text-[10px] text-red-400 hover:text-red-300"
                 >
                   Clear All
                 </button>
@@ -409,22 +448,29 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
                 {history.map((run) => (
                   <div
                     key={run.id}
-                    className="flex items-center gap-1 rounded-lg border border-gray-100 hover:bg-gray-50"
+                    className="flex items-center gap-1 rounded-lg border border-border-subtle hover:bg-surface-2"
                   >
                     <button
                       type="button"
                       onClick={() => loadFromHistory(run.id)}
                       className="flex-1 flex items-center justify-between px-3 py-2 text-xs text-left"
                     >
-                      <span className="text-gray-700">
+                      <span className="text-text-secondary">
                         {new Date(run.createdAt).toLocaleString(undefined, {
-                          month: 'short', day: 'numeric', year: 'numeric',
-                          hour: 'numeric', minute: '2-digit',
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
                         })}
                       </span>
-                      <span className={`rounded-full px-2 py-0.5 font-medium ${
-                        run.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
+                      <span
+                        className={`rounded-full px-2 py-0.5 font-medium ${
+                          run.status === 'completed'
+                            ? 'bg-green-500/15 text-green-400'
+                            : 'bg-red-500/15 text-red-400'
+                        }`}
+                      >
                         {run.status}
                       </span>
                     </button>
@@ -435,7 +481,7 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
                         await api.delete(`/flows/${flow.id}/executions/${run.id}`);
                         fetchHistory();
                       }}
-                      className="px-2 py-2 text-gray-300 hover:text-red-500"
+                      className="px-2 py-2 text-text-tertiary hover:text-red-400"
                       title="Delete"
                     >
                       ✕
@@ -452,7 +498,9 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
       <div ref={resultsRef} className="flex-1 overflow-y-auto space-y-3">
         {liveSteps.length === 0 && !isRunning && (
           <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-gray-400">Results will appear here as each step completes.</p>
+            <p className="text-sm text-text-tertiary">
+              Results will appear here as each step completes.
+            </p>
           </div>
         )}
 
@@ -468,21 +516,27 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
           />
         ))}
 
-        {isDone && totalDuration !== null && (() => {
-          const hasErrors = liveSteps.some((s) => s.state === 'error');
-          return (
-          <div className={`rounded-lg border px-4 py-3 text-sm flex items-center justify-between ${hasErrors ? 'border-red-200 bg-red-50 text-red-800' : 'border-green-200 bg-green-50 text-green-800'}`}>
-            <span>{hasErrors ? 'Failed' : 'Completed'} in {(totalDuration / 1000).toFixed(1)}s</span>
-            <button
-              type="button"
-              onClick={handleReset}
-              className="text-xs font-medium text-gray-500 hover:text-gray-700"
-            >
-              Clear Output
-            </button>
-          </div>
-          );
-        })()}
+        {isDone &&
+          totalDuration !== null &&
+          (() => {
+            const hasErrors = liveSteps.some((s) => s.state === 'error');
+            return (
+              <div
+                className={`rounded-lg border px-4 py-3 text-sm flex items-center justify-between ${hasErrors ? 'border-red-500/20 bg-red-500/10 text-red-400' : 'border-green-500/20 bg-green-500/10 text-green-400'}`}
+              >
+                <span>
+                  {hasErrors ? 'Failed' : 'Completed'} in {(totalDuration / 1000).toFixed(1)}s
+                </span>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="text-xs font-medium text-text-tertiary hover:text-text-secondary"
+                >
+                  Clear Output
+                </button>
+              </div>
+            );
+          })()}
       </div>
 
       <Modal
@@ -513,11 +567,12 @@ interface FieldInputProps {
 }
 
 function FieldInput({ field, value, onChange, disabled }: FieldInputProps) {
-  const baseClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:bg-gray-50';
+  const baseClass =
+    'w-full rounded-lg border border-border-default bg-surface-2 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/30 disabled:bg-surface-3 disabled:text-text-tertiary';
 
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">
+      <label className="mb-1 block text-sm font-medium text-text-secondary">
         {field.label}
         {field.required && <span className="ml-1 text-red-500">*</span>}
       </label>
@@ -539,7 +594,9 @@ function FieldInput({ field, value, onChange, disabled }: FieldInputProps) {
         >
           <option value="">Select...</option>
           {(field.options ?? []).map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
           ))}
         </select>
       ) : (
@@ -610,22 +667,24 @@ const THINKING_MESSAGES = [
   'Already better than most LinkedIn posts.',
   'No "synergy" in this output. Promise.',
   'Faster than your coffee is cooling...',
-  'Content that doesn\'t die in tabs.',
+  "Content that doesn't die in tabs.",
   // Momentum
   'Momentum loading...',
   'Zero to published...',
   'From blank page to done...',
   'The hard part is over. You showed up.',
   'Drop the idea. We handle the rest.',
-  'One idea. Multiple channels. Let\'s go.',
+  "One idea. Multiple channels. Let's go.",
   'Creating assets, not busywork.',
-  'Your audience won\'t wait. Neither do we.',
+  "Your audience won't wait. Neither do we.",
   'Ship it before lunch.',
   'Almost there. Stay caffeinated.',
 ];
 
 function useThinkingMessage(isRunning: boolean) {
-  const [messageIndex, setMessageIndex] = useState(() => Math.floor(Math.random() * THINKING_MESSAGES.length));
+  const [messageIndex, setMessageIndex] = useState(() =>
+    Math.floor(Math.random() * THINKING_MESSAGES.length),
+  );
 
   useEffect(() => {
     if (!isRunning) return;
@@ -638,14 +697,28 @@ function useThinkingMessage(isRunning: boolean) {
   return THINKING_MESSAGES[messageIndex];
 }
 
-function LiveStepCard({ step, flowId, onApprove, onOutputEdit, onRefresh, isRefreshing }: LiveStepCardProps) {
+function LiveStepCard({
+  step,
+  flowId,
+  onApprove,
+  onOutputEdit,
+  onRefresh,
+  isRefreshing,
+}: LiveStepCardProps) {
   const [editFeedback, setEditFeedback] = useState('');
   const [viewMode, setViewMode] = useState<'raw' | 'preview' | 'edit' | 'audit'>('preview');
   const [editBuffer, setEditBuffer] = useState<Record<string, string>>({});
-  const [auditResult, setAuditResult] = useState<{ violations: AuditViolation[]; mechanical: number; subjective: number; total: number } | null>(null);
+  const [auditResult, setAuditResult] = useState<{
+    violations: AuditViolation[];
+    mechanical: number;
+    subjective: number;
+    total: number;
+  } | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
   const [isReworking, setIsReworking] = useState(false);
-  const [reworkRounds, setReworkRounds] = useState<Array<{ round: number; fixedCount: number; remainingCount: number }>>([]);
+  const [reworkRounds, setReworkRounds] = useState<
+    Array<{ round: number; fixedCount: number; remainingCount: number }>
+  >([]);
   const thinkingMessage = useThinkingMessage(step.state === 'running');
 
   const getOutputText = () => {
@@ -660,7 +733,10 @@ function LiveStepCard({ step, flowId, onApprove, onOutputEdit, onRefresh, isRefr
     setIsAuditing(true);
     setAuditResult(null);
     try {
-      const { data } = await api.post(`/flows/${flowId}/audit`, { content: getOutputText(), includeAi });
+      const { data } = await api.post(`/flows/${flowId}/audit`, {
+        content: getOutputText(),
+        includeAi,
+      });
       setAuditResult(data.data);
       setViewMode('audit');
     } catch {
@@ -691,7 +767,10 @@ function LiveStepCard({ step, flowId, onApprove, onOutputEdit, onRefresh, isRefr
       }
 
       // Re-audit the final content
-      const auditRes = await api.post(`/flows/${flowId}/audit`, { content: result.finalContent, includeAi: false });
+      const auditRes = await api.post(`/flows/${flowId}/audit`, {
+        content: result.finalContent,
+        includeAi: false,
+      });
       setAuditResult(auditRes.data.data);
     } catch {
       // keep current state
@@ -701,17 +780,17 @@ function LiveStepCard({ step, flowId, onApprove, onOutputEdit, onRefresh, isRefr
   };
 
   const stateStyles: Record<StepState, string> = {
-    pending: 'border-gray-200 bg-gray-50',
-    running: 'border-brand-200 bg-brand-50',
-    done: 'border-green-200 bg-white',
-    error: 'border-red-200 bg-red-50',
+    pending: 'border-border-subtle bg-surface-1',
+    running: 'border-accent/30 bg-surface-1 shadow-[0_0_15px_rgba(255,214,10,0.05)]',
+    done: 'border-green-500/20 bg-surface-1',
+    error: 'border-red-500/20 bg-surface-1',
   };
 
   const stateBadge: Record<StepState, { text: string; class: string }> = {
-    pending: { text: 'Pending', class: 'bg-gray-100 text-gray-500' },
-    running: { text: 'Running...', class: 'bg-brand-100 text-brand-700' },
-    done: { text: 'Done', class: 'bg-green-100 text-green-700' },
-    error: { text: 'Error', class: 'bg-red-100 text-red-700' },
+    pending: { text: 'Pending', class: 'bg-surface-3 text-text-tertiary' },
+    running: { text: 'Running...', class: 'bg-accent/15 text-accent' },
+    done: { text: 'Done', class: 'bg-green-500/15 text-green-400' },
+    error: { text: 'Error', class: 'bg-red-500/15 text-red-400' },
   };
 
   const badge = stateBadge[step.state];
@@ -754,251 +833,281 @@ function LiveStepCard({ step, flowId, onApprove, onOutputEdit, onRefresh, isRefr
 
       {/* Metadata */}
       {step.state === 'done' && step.duration !== undefined && (
-        <div className="mb-2 flex gap-4 text-xs text-gray-500">
+        <div className="mb-2 flex gap-4 text-xs text-text-tertiary">
           <span>{(step.duration / 1000).toFixed(1)}s</span>
-          {step.tokens && (
-            <span>{step.tokens.input + step.tokens.output} tokens</span>
-          )}
+          {step.tokens && <span>{step.tokens.input + step.tokens.output} tokens</span>}
         </div>
       )}
 
       {/* Error */}
       {step.state === 'error' && step.error && (
-        <div className="text-sm text-red-700">{step.error}</div>
+        <div className="text-sm text-red-400">{step.error}</div>
       )}
 
       {/* Output */}
-      {step.output && Object.entries(step.output).filter(([key]) => !key.startsWith('__type_')).map(([key, value]) => {
-        const outputType = step.output?.[`__type_${key}`];
-        const isImage = outputType === 'image_url' || outputType === 'image_base64' || value?.startsWith('data:image/') || value?.match(/^https?:\/\/.*\.(png|jpg|jpeg|webp|gif)/i);
+      {step.output &&
+        Object.entries(step.output)
+          .filter(([key]) => !key.startsWith('__type_'))
+          .map(([key, value]) => {
+            const outputType = step.output?.[`__type_${key}`];
+            const isImage =
+              outputType === 'image_url' ||
+              outputType === 'image_base64' ||
+              value?.startsWith('data:image/') ||
+              value?.match(/^https?:\/\/.*\.(png|jpg|jpeg|webp|gif)/i);
 
-        return (
-        <div key={key} className="mt-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-500 uppercase">{key}</span>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                onClick={() => setViewMode('preview')}
-                className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'preview' ? 'bg-brand-100 text-brand-700' : 'text-gray-400 hover:text-gray-600'}`}
-              >
-                Preview
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('raw')}
-                className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'raw' ? 'bg-brand-100 text-brand-700' : 'text-gray-400 hover:text-gray-600'}`}
-              >
-                Raw
-              </button>
-              {step.state === 'done' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (viewMode === 'edit') {
-                        setViewMode('preview');
-                      } else {
-                        setEditBuffer({ ...editBuffer, [key]: value });
-                        setViewMode('edit');
-                      }
-                    }}
-                    className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'edit' ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    {viewMode === 'edit' ? 'Cancel' : 'Edit'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (viewMode === 'audit') {
-                        setViewMode('preview');
-                      } else {
-                        handleAudit(true);
-                      }
-                    }}
-                    disabled={isAuditing}
-                    className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'audit' ? 'bg-red-100 text-red-700' : 'text-gray-400 hover:text-gray-600'} disabled:opacity-50`}
-                  >
-                    {isAuditing ? 'Auditing...' : auditResult ? `Audit (${auditResult.total})` : 'Audit'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-          {isImage ? (
-            <div className="mt-1">
-              <img
-                src={value}
-                alt="Generated image"
-                className="max-h-96 rounded-lg border border-gray-200"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const link = document.createElement('a');
-                  link.href = value;
-                  link.download = `content-pilot-image-${Date.now()}.jpg`;
-                  link.click();
-                }}
-                className="mt-1 inline-block text-xs text-brand-600 hover:text-brand-800"
-              >
-                Download Image
-              </button>
-            </div>
-          ) : viewMode === 'edit' ? (
-            <div className="mt-1 space-y-2">
-              <textarea
-                value={editBuffer[key] ?? value}
-                onChange={(e) => setEditBuffer({ ...editBuffer, [key]: e.target.value })}
-                rows={16}
-                className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 font-mono text-xs text-gray-900 focus:border-brand-500 focus:outline-none"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onOutputEdit?.(step.index, key, editBuffer[key] ?? value);
-                    setViewMode('preview');
-                  }}
-                  className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
-                >
-                  Save Changes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('preview')}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : viewMode === 'audit' && auditResult ? (
-            <div className="mt-1 max-h-[500px] overflow-auto rounded-lg border border-gray-200 bg-white p-4">
-              {auditResult.total === 0 ? (
-                <div className="flex items-center gap-2 text-sm text-green-700">
-                  <span className="text-lg">&#10003;</span> No violations found
+            return (
+              <div key={key} className="mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-text-tertiary uppercase">{key}</span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('preview')}
+                      className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'preview' ? 'bg-accent/15 text-accent' : 'text-text-tertiary hover:text-text-secondary'}`}
+                    >
+                      Preview
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('raw')}
+                      className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'raw' ? 'bg-accent/15 text-accent' : 'text-text-tertiary hover:text-text-secondary'}`}
+                    >
+                      Raw
+                    </button>
+                    {step.state === 'done' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (viewMode === 'edit') {
+                              setViewMode('preview');
+                            } else {
+                              setEditBuffer({ ...editBuffer, [key]: value });
+                              setViewMode('edit');
+                            }
+                          }}
+                          className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'edit' ? 'bg-amber-400/15 text-amber-400' : 'text-text-tertiary hover:text-text-secondary'}`}
+                        >
+                          {viewMode === 'edit' ? 'Cancel' : 'Edit'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (viewMode === 'audit') {
+                              setViewMode('preview');
+                            } else {
+                              handleAudit(true);
+                            }
+                          }}
+                          disabled={isAuditing}
+                          className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'audit' ? 'bg-red-500/15 text-red-400' : 'text-text-tertiary hover:text-text-secondary'} disabled:opacity-50`}
+                        >
+                          {isAuditing
+                            ? 'Auditing...'
+                            : auditResult
+                              ? `Audit (${auditResult.total})`
+                              : 'Audit'}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              ) : auditResult.total === -1 ? (
-                <div className="text-sm text-red-600">Audit failed. Try again.</div>
-              ) : (
-                <>
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-gray-900">
-                      {auditResult.total} violation{auditResult.total !== 1 ? 's' : ''} found
-                    </span>
+                {isImage ? (
+                  <div className="mt-1">
+                    <img
+                      src={value}
+                      alt="Generated image"
+                      className="max-h-96 rounded-lg border border-border-subtle"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = value;
+                        link.download = `content-pilot-image-${Date.now()}.jpg`;
+                        link.click();
+                      }}
+                      className="mt-1 inline-block text-xs text-accent hover:text-accent-hover"
+                    >
+                      Download Image
+                    </button>
+                  </div>
+                ) : viewMode === 'edit' ? (
+                  <div className="mt-1 space-y-2">
+                    <textarea
+                      value={editBuffer[key] ?? value}
+                      onChange={(e) => setEditBuffer({ ...editBuffer, [key]: e.target.value })}
+                      rows={16}
+                      className="w-full rounded-lg border border-amber-400/30 bg-surface-2 px-3 py-2 font-mono text-xs text-text-primary focus:border-accent/40 focus:outline-none"
+                    />
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={handleAutoFix}
-                        disabled={isReworking}
-                        className="rounded-lg bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-                      >
-                        {isReworking ? 'Fixing...' : 'Auto-Fix'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleAudit(false)}
-                        disabled={isAuditing}
-                        className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Re-audit
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => {
-                          setEditBuffer({ ...editBuffer, [key]: value });
-                          setViewMode('edit');
+                          onOutputEdit?.(step.index, key, editBuffer[key] ?? value);
+                          setViewMode('preview');
                         }}
-                        className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-text-inverse hover:bg-accent-hover"
                       >
-                        Manual Edit
+                        Save Changes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('preview')}
+                        className="rounded-lg border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-2"
+                      >
+                        Cancel
                       </button>
                     </div>
                   </div>
-
-                  {/* Rework progress */}
-                  {reworkRounds.length > 0 && (
-                    <div className="mb-3 rounded-lg bg-brand-50 p-2 text-xs text-brand-700">
-                      {reworkRounds.map((r) => (
-                        <div key={r.round}>
-                          Round {r.round}: {r.fixedCount} fixed, {r.remainingCount} remaining
+                ) : viewMode === 'audit' && auditResult ? (
+                  <div className="mt-1 max-h-[500px] overflow-auto rounded-lg border border-border-subtle bg-surface-2 p-4">
+                    {auditResult.total === 0 ? (
+                      <div className="flex items-center gap-2 text-sm text-green-400">
+                        <span className="text-lg">&#10003;</span> No violations found
+                      </div>
+                    ) : auditResult.total === -1 ? (
+                      <div className="text-sm text-red-400">Audit failed. Try again.</div>
+                    ) : (
+                      <>
+                        <div className="mb-3 flex items-center justify-between">
+                          <span className="text-sm font-semibold text-text-primary">
+                            {auditResult.total} violation{auditResult.total !== 1 ? 's' : ''} found
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={handleAutoFix}
+                              disabled={isReworking}
+                              className="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-text-inverse hover:bg-accent-hover disabled:opacity-50"
+                            >
+                              {isReworking ? 'Fixing...' : 'Auto-Fix'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAudit(false)}
+                              disabled={isAuditing}
+                              className="rounded-lg border border-border-default px-3 py-1 text-xs font-medium text-text-secondary hover:bg-surface-3 disabled:opacity-50"
+                            >
+                              Re-audit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditBuffer({ ...editBuffer, [key]: value });
+                                setViewMode('edit');
+                              }}
+                              className="rounded-lg border border-border-default px-3 py-1 text-xs font-medium text-text-secondary hover:bg-surface-3"
+                            >
+                              Manual Edit
+                            </button>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
 
-                  {/* Mechanical violations */}
-                  {auditResult.mechanical > 0 && (
-                    <div className="mb-3">
-                      <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                        Mechanical ({auditResult.mechanical})
-                      </p>
-                      <div className="space-y-1">
-                        {auditResult.violations
-                          .filter((v) => v.type === 'mechanical')
-                          .map((v, i) => (
-                            <div key={`m-${i}`} className="rounded border-l-2 border-red-400 bg-red-50 px-3 py-1.5 text-xs">
-                              <span className="font-medium text-red-700">{v.rule}</span>
-                              {v.line > 0 && <span className="ml-1 text-red-400">line {v.line}</span>}
-                              <p className="mt-0.5 text-gray-600">{v.explanation}</p>
-                              <p className="mt-0.5 truncate text-gray-400 italic">{v.sentence.slice(0, 120)}</p>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
+                        {/* Rework progress */}
+                        {reworkRounds.length > 0 && (
+                          <div className="mb-3 rounded-lg bg-accent/10 p-2 text-xs text-accent">
+                            {reworkRounds.map((r) => (
+                              <div key={r.round}>
+                                Round {r.round}: {r.fixedCount} fixed, {r.remainingCount} remaining
+                              </div>
+                            ))}
+                          </div>
+                        )}
 
-                  {/* Subjective violations */}
-                  {auditResult.subjective > 0 && (
-                    <div>
-                      <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                        Subjective ({auditResult.subjective}) — AI scan
-                      </p>
-                      <div className="space-y-1">
-                        {auditResult.violations
-                          .filter((v) => v.type === 'subjective')
-                          .map((v, i) => (
-                            <div key={`s-${i}`} className="rounded border-l-2 border-amber-400 bg-amber-50 px-3 py-1.5 text-xs">
-                              <span className="font-medium text-amber-700">{v.rule}</span>
-                              {v.line > 0 && <span className="ml-1 text-amber-400">line {v.line}</span>}
-                              <p className="mt-0.5 text-gray-600">{v.explanation}</p>
-                              <p className="mt-0.5 truncate text-gray-400 italic">{v.sentence.slice(0, 120)}</p>
+                        {/* Mechanical violations */}
+                        {auditResult.mechanical > 0 && (
+                          <div className="mb-3">
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                              Mechanical ({auditResult.mechanical})
+                            </p>
+                            <div className="space-y-1">
+                              {auditResult.violations
+                                .filter((v) => v.type === 'mechanical')
+                                .map((v, i) => (
+                                  <div
+                                    key={`m-${i}`}
+                                    className="rounded border-l-2 border-red-400 bg-red-500/10 px-3 py-1.5 text-xs"
+                                  >
+                                    <span className="font-medium text-red-400">{v.rule}</span>
+                                    {v.line > 0 && (
+                                      <span className="ml-1 text-red-400/60">line {v.line}</span>
+                                    )}
+                                    <p className="mt-0.5 text-text-secondary">{v.explanation}</p>
+                                    <p className="mt-0.5 truncate text-text-tertiary italic">
+                                      {v.sentence.slice(0, 120)}
+                                    </p>
+                                  </div>
+                                ))}
                             </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          ) : viewMode === 'raw' ? (
-            <pre className="mt-1 max-h-96 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700 whitespace-pre-wrap">
-              {value}
-            </pre>
-          ) : (
-            <div className="mt-1 max-h-96 overflow-auto rounded-lg bg-white border border-gray-200 p-4 prose prose-sm prose-gray max-w-none">
-              <Markdown>{value}</Markdown>
-            </div>
-          )}
-        </div>
-      );})}
+                          </div>
+                        )}
+
+                        {/* Subjective violations */}
+                        {auditResult.subjective > 0 && (
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                              Subjective ({auditResult.subjective}) — AI scan
+                            </p>
+                            <div className="space-y-1">
+                              {auditResult.violations
+                                .filter((v) => v.type === 'subjective')
+                                .map((v, i) => (
+                                  <div
+                                    key={`s-${i}`}
+                                    className="rounded border-l-2 border-amber-400 bg-amber-400/10 px-3 py-1.5 text-xs"
+                                  >
+                                    <span className="font-medium text-amber-400">{v.rule}</span>
+                                    {v.line > 0 && (
+                                      <span className="ml-1 text-amber-400/60">line {v.line}</span>
+                                    )}
+                                    <p className="mt-0.5 text-text-secondary">{v.explanation}</p>
+                                    <p className="mt-0.5 truncate text-text-tertiary italic">
+                                      {v.sentence.slice(0, 120)}
+                                    </p>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ) : viewMode === 'raw' ? (
+                  <pre className="mt-1 max-h-96 overflow-auto rounded-lg bg-surface-2 p-3 text-xs text-text-secondary whitespace-pre-wrap">
+                    {value}
+                  </pre>
+                ) : (
+                  <div className="mt-1 max-h-96 overflow-auto rounded-lg bg-surface-2 border border-border-subtle p-4 prose prose-sm prose-invert max-w-none">
+                    <Markdown>{value}</Markdown>
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
       {/* Editor Rounds */}
       {step.editorRounds && step.editorRounds.length > 0 && (
-        <div className="mt-3 border-t border-gray-200 pt-3">
-          <h5 className="text-xs font-semibold text-gray-600 uppercase mb-2">Editor Review</h5>
+        <div className="mt-3 border-t border-border-subtle pt-3">
+          <h5 className="text-xs font-semibold text-text-tertiary uppercase mb-2">Editor Review</h5>
           {step.editorRounds.map((round) => (
-            <div key={round.round} className="mb-2 rounded-lg bg-gray-50 p-2 text-xs">
+            <div key={round.round} className="mb-2 rounded-lg bg-surface-2 p-2 text-xs">
               <div className="flex items-center justify-between mb-1">
-                <span className="font-medium text-gray-700">Round {round.round}/{round.maxRounds}</span>
-                <span className={`rounded-full px-2 py-0.5 font-medium ${
-                  round.verdict === 'approve' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                }`}>
+                <span className="font-medium text-text-secondary">
+                  Round {round.round}/{round.maxRounds}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 font-medium ${
+                    round.verdict === 'approve'
+                      ? 'bg-green-500/15 text-green-400'
+                      : 'bg-amber-400/15 text-amber-400'
+                  }`}
+                >
                   {round.verdict === 'approve' ? 'Approved' : 'Revise'}
                 </span>
               </div>
-              <p className="text-gray-600">{round.feedback}</p>
+              <p className="text-text-secondary">{round.feedback}</p>
             </div>
           ))}
         </div>
@@ -1006,22 +1115,32 @@ function LiveStepCard({ step, flowId, onApprove, onOutputEdit, onRefresh, isRefr
 
       {/* Manual Approval */}
       {step.awaitingApproval && (
-        <div className="mt-3 border-t border-gray-200 pt-3">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <h5 className="text-sm font-semibold text-amber-800 mb-2">Editor Feedback — Your Approval Needed</h5>
-            <p className="text-sm text-gray-700 mb-3">{step.awaitingApproval.editorFeedback}</p>
+        <div className="mt-3 border-t border-border-subtle pt-3">
+          <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-3">
+            <h5 className="text-sm font-semibold text-amber-400 mb-2">
+              Editor Feedback — Your Approval Needed
+            </h5>
+            <p className="text-sm text-text-secondary mb-3">
+              {step.awaitingApproval.editorFeedback}
+            </p>
             <textarea
               value={editFeedback}
               onChange={(e) => setEditFeedback(e.target.value)}
               placeholder="Optionally edit the feedback before sending..."
               rows={2}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-2"
+              className="w-full rounded-lg border border-border-default bg-surface-2 px-3 py-2 text-sm text-text-primary mb-2"
             />
             <div className="flex gap-2">
               <Button size="sm" onClick={() => onApprove('approve')}>
                 Accept Output
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => onApprove('revise', editFeedback || step.awaitingApproval!.editorFeedback)}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  onApprove('revise', editFeedback || step.awaitingApproval!.editorFeedback)
+                }
+              >
                 Send to Generator
               </Button>
             </div>

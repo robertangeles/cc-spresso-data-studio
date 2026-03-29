@@ -39,7 +39,7 @@ export function ContentEditor({ item, onSave, onClose }: ContentEditorProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Edit Content</h3>
+        <h3 className="text-lg font-semibold text-text-primary">Edit Content</h3>
         <div className="flex gap-2">
           <Button size="sm" onClick={handleSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save'}
@@ -55,28 +55,24 @@ export function ContentEditor({ item, onSave, onClose }: ContentEditorProps) {
 
       <Card padding="lg">
         <div className="space-y-4">
-          <Input
-            label="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Content</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">Content</label>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={12}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+              className="w-full rounded-lg border border-border-default px-3 py-2 text-sm text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/30 focus:ring-offset-2"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">Status</label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+              className="w-full rounded-lg border border-border-default px-3 py-2 text-sm focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/30 focus:ring-offset-2"
             >
               <option value="draft">Draft</option>
               <option value="ready">Ready</option>
@@ -88,11 +84,13 @@ export function ContentEditor({ item, onSave, onClose }: ContentEditorProps) {
       </Card>
 
       <Card padding="md">
-        <h4 className="mb-2 text-sm font-medium text-gray-500">Metadata</h4>
-        <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
+        <h4 className="mb-2 text-sm font-medium text-text-tertiary">Metadata</h4>
+        <div className="grid grid-cols-2 gap-2 text-xs text-text-tertiary">
           <div>Created: {new Date(item.createdAt).toLocaleString()}</div>
           {item.metadata?.model ? <div>Model: {String(item.metadata.model)}</div> : null}
-          {item.metadata?.durationMs ? <div>Duration: {String(item.metadata.durationMs)}ms</div> : null}
+          {item.metadata?.durationMs ? (
+            <div>Duration: {String(item.metadata.durationMs)}ms</div>
+          ) : null}
           {item.tags.length > 0 && <div>Tags: {item.tags.join(', ')}</div>}
         </div>
       </Card>
