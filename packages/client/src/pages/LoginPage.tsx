@@ -165,7 +165,12 @@ export function LoginPage() {
               }}
             />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-text-primary">Spresso</h1>
+          <div className="flex items-center justify-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-text-primary">Spresso</h1>
+            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent">
+              Open Beta
+            </span>
+          </div>
           <p className="mt-1 text-sm text-text-secondary font-medium">
             Create once. Reach everywhere.
           </p>

@@ -114,6 +114,9 @@ export function Sidebar() {
           <Coffee className="h-5 w-5 text-accent" />
         </div>
         <span className="text-lg font-bold tracking-tight text-text-primary">Spresso</span>
+        <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-accent">
+          Open Beta
+        </span>
       </div>
 
       {/* Chat zone */}
