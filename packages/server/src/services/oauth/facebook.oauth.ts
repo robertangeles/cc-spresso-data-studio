@@ -1,0 +1,128 @@
+import type { OAuthProvider, OAuthTokens } from './oauth.interface.js';
+import { db, schema } from '../../db/index.js';
+import { eq } from 'drizzle-orm';
+import { logger } from '../../config/logger.js';
+
+export class FacebookOAuthProvider implements OAuthProvider {
+  platform = 'facebook';
+
+  private async getCredentials(): Promise<{ appId: string; appSecret: string }> {
+    const appIdSetting = await db.query.settings.findFirst({
+      where: eq(schema.settings.key, 'META_APP_ID'),
+    });
+    const appSecretSetting = await db.query.settings.findFirst({
+      where: eq(schema.settings.key, 'META_APP_SECRET'),
+    });
+    if (!appIdSetting?.value || !appSecretSetting?.value) {
+      throw new Error(
+        'Meta App credentials not configured. Add META_APP_ID and META_APP_SECRET in Settings.',
+      );
+    }
+    return { appId: appIdSetting.value, appSecret: appSecretSetting.value };
+  }
+
+  async getAuthUrl(userId: string, redirectBase: string): Promise<string> {
+    const { appId } = await this.getCredentials();
+    const redirectUri = `${redirectBase}/api/oauth/facebook/callback`;
+    const state = Buffer.from(JSON.stringify({ userId })).toString('base64url');
+    const scopes = 'pages_manage_posts,pages_read_engagement,pages_show_list,public_profile';
+    return `https://www.facebook.com/v22.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${state}&response_type=code`;
+  }
+
+  async exchangeCode(code: string, redirectBase: string): Promise<OAuthTokens> {
+    const { appId, appSecret } = await this.getCredentials();
+    const redirectUri = `${redirectBase}/api/oauth/facebook/callback`;
+
+    // Exchange code for short-lived token
+    const tokenUrl = `https://graph.facebook.com/v22.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`;
+    const tokenRes = await fetch(tokenUrl);
+    const tokenData = (await tokenRes.json()) as any;
+
+    if (tokenData.error) {
+      logger.error({ error: tokenData.error }, 'Facebook code exchange failed');
+      throw new Error(tokenData.error.message || 'Failed to exchange code');
+    }
+
+    // Exchange for long-lived user token (60 days)
+    const longLivedUrl = `https://graph.facebook.com/v22.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${tokenData.access_token}`;
+    const longLivedRes = await fetch(longLivedUrl);
+    const longLivedData = (await longLivedRes.json()) as any;
+
+    if (longLivedData.error) {
+      logger.error({ error: longLivedData.error }, 'Facebook long-lived token exchange failed');
+      throw new Error(longLivedData.error.message || 'Failed to get long-lived token');
+    }
+
+    const userAccessToken = longLivedData.access_token;
+    const expiresIn = longLivedData.expires_in || 5184000;
+
+    // Get the first Facebook Page with its Page Access Token
+    const { accountId, accountName, pageAccessToken } = await this.getPageInfo(userAccessToken);
+
+    return {
+      accessToken: pageAccessToken,
+      expiresAt: new Date(Date.now() + expiresIn * 1000),
+      accountId,
+      accountName,
+      accountType: 'page',
+    };
+  }
+
+  /**
+   * Get Facebook Pages and return the first page's info + Page Access Token.
+   * Page Access Tokens from long-lived user tokens are also long-lived.
+   */
+  private async getPageInfo(
+    userAccessToken: string,
+  ): Promise<{ accountId: string; accountName: string; pageAccessToken: string }> {
+    const pagesRes = await fetch(
+      `https://graph.facebook.com/v22.0/me/accounts?fields=id,name,access_token&access_token=${userAccessToken}`,
+    );
+    const pagesData = (await pagesRes.json()) as any;
+
+    if (!pagesData.data || pagesData.data.length === 0) {
+      throw new Error('No Facebook Pages found. Create a Facebook Page first.');
+    }
+
+    const page = pagesData.data[0];
+    return {
+      accountId: page.id,
+      accountName: page.name,
+      pageAccessToken: page.access_token,
+    };
+  }
+
+  async refreshToken(currentToken: string): Promise<OAuthTokens> {
+    // Page Access Tokens derived from long-lived user tokens don't expire
+    // but we can still try to refresh via the Graph API
+    const { appId, appSecret } = await this.getCredentials();
+    const refreshUrl = `https://graph.facebook.com/v22.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${currentToken}`;
+    const res = await fetch(refreshUrl);
+    const data = (await res.json()) as any;
+
+    if (data.error) {
+      logger.error({ error: data.error }, 'Facebook token refresh failed');
+      throw new Error(data.error.message || 'Token refresh failed');
+    }
+
+    return {
+      accessToken: data.access_token,
+      expiresAt: new Date(Date.now() + (data.expires_in || 5184000) * 1000),
+    };
+  }
+
+  async getAccountInfo(accessToken: string): Promise<{ accountId: string; accountName: string }> {
+    const res = await fetch(
+      `https://graph.facebook.com/v22.0/me?fields=id,name&access_token=${accessToken}`,
+    );
+    const data = (await res.json()) as any;
+    return { accountId: data.id, accountName: data.name };
+  }
+
+  async revokeAccess(accessToken: string): Promise<void> {
+    await fetch(`https://graph.facebook.com/v22.0/me/permissions?access_token=${accessToken}`, {
+      method: 'DELETE',
+    });
+    logger.info('Facebook access revoked');
+  }
+}

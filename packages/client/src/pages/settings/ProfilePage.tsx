@@ -649,7 +649,7 @@ interface ConnectedAccount {
 }
 
 // Platforms with live OAuth support (redirect-based)
-const OAUTH_ENABLED_PLATFORMS = new Set(['instagram']);
+const OAUTH_ENABLED_PLATFORMS = new Set(['instagram', 'facebook', 'threads']);
 
 // Platforms that use credential-based auth (handle + app password)
 const CREDENTIAL_AUTH_PLATFORMS = new Set(['bluesky']);

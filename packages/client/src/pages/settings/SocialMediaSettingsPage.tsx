@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Share2, Check, Loader2, Save } from 'lucide-react';
+import { Share2, Check, Loader2, Save, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '../../components/ui/Toast';
 import { api } from '../../lib/api';
 
@@ -49,7 +49,7 @@ const PLATFORMS: PlatformInfo[] = [
     credentialKeys: ['META_APP_ID', 'META_APP_SECRET'],
     credentialLabels: ['Meta App ID', 'Meta App Secret'],
     setupSteps: ['Same setup as Instagram — shared Meta Developer App'],
-    status: 'coming-soon',
+    status: 'ready',
   },
   {
     slug: 'threads',
@@ -61,7 +61,7 @@ const PLATFORMS: PlatformInfo[] = [
     credentialKeys: ['META_APP_ID', 'META_APP_SECRET'],
     credentialLabels: ['Meta App ID', 'Meta App Secret'],
     setupSteps: ['Same setup as Instagram — shared Meta Developer App'],
-    status: 'coming-soon',
+    status: 'ready',
   },
   {
     slug: 'bluesky',
@@ -171,6 +171,7 @@ export function SocialMediaSettingsPage() {
   const [savedCredentials, setSavedCredentials] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
 
   const activePlatform = PLATFORMS.find((p) => p.slug === activeTab) ?? PLATFORMS[0];
@@ -312,25 +313,45 @@ export function SocialMediaSettingsPage() {
               </div>
             ) : (
               <>
-                {activePlatform.credentialKeys.map((key, i) => (
-                  <div key={key}>
-                    <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                      {activePlatform.credentialLabels[i]}
-                      {savedCredentials[key] && (
-                        <span className="ml-2 text-green-400 text-[10px]">✓ saved</span>
-                      )}
-                    </label>
-                    <input
-                      type="password"
-                      value={credentials[key] ?? ''}
-                      onChange={(e) =>
-                        setCredentials((prev) => ({ ...prev, [key]: e.target.value }))
-                      }
-                      placeholder={`Enter ${activePlatform.credentialLabels[i]}...`}
-                      className="w-full bg-surface-3 border border-border-subtle rounded-lg px-3 py-2 text-text-primary text-sm focus:border-accent focus:ring-1 focus:ring-accent/30 focus:outline-none transition-colors placeholder:text-text-tertiary font-mono"
-                    />
-                  </div>
-                ))}
+                {activePlatform.credentialKeys.map((key, i) => {
+                  const isSecret = key.toLowerCase().includes('secret');
+                  return (
+                    <div key={key}>
+                      <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                        {activePlatform.credentialLabels[i]}
+                        {savedCredentials[key] && (
+                          <span className="ml-2 text-green-400 text-[10px]">✓ saved</span>
+                        )}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={isSecret && !visibleKeys[key] ? 'password' : 'text'}
+                          value={credentials[key] ?? ''}
+                          onChange={(e) =>
+                            setCredentials((prev) => ({ ...prev, [key]: e.target.value }))
+                          }
+                          placeholder={`Enter ${activePlatform.credentialLabels[i]}...`}
+                          className="w-full bg-surface-3 border border-border-subtle rounded-lg px-3 py-2 pr-10 text-text-primary text-sm focus:border-accent focus:ring-1 focus:ring-accent/30 focus:outline-none transition-colors placeholder:text-text-tertiary font-mono"
+                        />
+                        {isSecret && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setVisibleKeys((prev) => ({ ...prev, [key]: !prev[key] }))
+                            }
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary transition-colors"
+                          >
+                            {visibleKeys[key] ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
                 <button
                   onClick={handleSaveCredentials}
                   disabled={saving || activePlatform.status === 'coming-soon'}

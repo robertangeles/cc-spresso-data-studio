@@ -4,11 +4,15 @@ import { logger } from '../../config/logger.js';
 import type { OAuthProvider, OAuthTokens } from './oauth.interface.js';
 import { InstagramOAuthProvider } from './instagram.oauth.js';
 import { BlueskyOAuthProvider } from './bluesky.oauth.js';
+import { FacebookOAuthProvider } from './facebook.oauth.js';
+import { ThreadsOAuthProvider } from './threads.oauth.js';
 
 // Registry of OAuth providers
 const providers: Record<string, OAuthProvider> = {
   instagram: new InstagramOAuthProvider(),
   bluesky: new BlueskyOAuthProvider(),
+  facebook: new FacebookOAuthProvider(),
+  threads: new ThreadsOAuthProvider(),
 };
 
 export function getOAuthProvider(platform: string): OAuthProvider {

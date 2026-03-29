@@ -9,6 +9,8 @@ import {
 } from './oauth/oauth.service.js';
 import { publishToInstagram } from './publishers/instagram.publisher.js';
 import { publishToBluesky } from './publishers/bluesky.publisher.js';
+import { publishToFacebook } from './publishers/facebook.publisher.js';
+import { publishToThreads } from './publishers/threads.publisher.js';
 
 /**
  * List all scheduled posts for a user, ordered by scheduledAt asc, pending first.
@@ -245,6 +247,45 @@ export async function processDuePosts(): Promise<number> {
           } else {
             publishError = result.error ?? 'Bluesky publish failed';
             logger.warn({ postId: post.id, error: result.error }, 'Bluesky auto-publish failed');
+          }
+        }
+
+        // Attempt auto-publish to Facebook
+        if (channelSlug === 'facebook') {
+          const result = await publishToFacebook({
+            accessToken: account.accessToken,
+            pageId: account.accountId,
+            message: contentItem.body,
+            imageUrl: contentItem.imageUrl ?? undefined,
+          });
+
+          if (result.success) {
+            autoPublished = true;
+            logger.info({ postId: post.id, fbPostId: result.postId }, 'Auto-published to Facebook');
+          } else {
+            publishError = result.error ?? 'Facebook publish failed';
+            logger.warn({ postId: post.id, error: result.error }, 'Facebook auto-publish failed');
+          }
+        }
+
+        // Attempt auto-publish to Threads
+        if (channelSlug === 'threads') {
+          const result = await publishToThreads({
+            accessToken: account.accessToken,
+            threadsUserId: account.accountId,
+            text: contentItem.body,
+            imageUrl: contentItem.imageUrl ?? undefined,
+          });
+
+          if (result.success) {
+            autoPublished = true;
+            logger.info(
+              { postId: post.id, threadsPostId: result.postId },
+              'Auto-published to Threads',
+            );
+          } else {
+            publishError = result.error ?? 'Threads publish failed';
+            logger.warn({ postId: post.id, error: result.error }, 'Threads auto-publish failed');
           }
         }
       } else if (channelSlug) {
