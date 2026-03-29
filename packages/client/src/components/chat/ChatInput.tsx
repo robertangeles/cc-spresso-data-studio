@@ -16,10 +16,16 @@ interface ChatInputProps {
 }
 
 export function ChatInput({
-  onSend, model, onModelChange, disabled,
-  imageMode, onImageModeToggle,
-  researchMode, onResearchToggle,
-  webSearchMode, onWebSearchToggle,
+  onSend,
+  model,
+  onModelChange,
+  disabled,
+  imageMode,
+  onImageModeToggle,
+  researchMode,
+  onResearchToggle,
+  webSearchMode,
+  onWebSearchToggle,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [showTools, setShowTools] = useState(false);
@@ -35,7 +41,9 @@ export function ChatInput({
     }
   }, [input]);
 
-  useEffect(() => { textareaRef.current?.focus(); }, []);
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
 
   // Close tools on click outside
   useEffect(() => {
@@ -77,9 +85,16 @@ export function ChatInput({
         {activeModes.length > 0 && (
           <div className="flex gap-1.5 mb-2">
             {activeModes.map((m) => (
-              <span key={m.label} className="inline-flex items-center gap-1 rounded-full bg-accent-dim border border-accent/20 px-2.5 py-0.5 text-[11px] font-medium text-accent">
+              <span
+                key={m.label}
+                className="inline-flex items-center gap-1 rounded-full bg-accent-dim border border-accent/20 px-2.5 py-0.5 text-[11px] font-medium text-accent"
+              >
                 {m.label}
-                <button type="button" onClick={m.onRemove} className="hover:text-status-error transition-colors">
+                <button
+                  type="button"
+                  onClick={m.onRemove}
+                  className="hover:text-status-error transition-colors"
+                >
                   <X className="h-3 w-3" />
                 </button>
               </span>
@@ -87,18 +102,55 @@ export function ChatInput({
           </div>
         )}
 
+        {/* Knight Rider scanning border animation */}
+        <style>{`
+          @keyframes knight-rider {
+            0%   { background-position: -200% 0, 0 -200%, 200% 0, 0 200%; }
+            25%  { background-position: 200% 0, 0 -200%, 200% 0, 0 200%; }
+            50%  { background-position: 200% 0, 0 200%, 200% 0, 0 200%; }
+            75%  { background-position: 200% 0, 0 200%, -200% 0, 0 200%; }
+            100% { background-position: 200% 0, 0 200%, -200% 0, 0 -200%; }
+          }
+        `}</style>
+
         {/* Input box */}
-        <div className={`rounded-2xl border bg-surface-2 transition-all duration-300 ease-spring ${
-          hasContent
-            ? 'border-accent/40 shadow-glow-accent'
-            : 'border-border-default focus-within:border-accent/40 focus-within:shadow-glow-accent'
-        }`}>
+        <div
+          className={`relative rounded-2xl border bg-surface-2 transition-all duration-300 ease-spring ${
+            hasContent
+              ? 'border-accent/40 shadow-glow-accent'
+              : 'border-border-default focus-within:border-accent/40 focus-within:shadow-glow-accent'
+          }`}
+          style={
+            !hasContent
+              ? {
+                  backgroundImage: [
+                    'linear-gradient(90deg, transparent 30%, rgba(255,214,10,0.5) 50%, transparent 70%)',
+                    'linear-gradient(180deg, transparent 30%, rgba(255,214,10,0.5) 50%, transparent 70%)',
+                    'linear-gradient(270deg, transparent 30%, rgba(255,214,10,0.5) 50%, transparent 70%)',
+                    'linear-gradient(0deg, transparent 30%, rgba(255,214,10,0.5) 50%, transparent 70%)',
+                  ].join(','),
+                  backgroundSize: '200% 1px, 1px 200%, 200% 1px, 1px 200%',
+                  backgroundPosition: '-200% 0, 0 -200%, 200% 0, 0 200%',
+                  backgroundRepeat: 'no-repeat',
+                  animation: 'knight-rider 4s linear infinite',
+                }
+              : undefined
+          }
+        >
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={imageMode ? 'Describe the image...' : webSearchMode ? 'Search the web...' : researchMode ? 'What should I research?' : 'Drop an idea...'}
+            placeholder={
+              imageMode
+                ? 'Describe the image...'
+                : webSearchMode
+                  ? 'Search the web...'
+                  : researchMode
+                    ? 'What should I research?'
+                    : 'Drop an idea...'
+            }
             rows={2}
             disabled={disabled}
             className="w-full resize-none rounded-t-2xl bg-transparent px-4 pt-3 pb-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50"
@@ -121,7 +173,10 @@ export function ChatInput({
                 <div className="absolute bottom-full left-0 mb-2 w-52 rounded-xl border border-border-default bg-surface-2 py-1.5 shadow-dark-lg backdrop-blur-glass z-50 animate-scale-in">
                   <button
                     type="button"
-                    onClick={() => { onResearchToggle?.(); setShowTools(false); }}
+                    onClick={() => {
+                      onResearchToggle?.();
+                      setShowTools(false);
+                    }}
                     className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-surface-3 transition-colors ${researchMode ? 'text-accent font-medium' : 'text-text-secondary'}`}
                   >
                     <Search className="h-4 w-4" />
@@ -130,7 +185,10 @@ export function ChatInput({
                   </button>
                   <button
                     type="button"
-                    onClick={() => { onWebSearchToggle?.(); setShowTools(false); }}
+                    onClick={() => {
+                      onWebSearchToggle?.();
+                      setShowTools(false);
+                    }}
                     className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-surface-3 transition-colors ${webSearchMode ? 'text-accent font-medium' : 'text-text-secondary'}`}
                   >
                     <Globe className="h-4 w-4" />
@@ -139,7 +197,10 @@ export function ChatInput({
                   </button>
                   <button
                     type="button"
-                    onClick={() => { onImageModeToggle?.(); setShowTools(false); }}
+                    onClick={() => {
+                      onImageModeToggle?.();
+                      setShowTools(false);
+                    }}
                     className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-surface-3 transition-colors ${imageMode ? 'text-accent font-medium' : 'text-text-secondary'}`}
                   >
                     <ImageIcon className="h-4 w-4" />

@@ -1,9 +1,100 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+
+// ─── Pulsing Grid Background ───
+function PulsingGrid() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const resize = () => {
+      const rect = canvas.parentElement?.getBoundingClientRect();
+      if (rect) {
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+      }
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const spacing = 32;
+    const dotBase = 1.2;
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const t = Date.now() * 0.001;
+      const cx = canvas.width / 2;
+      const cy = canvas.height * 0.38; // center near the logo
+
+      const cols = Math.ceil(canvas.width / spacing) + 1;
+      const rows = Math.ceil(canvas.height / spacing) + 1;
+
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const x = col * spacing;
+          const y = row * spacing;
+
+          // Distance from center
+          const dx = x - cx;
+          const dy = y - cy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          // Concentric wave pulse — multiple rings radiating outward
+          const wave1 = Math.sin(dist * 0.02 - t * 2.5) * 0.5 + 0.5;
+          const wave2 = Math.sin(dist * 0.015 - t * 1.8 + 1.5) * 0.5 + 0.5;
+          const wave = wave1 * 0.7 + wave2 * 0.3;
+
+          // Fade out at edges
+          const maxDist = Math.sqrt(cx * cx + cy * cy);
+          const edgeFade = 1 - Math.min(dist / maxDist, 1);
+
+          const alpha = wave * edgeFade * 0.4;
+          const radius = dotBase + wave * edgeFade * 1.8;
+
+          // Dot glow
+          if (alpha > 0.05) {
+            ctx.beginPath();
+            ctx.arc(x, y, radius * 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 214, 10, ${alpha * 0.15})`;
+            ctx.fill();
+          }
+
+          // Dot core
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 214, 10, ${0.08 + alpha * 0.5})`;
+          ctx.fill();
+        }
+      }
+
+      animRef.current = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 pointer-events-none"
+      style={{ opacity: 0.7 }}
+    />
+  );
+}
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -46,6 +137,9 @@ export function LoginPage() {
     >
       {/* Ambient aurora gradient */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,214,10,0.06)_0%,transparent_60%)]" />
+
+      {/* Pulsing grid animation */}
+      <PulsingGrid />
 
       {/* Cursor-following glow */}
       <div
