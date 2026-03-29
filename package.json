@@ -42,8 +42,9 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "bcrypt",
+      "es5-ext",
       "esbuild",
-      "es5-ext"
+      "sharp"
     ]
   },
   "engines": {

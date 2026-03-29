@@ -53,43 +53,42 @@ export class FacebookOAuthProvider implements OAuthProvider {
       throw new Error(longLivedData.error.message || 'Failed to get long-lived token');
     }
 
-    const userAccessToken = longLivedData.access_token;
-    const expiresIn = longLivedData.expires_in || 5184000;
-
-    // Get the first Facebook Page with its Page Access Token
-    const { accountId, accountName, pageAccessToken } = await this.getPageInfo(userAccessToken);
-
+    // Return the user access token — pages will be selected separately
     return {
-      accessToken: pageAccessToken,
-      expiresAt: new Date(Date.now() + expiresIn * 1000),
-      accountId,
-      accountName,
-      accountType: 'page',
+      accessToken: longLivedData.access_token,
+      expiresAt: new Date(Date.now() + (longLivedData.expires_in || 5184000) * 1000),
+      accountType: 'user',
     };
   }
 
   /**
-   * Get Facebook Pages and return the first page's info + Page Access Token.
-   * Page Access Tokens from long-lived user tokens are also long-lived.
+   * Get all Facebook Pages the user manages, with Page Access Tokens and linked IG accounts.
    */
-  private async getPageInfo(
-    userAccessToken: string,
-  ): Promise<{ accountId: string; accountName: string; pageAccessToken: string }> {
+  async getAvailablePages(userAccessToken: string): Promise<
+    Array<{
+      pageId: string;
+      pageName: string;
+      pageAccessToken: string;
+      instagramAccountId?: string;
+      instagramUsername?: string;
+    }>
+  > {
     const pagesRes = await fetch(
-      `https://graph.facebook.com/v22.0/me/accounts?fields=id,name,access_token&access_token=${userAccessToken}`,
+      `https://graph.facebook.com/v22.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username}&access_token=${userAccessToken}`,
     );
     const pagesData = (await pagesRes.json()) as any;
 
     if (!pagesData.data || pagesData.data.length === 0) {
-      throw new Error('No Facebook Pages found. Create a Facebook Page first.');
+      return [];
     }
 
-    const page = pagesData.data[0];
-    return {
-      accountId: page.id,
-      accountName: page.name,
+    return pagesData.data.map((page: any) => ({
+      pageId: page.id,
+      pageName: page.name,
       pageAccessToken: page.access_token,
-    };
+      instagramAccountId: page.instagram_business_account?.id,
+      instagramUsername: page.instagram_business_account?.username,
+    }));
   }
 
   async refreshToken(currentToken: string): Promise<OAuthTokens> {

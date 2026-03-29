@@ -12,7 +12,11 @@
       "Bash(printf '{\"\"email\"\":\"\"trebor.selegna@outlook.com\"\",\"\"password\"\":\"\"m3l4nMYL0V301!\"\"}')",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJmMWM0M2M0My1lNzU0LTQwODEtYjdmNi1mMDc3YTRjZWEwNDEiLCJlbWFpbCI6InRyZWJvci5zZWxlZ25hQG91dGxvb2suY29tIiwibmFtZSI6IlJvYiBBbmdlbGVzIiwicm9sZSI6IkFkbWluaXN0cmF0b3IiLCJpYXQiOjE3NzQ0OTYzNzAsImV4cCI6MTc3NDUxMDc3MH0.F2J7QsC8XNj9vShZ2tZyPfkfQ5qSR0WCF9v2NWGX2Oc\")",
       "Bash(powershell -Command \":*)",
-      "Bash(powershell -Command \"Invoke-RestMethod -Uri http://localhost:3003/api/prompts/6c84e561-c9dc-4adc-9c3a-a72c395dfea8 -Method DELETE -Headers @{Authorization=''Bearer $TOKEN''}\")"
+      "Bash(powershell -Command \"Invoke-RestMethod -Uri http://localhost:3003/api/prompts/6c84e561-c9dc-4adc-9c3a-a72c395dfea8 -Method DELETE -Headers @{Authorization=''Bearer $TOKEN''}\")",
+      "Read(//d//**)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -r api/content 'd:/My AI Projects/cc-content-builder/packages/client/src' --include=*.ts --include=*.tsx)",
+      "mcp__plugin_context-mode_context-mode__ctx_stats"
     ],
     "additionalDirectories": ["\\tmp"]
   }

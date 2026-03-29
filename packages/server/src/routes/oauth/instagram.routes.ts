@@ -57,9 +57,11 @@ router.get('/callback', async (req: Request, res: Response, _next: NextFunction)
     logger.info({ userId, accountName: tokens.accountName }, 'Instagram connected');
     res.redirect(`${config.clientUrl}/profile?oauth=success&platform=instagram`);
   } catch (err) {
-    logger.error({ err }, 'Instagram OAuth callback failed');
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logger.error({ err, message: errMsg }, 'Instagram OAuth callback failed');
+    console.error('INSTAGRAM OAUTH ERROR:', errMsg);
     res.redirect(
-      `${config.clientUrl}/profile?oauth=error&platform=instagram&reason=exchange_failed`,
+      `${config.clientUrl}/profile?oauth=error&platform=instagram&reason=${encodeURIComponent(errMsg)}`,
     );
   }
 });

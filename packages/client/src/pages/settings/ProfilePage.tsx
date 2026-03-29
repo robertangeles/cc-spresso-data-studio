@@ -666,6 +666,16 @@ function SocialAccountsTab() {
   const [credHandle, setCredHandle] = useState('');
   const [credAppPassword, setCredAppPassword] = useState('');
   const [credConnecting, setCredConnecting] = useState(false);
+  const [pagePicker, setPagePicker] = useState<Array<{
+    pageId: string;
+    pageName: string;
+    pageAccessToken: string;
+    instagramAccountId?: string;
+    instagramUsername?: string;
+    selected: boolean;
+    connectInstagram: boolean;
+  }> | null>(null);
+  const [connectingPages, setConnectingPages] = useState(false);
 
   // Fetch connected accounts on mount
   useEffect(() => {
@@ -678,12 +688,24 @@ function SocialAccountsTab() {
           const { data } = await api.get(`/oauth/${platform}/status`);
           const acct = data.data;
           if (acct?.connected) {
-            accounts.push({
-              platform,
-              accountName: acct.accountName ?? null,
-              accountId: acct.accountId ?? null,
-              connected: true,
-            });
+            // Handle multi-account response (Facebook) vs single account (Bluesky, Instagram)
+            if (acct.accounts && Array.isArray(acct.accounts)) {
+              for (const a of acct.accounts) {
+                accounts.push({
+                  platform,
+                  accountName: a.accountName ?? a.label ?? null,
+                  accountId: a.accountId ?? null,
+                  connected: true,
+                });
+              }
+            } else {
+              accounts.push({
+                platform,
+                accountName: acct.accountName ?? null,
+                accountId: acct.accountId ?? null,
+                connected: true,
+              });
+            }
           }
         } catch {
           // Platform not available or not connected
@@ -729,6 +751,26 @@ function SocialAccountsTab() {
       searchParams.delete('platform');
       searchParams.delete('reason');
       setSearchParams(searchParams, { replace: true });
+    } else if (oauthStatus === 'pages' && platform === 'facebook') {
+      // Fetch available pages for picker
+      api
+        .get('/oauth/facebook/pages')
+        .then(({ data }) => {
+          const pages = data.data?.pages ?? [];
+          setPagePicker(
+            pages.map((p: any) => ({
+              ...p,
+              selected: true,
+              connectInstagram: !!p.instagramAccountId,
+            })),
+          );
+        })
+        .catch(() => {
+          toast('Failed to load Facebook pages. Please try again.', 'error');
+        });
+      searchParams.delete('oauth');
+      searchParams.delete('platform');
+      setSearchParams(searchParams, { replace: true });
     } else if (oauthStatus === 'error' && platform) {
       const reason = searchParams.get('reason');
       const message = reason
@@ -741,9 +783,6 @@ function SocialAccountsTab() {
       setSearchParams(searchParams, { replace: true });
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const getConnected = (platformId: string) =>
-    connectedAccounts.find((a) => a.platform === platformId && a.connected);
 
   const handleConnect = (platformId: string) => {
     if (CREDENTIAL_AUTH_PLATFORMS.has(platformId)) {
@@ -814,7 +853,8 @@ function SocialAccountsTab() {
 
       <div className="space-y-3">
         {SOCIAL_PLATFORMS.map((platform) => {
-          const connected = getConnected(platform.id);
+          const platformAccounts = connectedAccounts.filter((a) => a.platform === platform.id);
+          const hasAccounts = platformAccounts.length > 0;
           const isOAuthEnabled = OAUTH_ENABLED_PLATFORMS.has(platform.id);
           const isCredentialAuth = CREDENTIAL_AUTH_PLATFORMS.has(platform.id);
           const isConnectable = isOAuthEnabled || isCredentialAuth;
@@ -822,75 +862,94 @@ function SocialAccountsTab() {
           return (
             <div
               key={platform.id}
-              className={`flex items-center justify-between rounded-lg border p-4 ${
-                connected ? 'border-green-500/30 bg-green-500/5' : 'border-border-default'
+              className={`rounded-lg border ${
+                hasAccounts ? 'border-green-500/30 bg-green-500/5' : 'border-border-default'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-lg text-white font-bold ${platform.color}`}
-                >
-                  {platform.icon}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-text-primary">{platform.name}</p>
-                    {connected && (
-                      <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400">
-                        Connected
-                      </span>
+              {/* Platform header */}
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg text-white font-bold ${platform.color}`}
+                  >
+                    {platform.icon}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-text-primary">{platform.name}</p>
+                      {hasAccounts && (
+                        <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400">
+                          {platformAccounts.length} connected
+                        </span>
+                      )}
+                    </div>
+                    {!hasAccounts && (
+                      <p className="text-xs text-text-tertiary">
+                        {isConnectable ? 'Not connected' : 'Coming soon'}
+                      </p>
                     )}
                   </div>
-                  {connected ? (
-                    <p className="text-xs text-text-secondary">
-                      {connected.accountName ?? 'Account linked'}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-text-tertiary">
-                      {isConnectable ? 'Not connected' : 'Coming soon'}
-                    </p>
-                  )}
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {connected ? (
-                  <>
-                    {isConnectable && (
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={() => handleConnect(platform.id)}
-                      >
-                        Reconnect
-                      </Button>
-                    )}
+                <div className="flex items-center gap-2">
+                  {isConnectable && (
                     <Button
                       size="sm"
-                      variant="secondary"
-                      onClick={() => handleDisconnect(platform.id)}
-                      disabled={disconnecting === platform.id}
-                    >
-                      {disconnecting === platform.id ? 'Disconnecting...' : 'Disconnect'}
-                    </Button>
-                  </>
-                ) : (
-                  <div className="relative group">
-                    <Button
-                      size="sm"
-                      variant={isConnectable ? 'primary' : 'secondary'}
+                      variant={hasAccounts ? 'secondary' : 'primary'}
                       onClick={() => handleConnect(platform.id)}
-                      disabled={!isConnectable}
                     >
-                      Connect
+                      {hasAccounts ? 'Add Account' : 'Connect'}
                     </Button>
-                    {!isConnectable && (
+                  )}
+                  {!isConnectable && !hasAccounts && (
+                    <div className="relative group">
+                      <Button size="sm" variant="secondary" disabled>
+                        Connect
+                      </Button>
                       <span className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-surface-4 px-2 py-1 text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                         Coming soon
                       </span>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* Connected accounts list */}
+              {hasAccounts && (
+                <div className="border-t border-border-subtle px-4 pb-3 pt-2 space-y-2">
+                  {platformAccounts.map((acct) => (
+                    <div
+                      key={`${acct.platform}-${acct.accountId}`}
+                      className="flex items-center justify-between rounded-md bg-surface-2 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-green-400" />
+                        <span className="text-sm text-text-primary">
+                          {acct.accountName ?? 'Account linked'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {isConnectable && (
+                          <button
+                            type="button"
+                            onClick={() => handleConnect(platform.id)}
+                            className="text-[10px] text-accent hover:text-accent-hover transition-colors px-2 py-1 rounded hover:bg-accent/5"
+                          >
+                            Reconnect
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleDisconnect(platform.id)}
+                          disabled={disconnecting === platform.id}
+                          className="text-[10px] text-text-tertiary hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-red-500/5"
+                        >
+                          {disconnecting === platform.id ? '...' : 'Disconnect'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -930,6 +989,142 @@ function SocialAccountsTab() {
             onChange={(e) => setCredAppPassword(e.target.value)}
             placeholder="xxxx-xxxx-xxxx-xxxx"
           />
+        </div>
+      </Modal>
+
+      {/* Facebook/Instagram Page Picker Modal */}
+      <Modal
+        isOpen={!!pagePicker}
+        onClose={() => setPagePicker(null)}
+        title="Select Pages & Accounts to Connect"
+        confirmLabel={connectingPages ? 'Connecting...' : 'Connect Selected'}
+        onConfirm={async () => {
+          if (!pagePicker) return;
+          const selected = pagePicker.filter((p) => p.selected);
+          if (selected.length === 0) {
+            toast('Select at least one page', 'error');
+            return;
+          }
+          setConnectingPages(true);
+          try {
+            await api.post('/oauth/facebook/connect-pages', {
+              selectedPages: selected.map((p) => ({
+                pageId: p.pageId,
+                pageName: p.pageName,
+                pageAccessToken: p.pageAccessToken,
+                connectInstagram: p.connectInstagram,
+                instagramAccountId: p.instagramAccountId,
+                instagramUsername: p.instagramUsername,
+              })),
+            });
+            toast('Accounts connected successfully!', 'success');
+            setPagePicker(null);
+            // Refresh connected accounts
+            const platforms = ['instagram', 'bluesky', 'facebook', 'threads'];
+            const accounts: ConnectedAccount[] = [];
+            for (const platform of platforms) {
+              try {
+                const { data } = await api.get(`/oauth/${platform}/status`);
+                const acct = data.data;
+                if (acct?.connected) {
+                  if (acct.accounts && Array.isArray(acct.accounts)) {
+                    for (const a of acct.accounts) {
+                      accounts.push({
+                        platform,
+                        accountName: a.accountName ?? a.label ?? null,
+                        accountId: a.accountId ?? null,
+                        connected: true,
+                      });
+                    }
+                  } else {
+                    accounts.push({
+                      platform,
+                      accountName: acct.accountName ?? null,
+                      accountId: acct.accountId ?? null,
+                      connected: true,
+                    });
+                  }
+                }
+              } catch {
+                /* skip */
+              }
+            }
+            setConnectedAccounts(accounts);
+          } catch {
+            toast('Failed to connect pages', 'error');
+          } finally {
+            setConnectingPages(false);
+          }
+        }}
+      >
+        <div className="space-y-3">
+          {pagePicker && pagePicker.length === 0 && (
+            <p className="text-sm text-text-tertiary text-center py-4">
+              No Facebook Pages found. Create a Page first.
+            </p>
+          )}
+          {pagePicker?.map((page) => (
+            <div
+              key={page.pageId}
+              className={`rounded-lg border p-3 transition-all cursor-pointer ${
+                page.selected ? 'border-accent/40 bg-accent/5' : 'border-border-subtle'
+              }`}
+              onClick={() =>
+                setPagePicker(
+                  (prev) =>
+                    prev?.map((p) =>
+                      p.pageId === page.pageId ? { ...p, selected: !p.selected } : p,
+                    ) ?? null,
+                )
+              }
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 text-sm font-bold">
+                  f
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-text-primary">{page.pageName}</p>
+                  <p className="text-[10px] text-text-tertiary">Page ID: {page.pageId}</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={page.selected}
+                  onChange={() => {}}
+                  className="h-4 w-4 rounded border-border-subtle accent-accent"
+                />
+              </div>
+
+              {page.instagramAccountId && page.selected && (
+                <div
+                  className="mt-2 ml-11 flex items-center gap-2 rounded-md bg-surface-3 p-2 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPagePicker(
+                      (prev) =>
+                        prev?.map((p) =>
+                          p.pageId === page.pageId
+                            ? { ...p, connectInstagram: !p.connectInstagram }
+                            : p,
+                        ) ?? null,
+                    );
+                  }}
+                >
+                  <div className="flex h-6 w-6 items-center justify-center rounded bg-pink-500/10 text-pink-400 text-xs">
+                    📸
+                  </div>
+                  <span className="text-xs text-text-secondary flex-1">
+                    Instagram: @{page.instagramUsername}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={page.connectInstagram}
+                    onChange={() => {}}
+                    className="h-3.5 w-3.5 rounded border-border-subtle accent-accent"
+                  />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </Modal>
     </div>
