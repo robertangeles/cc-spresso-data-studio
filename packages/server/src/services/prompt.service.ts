@@ -8,19 +8,20 @@ import { APEX_SYSTEM_PROMPT } from '../prompts/apex-system.js';
 // --- Prompt CRUD ---
 
 export async function listPrompts(userId: string, category?: string) {
-  const conditions = [
-    eq(schema.prompts.userId, userId),
-    eq(schema.prompts.isActive, true),
-  ];
+  const conditions = [eq(schema.prompts.userId, userId), eq(schema.prompts.isActive, true)];
 
   if (category) {
     conditions.push(eq(schema.prompts.category, category));
   }
 
-  return db.query.prompts.findMany({
+  const results = await db.query.prompts.findMany({
     where: and(...conditions),
     orderBy: [desc(schema.prompts.updatedAt)],
   });
+  logger.info(
+    `[listPrompts] userId=${userId} category=${category ?? 'all'} found=${results.length}`,
+  );
+  return results;
 }
 
 export async function getPrompt(id: string, userId: string) {
@@ -152,10 +153,7 @@ export async function revertPrompt(id: string, version: number, userId: string) 
   const prompt = await getPrompt(id, userId);
 
   const targetVersion = await db.query.promptVersions.findFirst({
-    where: and(
-      eq(schema.promptVersions.promptId, id),
-      eq(schema.promptVersions.version, version),
-    ),
+    where: and(eq(schema.promptVersions.promptId, id), eq(schema.promptVersions.version, version)),
   });
 
   if (!targetVersion) throw new NotFoundError(`Prompt version ${version} not found`);
@@ -182,7 +180,10 @@ export async function revertPrompt(id: string, version: number, userId: string) 
     .where(eq(schema.prompts.id, id))
     .returning();
 
-  logger.info({ promptId: id, revertedTo: version, newVersion: newVersionNumber }, 'Prompt reverted');
+  logger.info(
+    { promptId: id, revertedTo: version, newVersion: newVersionNumber },
+    'Prompt reverted',
+  );
   return updated;
 }
 
@@ -230,7 +231,10 @@ Target Audience: ${data.targetAudience}`;
     }
     parsed = JSON.parse(content);
   } catch (err) {
-    logger.error({ err, content: response.content.slice(0, 500) }, 'APEX: failed to parse AI response as JSON');
+    logger.error(
+      { err, content: response.content.slice(0, 500) },
+      'APEX: failed to parse AI response as JSON',
+    );
     // Fallback: use the raw response as the prompt
     parsed = {
       suggestedName: `${data.persona} - ${data.useCase.slice(0, 30)}`,
