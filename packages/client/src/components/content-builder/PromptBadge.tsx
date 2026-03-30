@@ -40,7 +40,12 @@ export function PromptBadge({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const { prompts, loading } = usePrompts();
+  const { prompts, loading, refetch } = usePrompts();
+
+  // Refetch prompts when dropdown opens (ensures fresh token)
+  useEffect(() => {
+    if (open) refetch();
+  }, [open, refetch]);
 
   // Close dropdown on outside click
   useEffect(() => {
