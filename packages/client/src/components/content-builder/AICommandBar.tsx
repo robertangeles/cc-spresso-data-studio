@@ -59,7 +59,7 @@ export function AICommandBar({
     const el = inputRef.current;
     if (el) {
       el.style.height = 'auto';
-      el.style.height = `${Math.min(el.scrollHeight, 80)}px`;
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
     }
   }, [input]);
 
@@ -150,9 +150,9 @@ export function AICommandBar({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Tell the AI what to write..."
-          rows={1}
+          rows={2}
           disabled={isProcessing}
-          className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[24px] leading-6"
+          className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[48px] leading-6"
         />
 
         {/* Model selector */}
