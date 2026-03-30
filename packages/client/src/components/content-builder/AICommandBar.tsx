@@ -183,7 +183,7 @@ export function AICommandBar({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Tell the AI what to write..."
+          placeholder="Tell Spresso what content to create..."
           rows={4}
           disabled={isProcessing}
           className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[96px] leading-6"
