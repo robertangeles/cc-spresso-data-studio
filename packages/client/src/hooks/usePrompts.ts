@@ -37,8 +37,9 @@ export function usePrompts() {
       const params = new URLSearchParams();
       if (category) params.set('category', category);
       const { data } = await api.get(`/prompts?${params.toString()}`);
-      setPrompts(data.data);
-    } catch {
+      setPrompts(data.data ?? []);
+    } catch (err) {
+      console.error('[usePrompts] Failed to fetch prompts:', err);
       setPrompts([]);
     } finally {
       setLoading(false);
@@ -49,23 +50,17 @@ export function usePrompts() {
     fetchPrompts();
   }, [fetchPrompts]);
 
-  const createPrompt = useCallback(
-    async (promptData: CreatePromptData) => {
-      const { data } = await api.post('/prompts', promptData);
-      setPrompts((prev) => [data.data, ...prev]);
-      return data.data as Prompt;
-    },
-    [],
-  );
+  const createPrompt = useCallback(async (promptData: CreatePromptData) => {
+    const { data } = await api.post('/prompts', promptData);
+    setPrompts((prev) => [data.data, ...prev]);
+    return data.data as Prompt;
+  }, []);
 
-  const updatePrompt = useCallback(
-    async (id: string, updates: UpdatePromptData) => {
-      const { data } = await api.put(`/prompts/${id}`, updates);
-      setPrompts((prev) => prev.map((p) => (p.id === id ? data.data : p)));
-      return data.data as Prompt;
-    },
-    [],
-  );
+  const updatePrompt = useCallback(async (id: string, updates: UpdatePromptData) => {
+    const { data } = await api.put(`/prompts/${id}`, updates);
+    setPrompts((prev) => prev.map((p) => (p.id === id ? data.data : p)));
+    return data.data as Prompt;
+  }, []);
 
   const deletePrompt = useCallback(async (id: string) => {
     await api.delete(`/prompts/${id}`);
