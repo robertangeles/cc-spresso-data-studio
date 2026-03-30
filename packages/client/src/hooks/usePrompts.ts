@@ -36,8 +36,11 @@ export function usePrompts() {
     try {
       const params = new URLSearchParams();
       if (category) params.set('category', category);
-      const { data } = await api.get(`/prompts?${params.toString()}`);
-      setPrompts(data.data ?? []);
+      const res = await api.get(`/prompts?${params.toString()}`);
+      console.log('[usePrompts] API response:', res.data);
+      const list = res.data?.data ?? [];
+      console.log('[usePrompts] Setting prompts:', list.length);
+      setPrompts(list);
     } catch (err) {
       console.error('[usePrompts] Failed to fetch prompts:', err);
       setPrompts([]);
