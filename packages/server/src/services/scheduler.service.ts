@@ -140,11 +140,7 @@ export async function getCalendarPosts(userId: string, startDate: string, endDat
     .leftJoin(schema.channels, eq(schema.scheduledPosts.channelId, schema.channels.id))
     .leftJoin(
       schema.socialAccounts,
-      and(
-        eq(schema.socialAccounts.userId, schema.scheduledPosts.userId),
-        eq(schema.socialAccounts.platform, schema.channels.slug),
-        eq(schema.socialAccounts.isConnected, true),
-      ),
+      eq(schema.socialAccounts.id, schema.scheduledPosts.socialAccountId),
     )
     .where(
       and(
