@@ -1,4 +1,4 @@
-import { eq, and, asc, lte, gte } from 'drizzle-orm';
+import { eq, and, asc, desc, lte, gte } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
@@ -149,7 +149,7 @@ export async function getCalendarPosts(userId: string, startDate: string, endDat
         lte(schema.scheduledPosts.scheduledAt, new Date(endDate)),
       ),
     )
-    .orderBy(asc(schema.scheduledPosts.scheduledAt));
+    .orderBy(desc(schema.scheduledPosts.scheduledAt));
 
   return rows.map((r) => ({
     id: r.id,
