@@ -160,73 +160,78 @@ export function AICommandBar({
         }
       `}</style>
 
-      {/* Input bar */}
-      <div className="kr-cmd-idle relative overflow-hidden flex items-center gap-2 bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 px-3 py-2 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
-        {/* Prompt badge */}
-        <PromptBadge
-          activePromptId={activePromptId}
-          activePromptName={activePromptName}
-          onSelectPrompt={onSelectPrompt}
-          onClearPrompt={onClearPrompt}
-          onCreateNew={onCreateNewPrompt}
-          onEditPrompt={onEditPrompt}
-        />
+      {/* Input card */}
+      <div className="kr-cmd-idle relative overflow-hidden bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
+        {/* Toolbar row */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
+          <div className="flex items-center gap-2">
+            <PromptBadge
+              activePromptId={activePromptId}
+              activePromptName={activePromptName}
+              onSelectPrompt={onSelectPrompt}
+              onClearPrompt={onClearPrompt}
+              onCreateNew={onCreateNewPrompt}
+              onEditPrompt={onEditPrompt}
+            />
+            <span className="text-accent">
+              <Wand2 className="h-4 w-4" />
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={model}
+              onChange={(e) => onModelChange(e.target.value)}
+              className="text-[10px] text-text-tertiary font-medium px-2 py-1 rounded-lg bg-surface-2 border border-border-subtle hover:border-border-default focus:border-accent/40 focus:outline-none cursor-pointer appearance-none pr-5 transition-colors"
+              style={{
+                backgroundImage:
+                  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 6px center',
+              }}
+            >
+              {configuredModels.map((m) => (
+                <option key={m.model} value={m.model}>
+                  {m.displayName}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!hasContent || isProcessing}
+              className={`rounded-lg p-2 transition-all ${
+                isProcessing
+                  ? 'bg-accent/50 text-text-inverse'
+                  : hasContent
+                    ? 'bg-accent text-text-inverse hover:bg-accent-hover shadow-[0_0_10px_rgba(255,214,10,0.2)]'
+                    : 'bg-surface-2 text-text-tertiary'
+              } disabled:opacity-30`}
+            >
+              {isProcessing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
 
-        {/* AI icon */}
-        <span className="shrink-0 text-accent">
-          <Wand2 className="h-4 w-4" />
-        </span>
-
-        {/* Input */}
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Tell Spresso what content to create..."
-          rows={4}
-          disabled={isProcessing}
-          className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[96px] leading-6"
-        />
-
-        {/* Model selector */}
-        <select
-          value={model}
-          onChange={(e) => onModelChange(e.target.value)}
-          className="text-[10px] text-text-tertiary font-medium px-1.5 py-0.5 rounded bg-surface-2 border border-border-subtle hover:border-border-default focus:border-accent/40 focus:outline-none cursor-pointer appearance-none pr-4 transition-colors shrink-0"
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'right 4px center',
-          }}
-        >
-          {configuredModels.map((m) => (
-            <option key={m.model} value={m.model}>
-              {m.displayName}
-            </option>
-          ))}
-        </select>
-
-        {/* Send button */}
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={!hasContent || isProcessing}
-          className={`rounded-lg p-1.5 transition-all shrink-0 ${
-            isProcessing
-              ? 'bg-accent/50 text-text-inverse'
-              : hasContent
-                ? 'bg-accent text-text-inverse hover:bg-accent-hover'
-                : 'bg-surface-2 text-text-tertiary'
-          } disabled:opacity-30`}
-        >
-          {isProcessing ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Send className="h-3.5 w-3.5" />
-          )}
-        </button>
+        {/* Textarea */}
+        <div className="px-3 py-2">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Tell Spresso what content to create..."
+            rows={4}
+            disabled={isProcessing}
+            className="w-full resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[96px] leading-6"
+          />
+          <p className="text-[10px] text-text-tertiary/50 text-right">
+            Enter to send · Shift+Enter for newline
+          </p>
+        </div>
       </div>
     </div>
   );
