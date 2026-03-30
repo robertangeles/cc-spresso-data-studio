@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, ArrowUp, Check, Loader2, Wand2, X } from 'lucide-react';
+import { Send, ArrowUp, Check, Wand2, X } from 'lucide-react';
 import { useConfiguredModels } from '../../hooks/useConfiguredModels';
+import { useThinkingMessage } from '../../lib/thinking-messages';
 
 interface MiniChatProps {
   messages: Array<{ id: string; role: 'user' | 'assistant'; content: string; createdAt: string }>;
@@ -48,7 +49,7 @@ export function MiniChat({
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 64)}px`;
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
   }, [input]);
 
@@ -66,6 +67,7 @@ export function MiniChat({
     }
   };
 
+  const thinkingMessage = useThinkingMessage(isSending);
   const hasContent = input.trim().length > 0;
   const hasMessages = messages.length > 0;
 
@@ -130,9 +132,10 @@ export function MiniChat({
             );
           })}
           {isSending && (
-            <div className="flex justify-start">
-              <div className="bg-surface-2 rounded-lg p-3">
-                <Loader2 className="h-4 w-4 text-text-tertiary animate-spin" />
+            <div className="flex justify-start animate-slide-up">
+              <div className="bg-surface-2 rounded-lg p-3 flex items-center gap-2">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+                <span className="text-sm text-text-tertiary italic">{thinkingMessage}</span>
               </div>
             </div>
           )}
@@ -171,7 +174,7 @@ export function MiniChat({
           placeholder="Ask AI to write, refine, or brainstorm..."
           rows={3}
           disabled={isSending}
-          className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[60px]"
+          className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[120px]"
         />
         <div className="flex items-center gap-1.5 shrink-0">
           <select
