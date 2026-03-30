@@ -126,8 +126,42 @@ export function AICommandBar({
         </div>
       )}
 
+      {/* Knight Rider scanning border animation */}
+      <style>{`
+        @keyframes kr-cmd-scan {
+          0% { left: -35%; }
+          50% { left: 100%; }
+          100% { left: -35%; }
+        }
+        .kr-cmd-idle::before {
+          content: '';
+          position: absolute;
+          top: -1px;
+          left: -35%;
+          width: 35%;
+          height: 3px;
+          background: radial-gradient(ellipse, rgba(255,214,10,1) 0%, rgba(255,214,10,0.5) 40%, transparent 70%);
+          animation: kr-cmd-scan 5s ease-in-out infinite;
+          z-index: 20;
+          filter: drop-shadow(0 0 4px rgba(255,214,10,0.4));
+        }
+        .kr-cmd-idle::after {
+          content: '';
+          position: absolute;
+          bottom: -1px;
+          left: 100%;
+          width: 35%;
+          height: 2px;
+          background: radial-gradient(ellipse, rgba(255,214,10,0.7) 0%, rgba(255,214,10,0.3) 40%, transparent 70%);
+          animation: kr-cmd-scan 5s ease-in-out infinite;
+          animation-delay: -2.5s;
+          z-index: 20;
+          filter: drop-shadow(0 0 6px rgba(255,214,10,0.7));
+        }
+      `}</style>
+
       {/* Input bar */}
-      <div className="flex items-center gap-2 bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 px-3 py-2 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
+      <div className="kr-cmd-idle relative overflow-hidden flex items-center gap-2 bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 px-3 py-2 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
         {/* Prompt badge */}
         <PromptBadge
           activePromptId={activePromptId}
