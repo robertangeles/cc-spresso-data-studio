@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   PenTool,
   Sparkles,
@@ -54,6 +54,17 @@ export function ContentBuilderPage() {
   const { toast } = useToast();
 
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+  const [socialAccounts, setSocialAccounts] = useState<
+    {
+      id: string;
+      platform: string;
+      accountType: string;
+      label: string | null;
+      accountName: string | null;
+      accountId: string | null;
+      isConnected: boolean;
+    }[]
+  >([]);
   const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
@@ -81,12 +92,47 @@ export function ContentBuilderPage() {
         // Connected platforms will remain empty
       }
     }
+    async function fetchAccounts() {
+      try {
+        const { data } = await api.get('/oauth/accounts');
+        if (!cancelled) {
+          setSocialAccounts(data.data ?? []);
+        }
+      } catch {
+        // Social accounts will remain empty
+      }
+    }
     fetchChannels();
     fetchConnected();
+    fetchAccounts();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Build a map of channelId → social accounts for multi-account picker
+  const accountsByChannel = useMemo(() => {
+    const map: Record<string, typeof socialAccounts> = {};
+    for (const ch of channels) {
+      const matching = socialAccounts.filter((a) => a.platform === ch.slug);
+      if (matching.length > 0) map[ch.id] = matching;
+    }
+    return map;
+  }, [channels, socialAccounts]);
+
+  // Auto-select single accounts when a channel is toggled on
+  useEffect(() => {
+    for (const channelId of builder.selectedChannels) {
+      const accounts = accountsByChannel[channelId];
+      if (!accounts) continue;
+      const currentSelection = builder.selectedAccounts[channelId];
+      // Auto-select if exactly 1 account and nothing selected yet
+      if (accounts.length === 1 && (!currentSelection || currentSelection.length === 0)) {
+        builder.setAccountsForChannel(channelId, [accounts[0].id]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [builder.selectedChannels, accountsByChannel]);
 
   // Keyboard shortcuts
   const handleKeyboard = useCallback(
@@ -330,14 +376,34 @@ export function ContentBuilderPage() {
         status: 'draft',
       });
       const items = batchData.data ?? [];
+      let totalScheduled = 0;
       for (const item of items) {
-        await api.post('/schedule', {
-          contentItemId: item.id,
-          channelId: item.channelId,
-          scheduledAt: date,
-        });
+        const accountIds = builder.selectedAccounts[item.channelId];
+        if (accountIds && accountIds.length > 0) {
+          // Schedule once per selected account
+          for (const socialAccountId of accountIds) {
+            await api.post('/schedule', {
+              contentItemId: item.id,
+              channelId: item.channelId,
+              socialAccountId,
+              scheduledAt: date,
+            });
+            totalScheduled++;
+          }
+        } else {
+          // Fallback: no explicit account selection (legacy behavior)
+          await api.post('/schedule', {
+            contentItemId: item.id,
+            channelId: item.channelId,
+            scheduledAt: date,
+          });
+          totalScheduled++;
+        }
       }
-      toast(`Scheduled ${items.length} post(s) for ${new Date(date).toLocaleString()}`, 'success');
+      toast(
+        `Scheduled ${totalScheduled} post(s) for ${new Date(date).toLocaleString()}`,
+        'success',
+      );
       builder.resetContent();
       chat.clearChat();
       setScheduleDate('');
@@ -499,7 +565,10 @@ export function ContentBuilderPage() {
             <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
               <span className="text-sm font-medium text-text-secondary">Platforms</span>
               <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full font-medium">
-                {builder.selectedChannels.length}
+                {Object.values(builder.selectedAccounts).reduce(
+                  (sum, ids) => sum + ids.length,
+                  0,
+                ) || builder.selectedChannels.length}
               </span>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
@@ -509,6 +578,9 @@ export function ContentBuilderPage() {
                 onToggle={builder.toggleChannel}
                 connectedPlatforms={connectedPlatforms}
                 layout="vertical"
+                accountsByChannel={accountsByChannel}
+                selectedAccounts={builder.selectedAccounts}
+                onToggleAccount={builder.toggleAccount}
               />
             </div>
           </div>
@@ -553,6 +625,9 @@ export function ContentBuilderPage() {
                 onToggle={builder.toggleChannel}
                 connectedPlatforms={connectedPlatforms}
                 layout="horizontal"
+                accountsByChannel={accountsByChannel}
+                selectedAccounts={builder.selectedAccounts}
+                onToggleAccount={builder.toggleAccount}
               />
             </div>
 
@@ -628,7 +703,12 @@ export function ContentBuilderPage() {
                 onPublishNow={handlePublishNow}
                 onSaveDraft={handleSaveDraft}
                 isSaving={builder.isSaving}
-                selectedChannelCount={builder.selectedChannels.length}
+                selectedChannelCount={
+                  Object.values(builder.selectedAccounts).reduce(
+                    (sum, ids) => sum + ids.length,
+                    0,
+                  ) || builder.selectedChannels.length
+                }
                 flowState={builder.flowState}
                 scheduleDate={scheduleDate}
                 onScheduleDateChange={setScheduleDate}

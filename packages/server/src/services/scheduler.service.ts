@@ -31,6 +31,7 @@ export async function schedulePost(data: {
   contentItemId: string;
   channelId?: string;
   scheduledAt: string;
+  socialAccountId?: string;
 }) {
   const scheduledDate = new Date(data.scheduledAt);
   if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
@@ -43,6 +44,7 @@ export async function schedulePost(data: {
       userId: data.userId,
       contentItemId: data.contentItemId,
       channelId: data.channelId ?? null,
+      socialAccountId: data.socialAccountId ?? null,
       scheduledAt: scheduledDate,
       status: 'pending',
     })

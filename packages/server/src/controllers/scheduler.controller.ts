@@ -24,12 +24,13 @@ export async function createScheduled(
 ) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
-    const { contentItemId, channelId, scheduledAt } = req.body;
+    const { contentItemId, channelId, scheduledAt, socialAccountId } = req.body;
     const post = await schedulerService.schedulePost({
       userId: req.user.userId,
       contentItemId,
       channelId,
       scheduledAt,
+      socialAccountId,
     });
     res.status(201).json({ success: true, data: post });
   } catch (err) {

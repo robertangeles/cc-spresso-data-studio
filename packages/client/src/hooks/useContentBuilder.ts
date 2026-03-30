@@ -14,6 +14,7 @@ interface ContentBuilderState {
   platformBodies: Record<string, string>;
   imageUrl: string | null;
   selectedChannels: string[];
+  selectedAccounts: Record<string, string[]>; // channelId → socialAccountId[]
   activePromptId: string | null;
   activePromptName: string | null;
   activePromptBody: string | null;
@@ -32,6 +33,7 @@ const initialState: ContentBuilderState = {
   platformBodies: {},
   imageUrl: null,
   selectedChannels: [],
+  selectedAccounts: {},
   activePromptId: null,
   activePromptName: null,
   activePromptBody: null,
@@ -76,6 +78,7 @@ export function useContentBuilder() {
           platformBodies: state.platformBodies,
           imageUrl: state.imageUrl,
           selectedChannels: state.selectedChannels,
+          selectedAccounts: state.selectedAccounts,
           activePromptId: state.activePromptId,
           activePromptName: state.activePromptName,
           activePromptBody: state.activePromptBody,
@@ -92,6 +95,7 @@ export function useContentBuilder() {
     state.platformBodies,
     state.imageUrl,
     state.selectedChannels,
+    state.selectedAccounts,
     state.activeTab,
     state.activePromptId,
     state.commandHistory,
@@ -144,6 +148,12 @@ export function useContentBuilder() {
           ? prev.selectedChannels.filter((id) => id !== channelId)
           : [...prev.selectedChannels, channelId];
 
+        // Clear account selections when deselecting a channel
+        const selectedAccounts = { ...prev.selectedAccounts };
+        if (isSelected) {
+          delete selectedAccounts[channelId];
+        }
+
         // If we removed the active tab, fall back to the first selected channel
         let activeTab = prev.activeTab;
         if (isSelected && prev.activeTab === channelId) {
@@ -154,8 +164,37 @@ export function useContentBuilder() {
           activeTab = channelId;
         }
 
-        return { ...prev, selectedChannels, activeTab };
+        return { ...prev, selectedChannels, selectedAccounts, activeTab };
       });
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const toggleAccount = useCallback(
+    (channelId: string, accountId: string) => {
+      setState((prev) => {
+        const current = prev.selectedAccounts[channelId] ?? [];
+        const isSelected = current.includes(accountId);
+        const updated = isSelected
+          ? current.filter((id) => id !== accountId)
+          : [...current, accountId];
+        return {
+          ...prev,
+          selectedAccounts: { ...prev.selectedAccounts, [channelId]: updated },
+        };
+      });
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const setAccountsForChannel = useCallback(
+    (channelId: string, accountIds: string[]) => {
+      setState((prev) => ({
+        ...prev,
+        selectedAccounts: { ...prev.selectedAccounts, [channelId]: accountIds },
+      }));
       markDirty();
     },
     [markDirty],
@@ -301,11 +340,12 @@ export function useContentBuilder() {
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 
-  /** Clear content after publish/schedule, preserving channels, active tab, and prompt */
+  /** Clear content after publish/schedule, preserving channels, accounts, active tab, and prompt */
   const resetContent = useCallback(() => {
     setState((prev) => ({
       ...initialState,
       selectedChannels: prev.selectedChannels,
+      selectedAccounts: prev.selectedAccounts,
       activeTab: prev.activeTab,
       activePromptId: prev.activePromptId,
       activePromptName: prev.activePromptName,
@@ -339,6 +379,8 @@ export function useContentBuilder() {
 
     // Actions
     toggleChannel,
+    toggleAccount,
+    setAccountsForChannel,
     setActiveTab,
     loadPrompt,
     clearPrompt,

@@ -71,4 +71,20 @@ router.get('/oauth/connected', authenticate, async (req, res, next) => {
   }
 });
 
+// Full account list (used by Content Builder multi-account picker)
+router.get('/oauth/accounts', authenticate, async (req, res, next) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, data: null });
+      return;
+    }
+    const accounts = await oauthService.getConnectedAccountsList(req.user.userId);
+    // Strip sensitive token fields before sending to client
+    const sanitized = accounts.map(({ accessToken, refreshToken, ...rest }) => rest);
+    res.json({ success: true, data: sanitized });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export { router };

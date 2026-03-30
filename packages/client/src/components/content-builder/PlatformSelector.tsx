@@ -10,6 +10,16 @@ interface Channel {
   config: Record<string, unknown>;
 }
 
+interface SocialAccount {
+  id: string;
+  platform: string;
+  accountType: string;
+  label: string | null;
+  accountName: string | null;
+  accountId: string | null;
+  isConnected: boolean;
+}
+
 interface PlatformSelectorProps {
   channels: Channel[];
   selectedIds: string[];
@@ -17,6 +27,12 @@ interface PlatformSelectorProps {
   connectedPlatforms?: string[];
   /** 'horizontal' = collapsible dropdown (default), 'vertical' = always-visible card stack */
   layout?: 'horizontal' | 'vertical';
+  /** Map of channelId → connected social accounts (for multi-account picker) */
+  accountsByChannel?: Record<string, SocialAccount[]>;
+  /** Currently selected account IDs per channel */
+  selectedAccounts?: Record<string, string[]>;
+  /** Toggle a specific account within a channel */
+  onToggleAccount?: (channelId: string, accountId: string) => void;
 }
 
 function formatCharLimit(limit: number | undefined | null): string {
@@ -144,6 +160,9 @@ export function PlatformSelector({
   onToggle,
   connectedPlatforms = [],
   layout = 'horizontal',
+  accountsByChannel = {},
+  selectedAccounts = {},
+  onToggleAccount,
 }: PlatformSelectorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showConnectHint, setShowConnectHint] = useState(false);
@@ -167,47 +186,99 @@ export function PlatformSelector({
             connectedPlatforms.includes(ch.slug) || ALWAYS_CONNECTED.includes(ch.slug);
           const color = getColor(ch.slug);
           const limit = formatCharLimit(ch.config?.charLimit as number | undefined | null);
+          const accounts = accountsByChannel[ch.id] ?? [];
+          const showSubPicker = isSelected && accounts.length >= 2;
+          const selectedForChannel = selectedAccounts[ch.id] ?? [];
 
           return (
-            <button
-              key={ch.id}
-              type="button"
-              onClick={() => onToggle(ch.id)}
-              className={`relative w-full flex items-center gap-3 rounded-xl p-2.5 transition-all duration-200 ease-spring cursor-pointer group ${
-                isSelected
-                  ? `bg-gradient-to-r ${color.cardBg} ${color.border} border ${color.glow}`
-                  : `bg-surface-2/20 border border-transparent hover:bg-gradient-to-r hover:${color.cardBg} hover:border-border-subtle hover:shadow-md active:scale-[0.97]`
-              }`}
-            >
-              {/* Platform icon */}
-              <span
-                className={`text-xl leading-none transition-transform duration-200 ${isSelected ? 'scale-110' : 'group-hover:scale-110'}`}
+            <div key={ch.id}>
+              <button
+                type="button"
+                onClick={() => onToggle(ch.id)}
+                className={`relative w-full flex items-center gap-3 rounded-xl p-2.5 transition-all duration-200 ease-spring cursor-pointer group ${
+                  isSelected
+                    ? `bg-gradient-to-r ${color.cardBg} ${color.border} border ${color.glow}`
+                    : `bg-surface-2/20 border border-transparent hover:bg-gradient-to-r hover:${color.cardBg} hover:border-border-subtle hover:shadow-md active:scale-[0.97]`
+                }`}
               >
-                {ch.icon}
-              </span>
-
-              {/* Name + meta */}
-              <div className="flex-1 text-left min-w-0">
+                {/* Platform icon */}
                 <span
-                  className={`text-xs font-medium block truncate transition-colors duration-200 ${isSelected ? color.text : 'text-text-secondary'}`}
+                  className={`text-xl leading-none transition-transform duration-200 ${isSelected ? 'scale-110' : 'group-hover:scale-110'}`}
                 >
-                  {ch.name}
+                  {ch.icon}
                 </span>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-text-tertiary/30'}`}
-                  />
-                  <span className="text-[9px] text-text-tertiary">{limit} chars</span>
-                </div>
-              </div>
 
-              {/* Selected checkmark */}
-              {isSelected && (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500 shadow-md shrink-0">
-                  <Check className="h-3 w-3 text-white" strokeWidth={3} />
-                </span>
+                {/* Name + meta */}
+                <div className="flex-1 text-left min-w-0">
+                  <span
+                    className={`text-xs font-medium block truncate transition-colors duration-200 ${isSelected ? color.text : 'text-text-secondary'}`}
+                  >
+                    {ch.name}
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-text-tertiary/30'}`}
+                    />
+                    <span className="text-[9px] text-text-tertiary">{limit} chars</span>
+                  </div>
+                </div>
+
+                {/* Selected checkmark */}
+                {isSelected && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500 shadow-md shrink-0">
+                    <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                  </span>
+                )}
+              </button>
+
+              {/* Account sub-picker — shown when platform selected & has 2+ accounts */}
+              {showSubPicker && (
+                <div className="ml-5 mt-1 space-y-1 animate-slide-up">
+                  {accounts.map((account, idx) => {
+                    const isAccountSelected = selectedForChannel.includes(account.id);
+                    const displayName =
+                      account.label || account.accountName || account.accountId || 'Account';
+                    return (
+                      <button
+                        key={account.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleAccount?.(ch.id, account.id);
+                        }}
+                        className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-all duration-150 cursor-pointer ${
+                          isAccountSelected
+                            ? `bg-gradient-to-r ${color.cardBg} border ${color.border} ${color.glow.replace('20px', '10px')}`
+                            : 'bg-surface-2/10 border border-transparent hover:bg-surface-2/30 hover:border-border-subtle'
+                        }`}
+                        style={{ animationDelay: `${idx * 50}ms` }}
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full shrink-0 transition-colors duration-150 ${
+                            isAccountSelected
+                              ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.4)]'
+                              : 'bg-text-tertiary/30'
+                          }`}
+                        />
+                        <span
+                          className={`text-[11px] font-medium truncate transition-colors duration-150 ${
+                            isAccountSelected ? color.text : 'text-text-tertiary'
+                          }`}
+                        >
+                          {displayName}
+                        </span>
+                        {isAccountSelected && (
+                          <Check
+                            className={`h-3 w-3 ml-auto shrink-0 ${color.text}`}
+                            strokeWidth={3}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-            </button>
+            </div>
           );
         })}
 
