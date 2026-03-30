@@ -161,7 +161,7 @@ export function AICommandBar({
       `}</style>
 
       {/* Input card */}
-      <div className="kr-cmd-idle relative overflow-hidden bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
+      <div className="kr-cmd-idle relative overflow-x-clip bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
         {/* Toolbar row */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
           <div className="flex items-center gap-2">
