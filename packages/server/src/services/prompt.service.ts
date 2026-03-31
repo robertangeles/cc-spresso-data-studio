@@ -14,14 +14,10 @@ export async function listPrompts(userId: string, category?: string) {
     conditions.push(eq(schema.prompts.category, category));
   }
 
-  const results = await db.query.prompts.findMany({
+  return db.query.prompts.findMany({
     where: and(...conditions),
     orderBy: [desc(schema.prompts.updatedAt)],
   });
-  logger.info(
-    `[listPrompts] userId=${userId} category=${category ?? 'all'} found=${results.length}`,
-  );
-  return results;
 }
 
 export async function getPrompt(id: string, userId: string) {
