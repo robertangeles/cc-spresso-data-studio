@@ -323,6 +323,22 @@ export function ContentBuilderPage() {
         // Add to command history
         builder.addCommand(instruction);
 
+        // Show in the unified chat transcript
+        chat.addLocalMessages(
+          {
+            id: `cmd-user-${Date.now()}`,
+            role: 'user',
+            content: instruction,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: `cmd-asst-${Date.now()}`,
+            role: 'assistant',
+            content: result,
+            createdAt: new Date().toISOString(),
+          },
+        );
+
         toast('AI content applied. Ctrl+Z to undo.', 'success');
       } catch {
         toast('AI command failed. Please try again.', 'error');
@@ -646,7 +662,6 @@ export function ContentBuilderPage() {
               onCommand={handleAICommand}
               isProcessing={builder.isProcessing}
               isSending={chat.isSending}
-              commandHistory={builder.commandHistory}
               model={chat.model}
               onModelChange={chat.setModel}
               activePromptId={builder.activePromptId}
@@ -658,7 +673,6 @@ export function ContentBuilderPage() {
               promptsLoading={promptsHook.loading}
               onDeletePrompt={promptsHook.deletePrompt}
               onEditPrompt={handleEditPrompt}
-              onRegenerate={handleAICommand}
             />
           </div>
 

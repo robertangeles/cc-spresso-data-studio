@@ -121,6 +121,11 @@ export function useContentChat(systemPrompt?: string | null) {
     setConversationId(null);
   }, []);
 
+  /** Add messages locally without making an API call (for displaying executeCommand results in chat) */
+  const addLocalMessages = useCallback((...msgs: ChatMessage[]) => {
+    setMessages((prev) => [...prev, ...msgs]);
+  }, []);
+
   return {
     messages,
     isSending,
@@ -128,6 +133,7 @@ export function useContentChat(systemPrompt?: string | null) {
     setModel,
     sendMessage,
     executeCommand,
+    addLocalMessages,
     clearChat,
     conversationId,
   };
