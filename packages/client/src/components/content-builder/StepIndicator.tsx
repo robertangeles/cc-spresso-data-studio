@@ -1,3 +1,4 @@
+import { PenTool, Layout, Sparkles, Image, Calendar, Check } from 'lucide-react';
 import type { FlowState } from '../../hooks/useContentBuilder';
 
 interface StepIndicatorProps {
@@ -5,11 +6,11 @@ interface StepIndicatorProps {
 }
 
 const STEPS = [
-  { key: 'WRITING', label: 'Write', minState: 'WRITING' },
-  { key: 'PLATFORMS_SELECTED', label: 'Platforms', minState: 'PLATFORMS_SELECTED' },
-  { key: 'ADAPTED', label: 'Adapt', minState: 'ADAPTED' },
-  { key: 'MEDIA_ADDED', label: 'Media', minState: 'MEDIA_ADDED' },
-  { key: 'READY', label: 'Schedule', minState: 'READY' },
+  { key: 'WRITING', label: 'Write', minState: 'WRITING', icon: PenTool },
+  { key: 'PLATFORMS_SELECTED', label: 'Platforms', minState: 'PLATFORMS_SELECTED', icon: Layout },
+  { key: 'ADAPTED', label: 'Adapt', minState: 'ADAPTED', icon: Sparkles },
+  { key: 'MEDIA_ADDED', label: 'Media', minState: 'MEDIA_ADDED', icon: Image },
+  { key: 'READY', label: 'Schedule', minState: 'READY', icon: Calendar },
 ] as const;
 
 const STATE_ORDER: FlowState[] = [
@@ -32,41 +33,48 @@ export function StepIndicator({ flowState }: StepIndicatorProps) {
     <div className="flex items-center gap-1">
       {STEPS.map((step, i) => {
         const stepIdx = stateIndex(step.minState as FlowState);
-        const isCompleted = currentIndex >= stepIdx;
-        const isActive =
-          currentIndex === stepIdx || (i === STEPS.length - 1 && currentIndex >= stepIdx);
+        const isCompleted = currentIndex > stepIdx;
+        const isActive = currentIndex === stepIdx;
+        const isReachable = currentIndex >= stepIdx;
         const isPrevCompleted =
-          i > 0 && currentIndex >= stateIndex(STEPS[i - 1].minState as FlowState);
+          i > 0 && currentIndex > stateIndex(STEPS[i - 1].minState as FlowState);
+        const Icon = step.icon;
 
         return (
           <div key={step.key} className="flex items-center gap-1">
             {/* Connector line */}
             {i > 0 && (
-              <div
-                className={`h-[2px] w-4 rounded-full transition-all duration-500 ${
-                  isPrevCompleted ? 'bg-accent/60' : 'bg-surface-3'
-                }`}
-              />
+              <div className="relative h-[2px] w-5 rounded-full bg-surface-3 overflow-hidden">
+                {isPrevCompleted && (
+                  <div className="absolute inset-0 bg-accent/60 rounded-full animate-step-fill" />
+                )}
+              </div>
             )}
 
-            {/* Step dot + label */}
-            <div className="flex items-center gap-1.5">
+            {/* Step circle + label */}
+            <div className="flex items-center gap-1.5 group">
               <div
-                className={`h-2 w-2 rounded-full transition-all duration-500 ${
+                className={`relative flex items-center justify-center h-5 w-5 rounded-full transition-all duration-500 ${
                   isActive
-                    ? 'bg-accent shadow-[0_0_8px_rgba(255,214,10,0.5)] scale-125'
+                    ? 'bg-accent text-text-inverse shadow-[0_0_12px_rgba(255,214,10,0.4)] scale-110'
                     : isCompleted
-                      ? 'bg-accent/70'
-                      : 'bg-surface-3'
+                      ? 'bg-accent/20 text-accent'
+                      : 'bg-surface-3 text-text-tertiary/50'
                 }`}
-              />
+              >
+                {isCompleted ? (
+                  <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                ) : (
+                  <Icon className="h-2.5 w-2.5" />
+                )}
+              </div>
               <span
-                className={`text-[10px] font-medium tracking-wide uppercase transition-colors duration-300 ${
+                className={`text-[10px] font-heading font-semibold tracking-wide uppercase transition-colors duration-300 ${
                   isActive
                     ? 'text-accent'
-                    : isCompleted
+                    : isReachable
                       ? 'text-text-secondary'
-                      : 'text-text-tertiary/50'
+                      : 'text-text-tertiary/40'
                 }`}
               >
                 {step.label}
