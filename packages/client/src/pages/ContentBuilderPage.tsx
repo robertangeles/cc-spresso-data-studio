@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { PlatformSelector } from '../components/content-builder/PlatformSelector';
 import { PostComposer } from '../components/content-builder/PostComposer';
-import { AICommandBar } from '../components/content-builder/AICommandBar';
+import { CopilotChat } from '../components/content-builder/CopilotChat';
 import { CharacterCountBar } from '../components/content-builder/CharacterCountBar';
 import { SchedulePanel } from '../components/content-builder/SchedulePanel';
 import { BuilderEmptyState } from '../components/content-builder/BuilderEmptyState';
@@ -47,6 +47,8 @@ export function ContentBuilderPage() {
     category: string;
     defaultModel: string | null;
   } | null>(null);
+
+  const [isCopilotActive, setIsCopilotActive] = useState(false);
 
   const builder = useContentBuilder();
   const promptsHook = usePrompts();
@@ -187,6 +189,7 @@ export function ContentBuilderPage() {
       // Don't re-trigger if same prompt is already active
       if (promptId === builder.activePromptId) return;
 
+      setIsCopilotActive(true);
       const hadContent = !!builder.mainBody.trim();
       builder.loadPrompt(promptId, name, body);
       chat.clearChat();
@@ -276,7 +279,7 @@ export function ContentBuilderPage() {
     setEditingPrompt(null);
   };
 
-  // AI Command handler
+  // AI Command handler — sends through unified chat with editor context
   const handleAICommand = useCallback(
     async (instruction: string) => {
       // Get current content from active editor
@@ -292,12 +295,15 @@ export function ContentBuilderPage() {
       const charLimit = activeChannel ? (activeChannel.config?.charLimit as number) || 0 : 0;
       const platformName = activeChannel?.name ?? 'general';
 
-      const enhancedInstruction = [
-        `You are a content writer. Return ONLY the post content — no preamble, no explanations, no separators, no quotation marks. Just the ready-to-publish text.`,
+      // Build full context message for the API (user won't see this version)
+      const contextParts = [
+        'You are a content writer. Return ONLY the post content — no preamble, no explanations, no separators, no quotation marks. Just the ready-to-publish text.',
         charLimit > 0
           ? `STRICT CHARACTER LIMIT: ${charLimit} characters maximum for ${platformName}.`
           : '',
-        instruction,
+        currentContent.trim()
+          ? `The user has written the following content:\n---\n${currentContent}\n---\n\nInstruction: ${instruction}`
+          : instruction,
       ]
         .filter(Boolean)
         .join('\n\n');
@@ -307,39 +313,25 @@ export function ContentBuilderPage() {
       builder.setProcessing(true);
 
       try {
-        const result = await chat.executeCommand(
-          enhancedInstruction,
-          currentContent,
-          builder.activePromptBody,
-        );
+        // Send full context to API but show only the instruction in the thread
+        const result = await chat.sendMessage(contextParts, {
+          displayContent: instruction,
+          systemPromptOverride: builder.activePromptBody,
+        });
 
-        // Replace the active editor content with AI result
-        if (builder.activeTab) {
-          builder.setPlatformBody(builder.activeTab, result);
-        } else {
-          builder.setMainBody(result);
+        if (result) {
+          // Replace the active editor content with AI result
+          if (builder.activeTab) {
+            builder.setPlatformBody(builder.activeTab, result);
+          } else {
+            builder.setMainBody(result);
+          }
+
+          // Add to command history
+          builder.addCommand(instruction);
+
+          toast('AI content applied. Ctrl+Z to undo.', 'success');
         }
-
-        // Add to command history
-        builder.addCommand(instruction);
-
-        // Show in the unified chat transcript
-        chat.addLocalMessages(
-          {
-            id: `cmd-user-${Date.now()}`,
-            role: 'user',
-            content: instruction,
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: `cmd-asst-${Date.now()}`,
-            role: 'assistant',
-            content: result,
-            createdAt: new Date().toISOString(),
-          },
-        );
-
-        toast('AI content applied. Ctrl+Z to undo.', 'success');
       } catch {
         toast('AI command failed. Please try again.', 'error');
       } finally {
@@ -355,8 +347,7 @@ export function ContentBuilderPage() {
 
   // Empty state handlers
   const handleStartScratch = () => {
-    const textarea = document.querySelector<HTMLTextAreaElement>('textarea');
-    if (textarea) textarea.focus();
+    setIsCopilotActive(true);
   };
 
   const handleOpenPrompts = () => {
@@ -373,6 +364,7 @@ export function ContentBuilderPage() {
   const handleQuickStart = useCallback(
     async (category: string) => {
       if (isGeneratingTemplate) return;
+      setIsCopilotActive(true);
       setIsGeneratingTemplate(true);
       try {
         const { data } = await api.post<{
@@ -653,46 +645,9 @@ export function ContentBuilderPage() {
               'radial-gradient(ellipse at center 40%, rgba(255,255,255,0.015) 0%, transparent 60%)',
           }}
         >
-          {/* AI Command Bar — promoted to top (co-pilot position) */}
-          <div
-            className="border-b border-border-subtle px-4 py-3 bg-surface-1/30 backdrop-blur-sm"
-            data-tour="ai-assistant"
-          >
-            <AICommandBar
-              onCommand={handleAICommand}
-              isProcessing={builder.isProcessing}
-              isSending={chat.isSending}
-              model={chat.model}
-              onModelChange={chat.setModel}
-              activePromptId={builder.activePromptId}
-              activePromptName={builder.activePromptName}
-              onSelectPrompt={handleSelectPrompt}
-              onClearPrompt={builder.clearPrompt}
-              onCreateNewPrompt={handleCreateNewPrompt}
-              prompts={promptsHook.prompts}
-              promptsLoading={promptsHook.loading}
-              onDeletePrompt={promptsHook.deletePrompt}
-              onEditPrompt={handleEditPrompt}
-            />
-          </div>
-
-          {/* Scrollable editor area */}
-          <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4">
-            {/* Inline platform selector — visible below xl */}
-            <div className="xl:hidden mb-4" data-tour="platform-selector">
-              <PlatformSelector
-                channels={channels}
-                selectedIds={builder.selectedChannels}
-                onToggle={builder.toggleChannel}
-                connectedPlatforms={connectedPlatforms}
-                layout="horizontal"
-                accountsByChannel={accountsByChannel}
-                selectedAccounts={builder.selectedAccounts}
-                onToggleAccount={builder.toggleAccount}
-              />
-            </div>
-
-            {showEmptyState ? (
+          {/* ─── IDLE: Full-width empty state ─── */}
+          {!isCopilotActive && showEmptyState ? (
+            <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4">
               <BuilderEmptyState
                 onStartScratch={handleStartScratch}
                 onOpenPrompts={handleOpenPrompts}
@@ -700,8 +655,55 @@ export function ContentBuilderPage() {
                 onQuickStart={handleQuickStart}
                 isGenerating={isGeneratingTemplate}
               />
-            ) : (
-              <>
+            </div>
+          ) : (
+            /* ─── COPILOT: Side-by-side AI + Editor ─── */
+            <div className="flex flex-1 overflow-hidden">
+              {/* Left: AI Conversation */}
+              <div
+                className="w-1/2 flex flex-col border-r border-border-subtle"
+                data-tour="ai-assistant"
+              >
+                <CopilotChat
+                  messages={chat.messages}
+                  isSending={chat.isSending}
+                  onSendMessage={(text) => {
+                    setIsCopilotActive(true);
+                    handleAICommand(text);
+                  }}
+                  isProcessing={builder.isProcessing}
+                  activePromptId={builder.activePromptId}
+                  activePromptName={builder.activePromptName}
+                  isSendingPrompt={chat.isSending}
+                  onSelectPrompt={handleSelectPrompt}
+                  onClearPrompt={builder.clearPrompt}
+                  onCreateNewPrompt={handleCreateNewPrompt}
+                  prompts={promptsHook.prompts}
+                  promptsLoading={promptsHook.loading}
+                  onDeletePrompt={promptsHook.deletePrompt}
+                  onEditPrompt={handleEditPrompt}
+                  model={chat.model}
+                  onModelChange={chat.setModel}
+                  onApplyToEditor={handleApplyToEditor}
+                />
+              </div>
+
+              {/* Right: Editor */}
+              <div className="w-1/2 flex flex-col overflow-y-auto px-4 py-4">
+                {/* Inline platform selector — visible below xl */}
+                <div className="xl:hidden mb-4" data-tour="platform-selector">
+                  <PlatformSelector
+                    channels={channels}
+                    selectedIds={builder.selectedChannels}
+                    onToggle={builder.toggleChannel}
+                    connectedPlatforms={connectedPlatforms}
+                    layout="horizontal"
+                    accountsByChannel={accountsByChannel}
+                    selectedAccounts={builder.selectedAccounts}
+                    onToggleAccount={builder.toggleAccount}
+                  />
+                </div>
+
                 {/* Main composer */}
                 <div data-tour="composer">
                   <PostComposer
@@ -743,9 +745,9 @@ export function ContentBuilderPage() {
                     nudge={builder.flowState === 'ADAPTED'}
                   />
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ─── RIGHT COLUMN: Schedule ─── */}
@@ -755,69 +757,7 @@ export function ContentBuilderPage() {
           }`}
         >
           <div className="flex h-full w-[320px] flex-col">
-            {/* AI Chat — read-only message transcript */}
-            <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
-              <span className="text-sm font-medium text-text-secondary flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-accent" />
-                AI Chat
-              </span>
-            </div>
-            <div className="border-b border-border-subtle max-h-[300px] overflow-y-auto scrollbar-thin">
-              {chat.messages.length === 0 && !chat.isSending ? (
-                <p className="text-xs text-text-tertiary text-center py-6 px-3">
-                  Select a prompt or type in the AI bar above to start.
-                </p>
-              ) : (
-                <div className="px-3 py-2.5 space-y-2">
-                  {chat.messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div className={`max-w-[90%] ${msg.role === 'user' ? 'order-2' : ''}`}>
-                        <div
-                          className={`rounded-lg p-2.5 text-xs leading-relaxed ${
-                            msg.role === 'user'
-                              ? 'bg-accent-dim text-text-primary'
-                              : 'bg-surface-2 text-text-primary'
-                          }`}
-                        >
-                          {msg.role === 'assistant' && (
-                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent mr-1.5 align-middle" />
-                          )}
-                          <span className="whitespace-pre-wrap inline">
-                            {msg.content.length > 500
-                              ? msg.content.slice(0, 500) + '...'
-                              : msg.content}
-                          </span>
-                        </div>
-                        {msg.role === 'assistant' && (
-                          <button
-                            type="button"
-                            onClick={() => handleApplyToEditor(msg.content)}
-                            className="mt-1 inline-flex items-center gap-1 rounded-full text-[10px] px-2.5 py-0.5 font-medium bg-accent/20 text-accent hover:bg-accent/30 transition-all"
-                          >
-                            <PenTool className="h-2.5 w-2.5" />
-                            Apply to editor
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {chat.isSending && (
-                    <div className="flex justify-start">
-                      <div className="bg-surface-2 rounded-lg p-2.5 flex items-center gap-2">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
-                        <span className="text-xs text-text-tertiary italic">Thinking...</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Schedule Panel */}
-            <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
+            <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
               <span className="text-sm font-medium text-text-secondary">Schedule</span>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
