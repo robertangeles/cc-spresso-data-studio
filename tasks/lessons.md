@@ -222,3 +222,68 @@ npm install -g pnpm@9 && NODE_ENV=development pnpm install && rm -f packages/sha
 **Fix:** Implemented a flow state machine (IDLE → WRITING → PLATFORMS_SELECTED → ADAPTED → READY) that controls what's visible and what glows. Media Studio starts collapsed. Schedule panel dims until content exists. Contextual placeholders guide the next action.
 
 **Rule:** For complex multi-step features, use progressive disclosure: show only what's relevant at each step. Add subtle glow/nudge to the next recommended action. Power users can always expand everything manually. Step indicators provide orientation without being patronizing.
+
+## 20. Follow branching strategy — no exceptions for "speed"
+
+**Problem:** Multi-account picker feature (8 files, 250+ lines) was committed directly to main without a feature branch. Shipped a calendar JOIN bug that fanned out scheduled posts to all accounts per platform. Deployed broken code to production because shortcuts were taken.
+
+**Fix:** Fixed the calendar query to join on socialAccountId instead of platform slug. But the damage was already in production.
+
+**Rule:** Non-trivial changes (3+ files or architectural decisions) MUST go on a feature branch. No exceptions. The workflow is: branch → implement → CI passes → verify end-to-end → merge with --no-ff → confirm with user before push. Committing directly to main for speed is a false economy — the time "saved" gets spent debugging production bugs.
+
+## 21. Verify JOIN queries when tables have one-to-many relationships
+
+**Problem:** Calendar query LEFT JOINed scheduledPosts to socialAccounts by platform slug. When a user had 2 Facebook Pages connected, every scheduled Facebook post appeared twice in the calendar — one phantom row per account.
+
+**Fix:** Changed the JOIN to use `eq(socialAccounts.id, scheduledPosts.socialAccountId)` — a direct FK reference instead of a loose platform match.
+
+**Rule:** When writing JOINs involving tables with one-to-many relationships (like socialAccounts per platform), always join on a specific FK, never on a categorical field like platform slug. A slug-based join will fan out rows as soon as multiple accounts exist.
+
+## 22. Check overflow when restructuring container layout
+
+**Problem:** Restructured AICommandBar into a card layout with `overflow-hidden` for the Knight Rider animation. This clipped the PromptBadge dropdown which opens `bottom-full` (upward, outside the container).
+
+**Fix:** Changed `overflow-hidden` to `overflow-x-clip` so the Knight Rider pseudo-elements are clipped horizontally but the dropdown can overflow vertically.
+
+**Rule:** When adding `overflow-hidden` to any container, check if child components have absolute-positioned elements (dropdowns, tooltips, popovers) that need to escape the container. Use `overflow-x-clip` or `overflow-y-clip` for directional clipping when needed. Always test interactive elements after layout restructuring.
+
+## 23. Impact analysis before every change — mandatory regression checklist
+
+**Problem:** Multiple bugs shipped in one session because changes were made without asking "what existing features will this affect?" The calendar JOIN fan-out, the overflow clipping the PromptBadge dropdown, and deploying without verifying affected features.
+
+**Fix:** N/A — process failure, not code failure.
+
+**Rule:** Before pushing ANY change, answer these questions:
+
+1. **What existing features live in or depend on the files I changed?** List them.
+2. **For each affected feature, does it still work?** Verify — don't assume.
+3. **Did I change a container/wrapper/layout?** Check all children: dropdowns, modals, tooltips, popovers, absolute-positioned elements.
+4. **Did I change a data query or schema?** Check all consumers of that data: calendar, lists, dashboards, exports.
+5. **Add every affected feature to the regression checklist** and verify before marking done.
+
+This is not optional polish — it is the difference between a product and a demo.
+
+## 24. Use React portals for dropdowns inside styled containers
+
+**Problem:** PromptBadge dropdown was invisible for hours because it was rendered inside a container with `overflow-hidden`/`overflow-x-clip`. CSS spec: setting overflow on one axis forces the other to compute as `auto`, clipping both directions. Multiple attempts to fix with `overflow-x-clip`, `z-index`, and position changes all failed because the fundamental problem was the dropdown being a child of a clipped container.
+
+**Fix:** Used `createPortal(dropdown, document.body)` to render the dropdown at document root, positioned with `getBoundingClientRect()` relative to the button. Also moved prompts data to single `usePrompts()` instance in parent, passed as props — eliminated stale state from multiple independent hook instances.
+
+**Rule:** Any dropdown, tooltip, popover, or modal that needs to escape its parent container MUST use a React portal. Never rely on z-index or overflow tweaks — they are fragile and browser-dependent. When debugging "invisible but data exists" UI issues, check the DOM inspector first to see if the element exists but is clipped, before assuming a data/state problem.
+
+## 25. Enumerate detailed test plan BEFORE writing any feature code
+
+**Problem:** Features were implemented without upfront test planning, leading to ad-hoc testing that missed components, edge cases, and interaction scenarios. Bugs slipped through because there was no systematic checklist to verify against.
+
+**Fix:** Established as a mandatory ways-of-working standard: every new feature must have a fully enumerated test plan with detailed test cases created during the planning phase, before any implementation begins.
+
+**Rule:** MANDATORY for every new feature:
+
+1. During planning (plan mode or review), enumerate ALL test cases in a structured table
+2. Break tests into categories: **Unit**, **Integration**, **E2E**, **Edge Cases**
+3. Each test case must specify: ID, description, setup/input, expected result, priority (P1/P2)
+4. Cover all paths: happy path, error path, empty/null/boundary inputs, interaction edge cases (double-click, navigate-away, rapid switching, concurrent actions)
+5. Write the test plan to a file: `tasks/test-plan-{feature}.md`
+6. During implementation, write tests alongside code and check off against the plan
+7. No feature is marked complete until every P1 test case passes
+8. The test plan is a deliverable — not an afterthought

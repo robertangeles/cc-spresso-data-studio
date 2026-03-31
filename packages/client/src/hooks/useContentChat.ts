@@ -27,8 +27,8 @@ export function useContentChat(systemPrompt?: string | null) {
   }, [conversationId]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
-      if (!text.trim() || isSending) return;
+    async (text: string): Promise<string | null> => {
+      if (!text.trim() || isSending) return null;
 
       setIsSending(true);
 
@@ -72,9 +72,12 @@ export function useContentChat(systemPrompt?: string | null) {
             assistantMsg,
           ];
         });
+
+        return assistantMsg.content;
       } catch {
         // Remove optimistic message on failure
         setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
+        return null;
       } finally {
         setIsSending(false);
       }

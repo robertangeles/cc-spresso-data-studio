@@ -7,6 +7,7 @@ import type { Prompt } from '../../hooks/usePrompts';
 interface AICommandBarProps {
   onCommand: (instruction: string) => void;
   isProcessing: boolean;
+  isSending?: boolean;
   commandHistory: Array<{ instruction: string; timestamp: string }>;
   model: string;
   onModelChange: (model: string) => void;
@@ -43,6 +44,7 @@ function relativeTime(timestamp: string): string {
 export function AICommandBar({
   onCommand,
   isProcessing,
+  isSending,
   commandHistory,
   model,
   onModelChange,
@@ -175,6 +177,7 @@ export function AICommandBar({
             <PromptBadge
               activePromptId={activePromptId}
               activePromptName={activePromptName}
+              isSending={isSending}
               onSelectPrompt={onSelectPrompt}
               onClearPrompt={onClearPrompt}
               onCreateNew={onCreateNewPrompt}
@@ -233,7 +236,11 @@ export function AICommandBar({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Tell Spresso what content to create..."
+            placeholder={
+              activePromptName
+                ? `Refine your ${activePromptName} output...`
+                : 'Tell Spresso what content to create...'
+            }
             rows={4}
             disabled={isProcessing}
             className="w-full resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[96px] leading-6"

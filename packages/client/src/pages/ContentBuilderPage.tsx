@@ -17,6 +17,7 @@ import { BuilderEmptyState } from '../components/content-builder/BuilderEmptySta
 import MediaStudio from '../components/content-builder/MediaStudio';
 import { PromptEditorModal } from '../components/content-builder/PromptEditorModal';
 import { StepIndicator } from '../components/content-builder/StepIndicator';
+import { MiniChat } from '../components/content-builder/MiniChat';
 import { useContentBuilder } from '../hooks/useContentBuilder';
 import { usePrompts } from '../hooks/usePrompts';
 import { useContentChat } from '../hooks/useContentChat';
@@ -24,6 +25,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { useToast } from '../components/ui/Toast';
+import { isContentResponse, synthesizeTriggerMessage } from '../utils/contentDetection';
 
 interface Channel {
   id: string;
@@ -180,12 +182,54 @@ export function ContentBuilderPage() {
   // Compute selected channel objects from IDs
   const selectedChannelObjects = channels.filter((ch) => builder.selectedChannels.includes(ch.id));
 
-  // Handle prompt selection from PromptBadge
-  const handleSelectPrompt = (promptId: string, name: string, body: string) => {
-    builder.loadPrompt(promptId, name, body);
-    chat.clearChat();
-    toast(`Prompt loaded: ${name}`, 'success');
-  };
+  // Handle prompt selection from PromptBadge — auto-send trigger to AI
+  const handleSelectPrompt = useCallback(
+    async (promptId: string, name: string, body: string) => {
+      // Don't re-trigger if same prompt is already active
+      if (promptId === builder.activePromptId) return;
+
+      const hadContent = !!builder.mainBody.trim();
+      builder.loadPrompt(promptId, name, body);
+      chat.clearChat();
+
+      // If prompt has no body, just load it passively
+      if (!body?.trim()) {
+        toast(`Prompt loaded: ${name}`, 'success');
+        return;
+      }
+
+      // Auto-send synthesized trigger message
+      const trigger = synthesizeTriggerMessage(name);
+      const response = await chat.sendMessage(trigger);
+
+      if (response && isContentResponse(response)) {
+        builder.setMainBody(response);
+        if (hadContent) {
+          toast('Previous draft replaced by prompt generation', 'info');
+        } else {
+          toast(`Content generated with ${name}!`, 'success');
+        }
+      } else if (response) {
+        toast(`${name} active — continue the conversation`, 'info');
+      }
+    },
+    [builder, chat, toast],
+  );
+
+  // Apply AI chat response content to the editor
+  const handleApplyToEditor = useCallback(
+    (content: string) => {
+      if (!content.trim()) return;
+      const hadContent = !!builder.mainBody.trim();
+      builder.setMainBody(content);
+      if (hadContent) {
+        toast('Previous draft replaced', 'info');
+      } else {
+        toast('Content applied to editor', 'success');
+      }
+    },
+    [builder, toast],
+  );
 
   const handleCreateNewPrompt = () => {
     setEditingPrompt(null);
@@ -602,6 +646,7 @@ export function ContentBuilderPage() {
             <AICommandBar
               onCommand={handleAICommand}
               isProcessing={builder.isProcessing}
+              isSending={chat.isSending}
               commandHistory={builder.commandHistory}
               model={chat.model}
               onModelChange={chat.setModel}
@@ -697,7 +742,28 @@ export function ContentBuilderPage() {
           }`}
         >
           <div className="flex h-full w-[320px] flex-col">
-            <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
+            {/* AI Chat Panel */}
+            <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
+              <span className="text-sm font-medium text-text-secondary flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-accent" />
+                AI Chat
+              </span>
+            </div>
+            <div className="border-b border-border-subtle">
+              <MiniChat
+                messages={chat.messages}
+                onSendMessage={chat.sendMessage}
+                onInsert={handleApplyToEditor}
+                isSending={chat.isSending}
+                model={chat.model}
+                onModelChange={chat.setModel}
+                activePromptName={builder.activePromptName}
+                onClearPrompt={builder.clearPrompt}
+              />
+            </div>
+
+            {/* Schedule Panel */}
+            <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
               <span className="text-sm font-medium text-text-secondary">Schedule</span>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
