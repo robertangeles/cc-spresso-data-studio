@@ -63,5 +63,5 @@ export function isContentResponse(text: string): boolean {
  */
 export function synthesizeTriggerMessage(promptName: string): string {
   const name = promptName.length > 80 ? promptName.slice(0, 77) + '...' : promptName;
-  return `Generate content using ${name}`;
+  return `I'd like to use the "${name}" prompt. Please follow its instructions.`;
 }

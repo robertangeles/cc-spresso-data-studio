@@ -17,7 +17,6 @@ import { BuilderEmptyState } from '../components/content-builder/BuilderEmptySta
 import MediaStudio from '../components/content-builder/MediaStudio';
 import { PromptEditorModal } from '../components/content-builder/PromptEditorModal';
 import { StepIndicator } from '../components/content-builder/StepIndicator';
-import { MiniChat } from '../components/content-builder/MiniChat';
 import { useContentBuilder } from '../hooks/useContentBuilder';
 import { usePrompts } from '../hooks/usePrompts';
 import { useContentChat } from '../hooks/useContentChat';
@@ -742,24 +741,65 @@ export function ContentBuilderPage() {
           }`}
         >
           <div className="flex h-full w-[320px] flex-col">
-            {/* AI Chat Panel */}
+            {/* AI Chat — read-only message transcript */}
             <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
               <span className="text-sm font-medium text-text-secondary flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-accent" />
                 AI Chat
               </span>
             </div>
-            <div className="border-b border-border-subtle">
-              <MiniChat
-                messages={chat.messages}
-                onSendMessage={chat.sendMessage}
-                onInsert={handleApplyToEditor}
-                isSending={chat.isSending}
-                model={chat.model}
-                onModelChange={chat.setModel}
-                activePromptName={builder.activePromptName}
-                onClearPrompt={builder.clearPrompt}
-              />
+            <div className="border-b border-border-subtle max-h-[300px] overflow-y-auto scrollbar-thin">
+              {chat.messages.length === 0 && !chat.isSending ? (
+                <p className="text-xs text-text-tertiary text-center py-6 px-3">
+                  Select a prompt or type in the AI bar above to start.
+                </p>
+              ) : (
+                <div className="px-3 py-2.5 space-y-2">
+                  {chat.messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div className={`max-w-[90%] ${msg.role === 'user' ? 'order-2' : ''}`}>
+                        <div
+                          className={`rounded-lg p-2.5 text-xs leading-relaxed ${
+                            msg.role === 'user'
+                              ? 'bg-accent-dim text-text-primary'
+                              : 'bg-surface-2 text-text-primary'
+                          }`}
+                        >
+                          {msg.role === 'assistant' && (
+                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent mr-1.5 align-middle" />
+                          )}
+                          <span className="whitespace-pre-wrap inline">
+                            {msg.content.length > 500
+                              ? msg.content.slice(0, 500) + '...'
+                              : msg.content}
+                          </span>
+                        </div>
+                        {msg.role === 'assistant' && (
+                          <button
+                            type="button"
+                            onClick={() => handleApplyToEditor(msg.content)}
+                            className="mt-1 inline-flex items-center gap-1 rounded-full text-[10px] px-2.5 py-0.5 font-medium bg-accent/20 text-accent hover:bg-accent/30 transition-all"
+                          >
+                            <PenTool className="h-2.5 w-2.5" />
+                            Apply to editor
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {chat.isSending && (
+                    <div className="flex justify-start">
+                      <div className="bg-surface-2 rounded-lg p-2.5 flex items-center gap-2">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+                        <span className="text-xs text-text-tertiary italic">Thinking...</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Schedule Panel */}

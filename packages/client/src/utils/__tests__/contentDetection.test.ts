@@ -89,7 +89,7 @@ describe('synthesizeTriggerMessage', () => {
   // U11: Normal prompt name
   it('returns formatted trigger message for normal name', () => {
     expect(synthesizeTriggerMessage('Random Quote Generator')).toBe(
-      'Generate content using Random Quote Generator',
+      'I\'d like to use the "Random Quote Generator" prompt. Please follow its instructions.',
     );
   });
 
@@ -97,13 +97,15 @@ describe('synthesizeTriggerMessage', () => {
   it('truncates very long prompt names', () => {
     const longName = 'A'.repeat(100);
     const result = synthesizeTriggerMessage(longName);
-    expect(result.length).toBeLessThan(120);
+    expect(result.length).toBeLessThan(160);
     expect(result).toContain('...');
   });
 
   // U13: Special characters handled cleanly
   it('handles special characters in prompt name', () => {
     const result = synthesizeTriggerMessage('Tips & Tricks — Social');
-    expect(result).toBe('Generate content using Tips & Tricks — Social');
+    expect(result).toBe(
+      'I\'d like to use the "Tips & Tricks — Social" prompt. Please follow its instructions.',
+    );
   });
 });
