@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Check, Loader2, Wand2, RotateCcw } from 'lucide-react';
 import { useConfiguredModels } from '../../hooks/useConfiguredModels';
 import { PromptBadge } from './PromptBadge';
+import type { Prompt } from '../../hooks/usePrompts';
 
 interface AICommandBarProps {
   onCommand: (instruction: string) => void;
@@ -14,6 +15,9 @@ interface AICommandBarProps {
   onSelectPrompt: (promptId: string, name: string, body: string) => void;
   onClearPrompt: () => void;
   onCreateNewPrompt: () => void;
+  prompts: Prompt[];
+  promptsLoading: boolean;
+  onDeletePrompt?: (id: string) => void;
   onEditPrompt?: (prompt: {
     id: string;
     name: string;
@@ -47,6 +51,9 @@ export function AICommandBar({
   onSelectPrompt,
   onClearPrompt,
   onCreateNewPrompt,
+  prompts,
+  promptsLoading,
+  onDeletePrompt,
   onEditPrompt,
   onRegenerate,
 }: AICommandBarProps) {
@@ -161,7 +168,7 @@ export function AICommandBar({
       `}</style>
 
       {/* Input card */}
-      <div className="kr-cmd-idle relative overflow-x-clip bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
+      <div className="kr-cmd-idle relative bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
         {/* Toolbar row */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
           <div className="flex items-center gap-2">
@@ -171,6 +178,9 @@ export function AICommandBar({
               onSelectPrompt={onSelectPrompt}
               onClearPrompt={onClearPrompt}
               onCreateNew={onCreateNewPrompt}
+              prompts={prompts}
+              loading={promptsLoading}
+              onDeletePrompt={onDeletePrompt}
               onEditPrompt={onEditPrompt}
             />
             <span className="text-accent">

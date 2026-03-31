@@ -610,6 +610,9 @@ export function ContentBuilderPage() {
               onSelectPrompt={handleSelectPrompt}
               onClearPrompt={builder.clearPrompt}
               onCreateNewPrompt={handleCreateNewPrompt}
+              prompts={promptsHook.prompts}
+              promptsLoading={promptsHook.loading}
+              onDeletePrompt={promptsHook.deletePrompt}
               onEditPrompt={handleEditPrompt}
               onRegenerate={handleAICommand}
             />
