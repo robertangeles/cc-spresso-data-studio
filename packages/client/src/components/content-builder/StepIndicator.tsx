@@ -1,4 +1,3 @@
-import { PenTool, Layout, Sparkles, Image, Calendar, Check } from 'lucide-react';
 import type { FlowState } from '../../hooks/useContentBuilder';
 
 interface StepIndicatorProps {
@@ -6,11 +5,11 @@ interface StepIndicatorProps {
 }
 
 const STEPS = [
-  { key: 'WRITING', label: 'Write', minState: 'WRITING', icon: PenTool },
-  { key: 'PLATFORMS_SELECTED', label: 'Platforms', minState: 'PLATFORMS_SELECTED', icon: Layout },
-  { key: 'ADAPTED', label: 'Adapt', minState: 'ADAPTED', icon: Sparkles },
-  { key: 'MEDIA_ADDED', label: 'Media', minState: 'MEDIA_ADDED', icon: Image },
-  { key: 'READY', label: 'Schedule', minState: 'READY', icon: Calendar },
+  { key: 'WRITING', label: 'Write', minState: 'WRITING' },
+  { key: 'PLATFORMS_SELECTED', label: 'Platforms', minState: 'PLATFORMS_SELECTED' },
+  { key: 'ADAPTED', label: 'Adapt', minState: 'ADAPTED' },
+  { key: 'MEDIA_ADDED', label: 'Media', minState: 'MEDIA_ADDED' },
+  { key: 'READY', label: 'Schedule', minState: 'READY' },
 ] as const;
 
 const STATE_ORDER: FlowState[] = [
@@ -33,48 +32,55 @@ export function StepIndicator({ flowState }: StepIndicatorProps) {
     <div className="flex items-center gap-1">
       {STEPS.map((step, i) => {
         const stepIdx = stateIndex(step.minState as FlowState);
-        const isCompleted = currentIndex > stepIdx;
-        const isActive = currentIndex === stepIdx;
-        const isReachable = currentIndex >= stepIdx;
+        const isCompleted = currentIndex >= stepIdx;
+        const isActive =
+          currentIndex === stepIdx || (i === STEPS.length - 1 && currentIndex >= stepIdx);
+        const isNext = !isCompleted && currentIndex === stepIdx - 1;
         const isPrevCompleted =
-          i > 0 && currentIndex > stateIndex(STEPS[i - 1].minState as FlowState);
-        const Icon = step.icon;
+          i > 0 && currentIndex >= stateIndex(STEPS[i - 1].minState as FlowState);
 
         return (
           <div key={step.key} className="flex items-center gap-1">
             {/* Connector line */}
             {i > 0 && (
-              <div className="relative h-[2px] w-5 rounded-full bg-surface-3 overflow-hidden">
-                {isPrevCompleted && (
-                  <div className="absolute inset-0 bg-accent/60 rounded-full animate-step-fill" />
-                )}
-              </div>
+              <div
+                className={`h-[2px] w-4 rounded-full transition-all duration-500 ${
+                  isPrevCompleted ? 'bg-accent/60' : isNext ? 'bg-text-tertiary/30' : 'bg-surface-3'
+                }`}
+              />
             )}
 
-            {/* Step circle + label */}
-            <div className="flex items-center gap-1.5 group">
-              <div
-                className={`relative flex items-center justify-center h-5 w-5 rounded-full transition-all duration-500 ${
-                  isActive
-                    ? 'bg-accent text-text-inverse shadow-[0_0_12px_rgba(255,214,10,0.4)] scale-110'
-                    : isCompleted
-                      ? 'bg-accent/20 text-accent'
-                      : 'bg-surface-3 text-text-tertiary/50'
-                }`}
-              >
-                {isCompleted ? (
-                  <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                ) : (
-                  <Icon className="h-2.5 w-2.5" />
+            {/* Step dot + label */}
+            <div className="flex items-center gap-1.5">
+              {/* Dot with pulse ring for next step */}
+              <div className="relative flex items-center justify-center">
+                {isNext && (
+                  <div
+                    className="absolute h-3.5 w-3.5 rounded-full bg-accent/20 animate-ping"
+                    style={{ animationDuration: '2s' }}
+                  />
                 )}
+                <div
+                  className={`h-2 w-2 rounded-full transition-all duration-500 ${
+                    isActive
+                      ? 'bg-accent shadow-[0_0_8px_rgba(255,214,10,0.5)] scale-125'
+                      : isCompleted
+                        ? 'bg-accent shadow-[0_0_4px_rgba(255,214,10,0.25)]'
+                        : isNext
+                          ? 'bg-accent/40 shadow-[0_0_6px_rgba(255,214,10,0.15)]'
+                          : 'bg-surface-3'
+                  }`}
+                />
               </div>
               <span
-                className={`text-[10px] font-heading font-semibold tracking-wide uppercase transition-colors duration-300 ${
+                className={`text-[10px] font-semibold tracking-wide uppercase transition-colors duration-300 ${
                   isActive
                     ? 'text-accent'
-                    : isReachable
-                      ? 'text-text-secondary'
-                      : 'text-text-tertiary/40'
+                    : isCompleted
+                      ? 'text-accent/80'
+                      : isNext
+                        ? 'text-text-secondary'
+                        : 'text-text-tertiary/70'
                 }`}
               >
                 {step.label}

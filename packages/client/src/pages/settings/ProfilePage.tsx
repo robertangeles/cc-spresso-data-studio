@@ -658,6 +658,7 @@ const OAUTH_ENABLED_PLATFORMS = new Set([
   'threads',
   'linkedin',
   'pinterest',
+  'twitter',
 ]);
 
 // Platforms that use credential-based auth (handle + app password)
@@ -686,7 +687,15 @@ function SocialAccountsTab() {
   // Fetch connected accounts on mount
   useEffect(() => {
     const fetchStatuses = async () => {
-      const platforms = ['instagram', 'bluesky', 'facebook', 'threads', 'linkedin', 'pinterest'];
+      const platforms = [
+        'instagram',
+        'bluesky',
+        'facebook',
+        'threads',
+        'linkedin',
+        'pinterest',
+        'twitter',
+      ];
       const accounts: ConnectedAccount[] = [];
 
       for (const platform of platforms) {
