@@ -10,11 +10,14 @@ import type {
   SSEDone,
   AuditViolation,
 } from '@cc/shared';
+import { detectPlatform } from '@cc/shared';
 import Markdown from 'react-markdown';
+import { Send } from 'lucide-react';
 import { Card } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import { Modal } from '../../ui/Modal';
 import { api } from '../../../lib/api';
+import { OutputPickerModal, PLATFORM_CHIP_COLORS } from '../OutputPickerModal';
 
 interface RunFlowTabProps {
   flow: Flow;
@@ -63,6 +66,80 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
   const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  // ── Send to Studio ──
+  const [showOutputPicker, setShowOutputPicker] = useState(false);
+  const [pickerSteps, setPickerSteps] = useState<
+    Array<{ stepIndex: number; skillName: string; outputs: Record<string, string> }>
+  >([]);
+
+  const openPickerForAllSteps = useCallback(() => {
+    const completed = liveSteps
+      .filter((s) => s.state === 'done' && s.output)
+      .map((s) => ({
+        stepIndex: s.index,
+        skillName: s.skillName,
+        outputs: Object.fromEntries(
+          Object.entries(s.output!).filter(([k]) => !k.startsWith('__type_')),
+        ),
+      }));
+    if (completed.length === 0) return;
+    setPickerSteps(completed);
+    setShowOutputPicker(true);
+  }, [liveSteps]);
+
+  const openPickerForStep = useCallback((step: LiveStep) => {
+    if (!step.output) return;
+    setPickerSteps([
+      {
+        stepIndex: step.index,
+        skillName: step.skillName,
+        outputs: Object.fromEntries(
+          Object.entries(step.output).filter(([k]) => !k.startsWith('__type_')),
+        ),
+      },
+    ]);
+    setShowOutputPicker(true);
+  }, []);
+
+  const openPickerFromHistory = useCallback(
+    async (runId: string) => {
+      try {
+        const { data } = await api.get(`/flows/${flow.id}/executions/${runId}`);
+        const run = data.data;
+        const stepResults: Array<{ stepId: string; outputs: Record<string, string> }> =
+          run.stepResults ?? [];
+        const stepsForPicker = stepResults.map(
+          (sr: { stepId: string; outputs: Record<string, string> }, i: number) => ({
+            stepIndex: i,
+            skillName: sr.stepId,
+            outputs: Object.fromEntries(
+              Object.entries(sr.outputs ?? {}).filter(([k]) => !k.startsWith('__type_')),
+            ),
+          }),
+        );
+        if (stepsForPicker.length === 0) return;
+        setPickerSteps(stepsForPicker);
+        setShowOutputPicker(true);
+      } catch {
+        // Non-blocking — history item may have been deleted
+      }
+    },
+    [flow.id],
+  );
+
+  // Keyboard shortcut: Ctrl+Shift+E to open Send to Studio
+  useEffect(() => {
+    if (!isDone) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'E') {
+        e.preventDefault();
+        openPickerForAllSteps();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isDone, openPickerForAllSteps]);
 
   const fields = flow.config.fields;
   const steps = flow.config.steps;
@@ -474,6 +551,19 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
                         {run.status}
                       </span>
                     </button>
+                    {run.status === 'completed' && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openPickerFromHistory(run.id);
+                        }}
+                        className="px-1.5 py-2 text-text-tertiary hover:text-accent transition-colors"
+                        title="Send to Content Studio"
+                      >
+                        <Send className="h-3 w-3" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={async (e) => {
@@ -504,6 +594,39 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
           </div>
         )}
 
+        {/* CTA at top — visible immediately after completion */}
+        {isDone && liveSteps.some((s) => s.state === 'done') && (
+          <button
+            type="button"
+            onClick={openPickerForAllSteps}
+            className="group w-full rounded-xl border border-accent/30 bg-gradient-to-r from-accent/10 via-amber-500/10 to-accent/10 p-5 text-left transition-all hover:border-accent/50 hover:shadow-[0_0_24px_rgba(255,214,10,0.15)] hover:-translate-y-0.5 active:scale-[0.99]"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-amber-600 shadow-glow-accent">
+                  <Send className="h-5 w-5 text-text-inverse" />
+                </div>
+                <div>
+                  <h4 className="text-base font-semibold text-text-primary group-hover:text-accent transition-colors">
+                    Send to Content Studio
+                  </h4>
+                  <p className="text-sm text-text-tertiary">
+                    Select outputs, map to editor fields, and start publishing
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="hidden sm:inline-flex items-center gap-1 rounded-md border border-border-subtle bg-surface-3 px-2 py-1 text-[10px] font-mono text-text-tertiary">
+                  Ctrl+Shift+E
+                </kbd>
+                <span className="text-xl text-accent group-hover:translate-x-1 transition-transform">
+                  &rarr;
+                </span>
+              </div>
+            </div>
+          </button>
+        )}
+
         {liveSteps.map((step) => (
           <LiveStepCard
             key={step.index}
@@ -513,6 +636,7 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
             onOutputEdit={handleOutputEdit}
             onRefresh={handleStepRefresh}
             isRefreshing={refreshingStep === step.index}
+            onSendToStudio={openPickerForStep}
           />
         ))}
 
@@ -538,6 +662,13 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
             );
           })()}
       </div>
+
+      <OutputPickerModal
+        isOpen={showOutputPicker}
+        onClose={() => setShowOutputPicker(false)}
+        steps={pickerSteps}
+        orchestrationName={flow.name}
+      />
 
       <Modal
         isOpen={showClearHistoryModal}
@@ -622,6 +753,7 @@ interface LiveStepCardProps {
   onOutputEdit?: (stepIndex: number, key: string, value: string) => void;
   onRefresh?: (stepIndex: number) => void;
   isRefreshing?: boolean;
+  onSendToStudio?: (step: LiveStep) => void;
 }
 
 import { useThinkingMessage } from '../../../lib/thinking-messages';
@@ -633,6 +765,7 @@ function LiveStepCard({
   onOutputEdit,
   onRefresh,
   isRefreshing,
+  onSendToStudio,
 }: LiveStepCardProps) {
   const [editFeedback, setEditFeedback] = useState('');
   const [viewMode, setViewMode] = useState<'raw' | 'preview' | 'edit' | 'audit'>('preview');
@@ -739,6 +872,17 @@ function LiveStepCard({
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-text-tertiary">{step.model}</span>
+          {step.state === 'done' && onSendToStudio && (
+            <button
+              type="button"
+              onClick={() => onSendToStudio(step)}
+              className="flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/20 hover:border-accent/50 hover:shadow-[0_0_8px_rgba(255,214,10,0.1)] transition-all"
+              title="Send this step's output to Content Studio"
+            >
+              <Send className="h-3 w-3" />
+              Send to Studio
+            </button>
+          )}
           {(step.state === 'done' || step.state === 'error') && onRefresh && (
             <button
               type="button"
@@ -757,7 +901,7 @@ function LiveStepCard({
 
       {/* Thinking message */}
       {step.state === 'running' && (
-        <p className="mb-2 text-sm text-brand-600 italic animate-pulse">{thinkingMessage}</p>
+        <p className="mb-2 text-sm text-accent italic animate-pulse">{thinkingMessage}</p>
       )}
 
       {/* Metadata */}
@@ -788,7 +932,22 @@ function LiveStepCard({
             return (
               <div key={key} className="mt-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-text-tertiary uppercase">{key}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-text-tertiary uppercase">{key}</span>
+                    {(() => {
+                      const platform = detectPlatform(key);
+                      if (!platform) return null;
+                      const chip = PLATFORM_CHIP_COLORS[platform];
+                      if (!chip) return null;
+                      return (
+                        <span
+                          className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${chip.bg} ${chip.text}`}
+                        >
+                          {chip.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
                   <div className="flex gap-1">
                     <button
                       type="button"

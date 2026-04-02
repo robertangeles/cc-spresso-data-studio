@@ -13,6 +13,7 @@ import { db, schema } from '../db/index.js';
 interface ExecToken {
   flowId: string;
   userId: string;
+  role?: string;
   inputs: Record<string, string>;
   expiresAt: number;
 }
@@ -40,7 +41,7 @@ export async function executeFlow(
     const { id } = req.params;
     const { inputs } = req.body;
 
-    const result = await flowExecutor.executeFlow(id, req.user.userId, inputs);
+    const result = await flowExecutor.executeFlow(id, req.user.userId, inputs, req.user.role);
 
     res.json({ success: true, data: result });
   } catch (err) {
@@ -62,12 +63,19 @@ export async function createExecutionToken(
     const { inputs } = req.body;
 
     // Generate a short-lived token
-    const tokenPayload = { userId: req.user.userId, email: req.user.email, name: req.user.name, role: req.user.role };
+    const tokenPayload = {
+      userId: req.user.userId,
+      email: req.user.email,
+      name: req.user.name,
+      role: req.user.role,
+      isEmailVerified: true,
+    };
     const token = signAccessToken(tokenPayload) + '.' + crypto.randomUUID().slice(0, 8);
 
     execTokenStore.set(token, {
       flowId: id,
       userId: req.user.userId,
+      role: req.user.role,
       inputs: inputs ?? {},
       expiresAt: Date.now() + 60_000, // 60s TTL
     });
@@ -80,11 +88,7 @@ export async function createExecutionToken(
 
 // --- B2: SSE streaming endpoint ---
 
-export async function executeFlowStream(
-  req: Request,
-  res: Response,
-  _next: NextFunction,
-) {
+export async function executeFlowStream(req: Request, res: Response, _next: NextFunction) {
   const token = req.query.token as string;
 
   if (!token) {
@@ -108,7 +112,7 @@ export async function executeFlowStream(
   // Consume token — single use
   execTokenStore.delete(token);
 
-  const { flowId, userId, inputs } = execData;
+  const { flowId, userId, inputs, role } = execData;
 
   // Verify flowId matches route param
   if (req.params.id !== flowId) {
@@ -120,7 +124,7 @@ export async function executeFlowStream(
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
+    Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
   res.flushHeaders();
@@ -146,9 +150,16 @@ export async function executeFlowStream(
   };
 
   try {
-    await flowExecutor.executeFlowStreaming(flowId, userId, inputs, emit, {
-      signal: abortController.signal,
-    });
+    await flowExecutor.executeFlowStreaming(
+      flowId,
+      userId,
+      inputs,
+      emit,
+      {
+        signal: abortController.signal,
+      },
+      role ?? 'Subscriber',
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Execution failed';
     emit({ type: 'step_error', data: { stepIndex: -1, error: message } });
@@ -188,7 +199,8 @@ export async function approveEditorStep(
     }
 
     // Update status — the executor's DB polling will detect this
-    await db.update(schema.pendingApprovals)
+    await db
+      .update(schema.pendingApprovals)
       .set({
         status: action === 'approve' ? 'approved' : 'revised',
         userAction: action,
@@ -271,13 +283,15 @@ export async function deleteExecutionRun(
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { id, runId } = req.params;
-    await db.delete(schema.executionRuns).where(
-      and(
-        eq(schema.executionRuns.id, runId),
-        eq(schema.executionRuns.flowId, id),
-        eq(schema.executionRuns.userId, req.user.userId),
-      ),
-    );
+    await db
+      .delete(schema.executionRuns)
+      .where(
+        and(
+          eq(schema.executionRuns.id, runId),
+          eq(schema.executionRuns.flowId, id),
+          eq(schema.executionRuns.userId, req.user.userId),
+        ),
+      );
     res.json({ success: true, data: null, message: 'Run deleted' });
   } catch (err) {
     next(err);
@@ -292,12 +306,11 @@ export async function deleteAllExecutionRuns(
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { id } = req.params;
-    await db.delete(schema.executionRuns).where(
-      and(
-        eq(schema.executionRuns.flowId, id),
-        eq(schema.executionRuns.userId, req.user.userId),
-      ),
-    );
+    await db
+      .delete(schema.executionRuns)
+      .where(
+        and(eq(schema.executionRuns.flowId, id), eq(schema.executionRuns.userId, req.user.userId)),
+      );
     res.json({ success: true, data: null, message: 'All runs deleted' });
   } catch (err) {
     next(err);
@@ -321,7 +334,12 @@ export async function rerunStep(
       throw new AppError(400, 'stepIndex (number) and executionContext (object) are required');
     }
 
-    const result = await flowExecutor.rerunSingleStep(id, req.user.userId, stepIndex, executionContext);
+    const result = await flowExecutor.rerunSingleStep(
+      id,
+      req.user.userId,
+      stepIndex,
+      executionContext,
+    );
 
     res.json({ success: true, data: result });
   } catch (err) {
@@ -331,7 +349,11 @@ export async function rerunStep(
 
 // --- Content Audit ---
 
-export async function auditStepOutput(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function auditStepOutput(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { content, includeAi } = req.body;
@@ -341,7 +363,7 @@ export async function auditStepOutput(req: Request, res: Response<ApiResponse<un
 
     let result;
     if (includeAi) {
-      result = await contentAuditor.fullAudit(content, req.user.userId);
+      result = await contentAuditor.fullAudit(content, req.user.userId, req.user.role);
     } else {
       result = await contentAuditor.auditContent(content, req.user.userId);
     }
@@ -352,7 +374,11 @@ export async function auditStepOutput(req: Request, res: Response<ApiResponse<un
   }
 }
 
-export async function reworkStepOutput(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function reworkStepOutput(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { content, model, maxRounds } = req.body;
@@ -363,7 +389,14 @@ export async function reworkStepOutput(req: Request, res: Response<ApiResponse<u
     const reworkModel = model || 'claude-sonnet-4-6';
     const rounds = Math.min(maxRounds || 3, 5);
 
-    const result = await contentAuditor.reworkLoop(content, req.user.userId, reworkModel, rounds);
+    const result = await contentAuditor.reworkLoop(
+      content,
+      req.user.userId,
+      reworkModel,
+      rounds,
+      undefined,
+      req.user.role,
+    );
 
     res.json({
       success: true,

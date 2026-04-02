@@ -1,12 +1,12 @@
-import { Calendar, Clock, Send, Save, Loader2 } from 'lucide-react';
+import { Calendar, Clock, Send, Loader2 } from 'lucide-react';
 import { MiniCalendar } from './MiniCalendar';
 
 interface SchedulePanelProps {
   onSchedule: (date: string) => void;
   onPublishNow: () => void;
-  onSaveDraft: () => void;
   isSaving: boolean;
   selectedChannelCount: number;
+  allAccountsSelected: boolean;
   flowState?: string;
   scheduleDate: string;
   onScheduleDateChange: (date: string) => void;
@@ -16,22 +16,23 @@ interface SchedulePanelProps {
 export function SchedulePanel({
   onSchedule,
   onPublishNow,
-  onSaveDraft,
   isSaving,
   selectedChannelCount,
+  allAccountsSelected,
   flowState,
   scheduleDate,
   onScheduleDateChange,
   refreshKey = 0,
 }: SchedulePanelProps) {
   const handleSchedule = () => {
-    if (!scheduleDate || selectedChannelCount === 0) return;
+    if (!scheduleDate || selectedChannelCount === 0 || !allAccountsSelected) return;
     onSchedule(scheduleDate);
   };
 
   const isDateInPast = scheduleDate ? new Date(scheduleDate).getTime() < Date.now() : false;
-  const canSchedule = scheduleDate && !isDateInPast && selectedChannelCount > 0 && !isSaving;
-  const canPublish = selectedChannelCount > 0 && !isSaving;
+  const canSchedule =
+    scheduleDate && !isDateInPast && selectedChannelCount > 0 && allAccountsSelected && !isSaving;
+  const canPublish = selectedChannelCount > 0 && allAccountsSelected && !isSaving;
 
   // Compute a friendly relative date string
   const getRelativeDate = () => {
@@ -79,10 +80,15 @@ export function SchedulePanel({
         }`}
       >
         {/* Channel count badge */}
-        {selectedChannelCount > 0 ? (
+        {selectedChannelCount > 0 && allAccountsSelected ? (
           <div className="flex items-center gap-1.5 text-xs text-text-secondary">
             <Send className="h-3 w-3 text-accent" />
             Publishing to {selectedChannelCount} account{selectedChannelCount !== 1 ? 's' : ''}
+          </div>
+        ) : selectedChannelCount > 0 && !allAccountsSelected ? (
+          <div className="flex items-center gap-1.5 text-xs text-amber-400">
+            <Send className="h-3 w-3 text-amber-400" />
+            Select an account for each platform
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 py-2">
@@ -160,16 +166,7 @@ export function SchedulePanel({
             Publish Now
           </button>
 
-          {/* Save as Draft */}
-          <button
-            type="button"
-            onClick={onSaveDraft}
-            disabled={isSaving}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-surface-3 text-text-secondary border border-border-subtle px-4 py-2 text-sm font-medium hover:bg-surface-4 hover:text-text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save as Draft
-          </button>
+          {/* Save as Draft lives in the header bar (Ctrl+S) */}
         </div>
       </div>
 

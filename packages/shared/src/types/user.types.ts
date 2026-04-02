@@ -3,6 +3,7 @@ export interface User {
   email: string;
   name: string;
   role: string;
+  isEmailVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,4 +29,12 @@ export interface TokenPayload {
   email: string;
   name: string;
   role: string;
+  isEmailVerified: boolean;
+}
+
+export interface SessionStatus {
+  unlimited: boolean;
+  used: number;
+  limit: number;
+  remaining: number;
 }

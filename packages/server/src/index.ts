@@ -5,7 +5,7 @@ import { verifyConnection } from './db/index.js';
 import { seedBuiltinSkills } from './services/skills/seed.js';
 import { seedAIProviders, seedRoles } from './services/admin.service.js';
 import { providerRegistry } from './services/ai/provider.registry.js';
-import { seedChannels } from './services/content.service.js';
+import { seedChannels, seedRemixStylePrompts } from './services/content.service.js';
 import { seedDefaultPrompts } from './services/system-prompt.service.js';
 import { startSchedulerCron } from './services/scheduler.cron.js';
 
@@ -16,6 +16,7 @@ async function start() {
   await seedAIProviders();
   await seedChannels();
   await seedDefaultPrompts();
+  await seedRemixStylePrompts();
   await providerRegistry.loadFromDatabase();
 
   startSchedulerCron();

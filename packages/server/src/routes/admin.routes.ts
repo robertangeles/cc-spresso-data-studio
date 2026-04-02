@@ -15,9 +15,16 @@ router.post('/database/query', validate(executeQuerySchema), adminController.exe
 // Specific settings routes (before generic :key route)
 router.get('/settings/site', adminController.getSiteSettings);
 router.put('/settings/site', adminController.updateSiteSettings);
+router.get('/settings/google-oauth', adminController.getGoogleOAuthConfig);
+router.put('/settings/google-oauth', adminController.updateGoogleOAuthConfig);
+router.post('/settings/google-oauth/test', adminController.testGoogleOAuthConnection);
 router.get('/settings/cloudinary', adminController.getCloudinaryConfig);
 router.put('/settings/cloudinary', adminController.updateCloudinaryConfig);
 router.post('/settings/cloudinary/test', adminController.testCloudinaryConnection);
+router.get('/settings/resend', adminController.getResendConfig);
+router.put('/settings/resend', adminController.updateResendConfig);
+router.get('/settings/turnstile', adminController.getTurnstileConfig);
+router.put('/settings/turnstile', adminController.updateTurnstileConfig);
 
 // Generic key-value settings (key in body)
 router.put('/settings', adminController.upsertSetting);

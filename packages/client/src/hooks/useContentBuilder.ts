@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { api } from '../lib/api';
+import type { OrchestrationRelayPayload } from '../components/flow/OutputPickerModal';
 
 const STORAGE_KEY = 'spresso_content_builder_draft';
 
@@ -47,26 +48,7 @@ const initialState: ContentBuilderState = {
 };
 
 export function useContentBuilder() {
-  const [state, setState] = useState<ContentBuilderState>(() => {
-    // Restore draft from localStorage on mount
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          ...initialState,
-          ...parsed,
-          isDirty: false,
-          isSaving: false,
-          isAdapting: false,
-          isProcessing: false,
-        };
-      }
-    } catch {
-      /* ignore corrupt data */
-    }
-    return initialState;
-  });
+  const [state, setState] = useState<ContentBuilderState>(initialState);
 
   // Auto-save to localStorage on content changes (debounced)
   useEffect(() => {
@@ -335,6 +317,29 @@ export function useContentBuilder() {
     });
   }, []);
 
+  const loadFromOrchestration = useCallback((payload: OrchestrationRelayPayload) => {
+    setState({
+      ...initialState,
+      title: payload.title || '',
+      mainBody: payload.mainBody || '',
+      imageUrl: payload.imageUrl || null,
+      platformBodies: payload.platformBodies || {},
+      selectedChannels: payload.channels || [],
+      selectedAccounts: {},
+      activeTab: payload.channels?.[0] ?? null,
+      isDirty: true,
+      activePromptId: null,
+      activePromptName: null,
+      activePromptBody: null,
+      isProcessing: false,
+      isSaving: false,
+      isAdapting: false,
+      commandHistory: [],
+      previousContent: null,
+    });
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
+
   const reset = useCallback(() => {
     setState(initialState);
     localStorage.removeItem(STORAGE_KEY);
@@ -389,6 +394,7 @@ export function useContentBuilder() {
     adaptAll,
     addCommand,
     undoLastAI,
+    loadFromOrchestration,
     reset,
     resetContent,
     flowState,

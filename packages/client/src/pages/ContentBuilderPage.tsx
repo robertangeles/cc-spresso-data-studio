@@ -1,19 +1,36 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { PenTool, Wand2, Send, Loader2 } from 'lucide-react';
-import { PlatformPillBar } from '../components/content-builder/PlatformPillBar';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  PenTool,
+  Sparkles,
+  Save,
+  Keyboard,
+  Check,
+  PanelLeftClose,
+  PanelRightClose,
+  Info,
+  RotateCcw,
+} from 'lucide-react';
+import {
+  ORCHESTRATION_RELAY_KEY,
+  type OrchestrationRelayPayload,
+} from '../components/flow/OutputPickerModal';
+import { PlatformSelector } from '../components/content-builder/PlatformSelector';
 import { PostComposer } from '../components/content-builder/PostComposer';
+import { CopilotChat } from '../components/content-builder/CopilotChat';
 import { CharacterCountBar } from '../components/content-builder/CharacterCountBar';
+import { SchedulePanel } from '../components/content-builder/SchedulePanel';
 import { BuilderEmptyState } from '../components/content-builder/BuilderEmptyState';
 import MediaStudio from '../components/content-builder/MediaStudio';
 import { PromptEditorModal } from '../components/content-builder/PromptEditorModal';
-import { ActionBar } from '../components/content-builder/ActionBar';
-import { ChatDrawer } from '../components/content-builder/ChatDrawer';
-import { ScheduleDrawer } from '../components/content-builder/ScheduleDrawer';
+import { StepIndicator } from '../components/content-builder/StepIndicator';
 import { useContentBuilder } from '../hooks/useContentBuilder';
 import { usePrompts } from '../hooks/usePrompts';
 import { useContentChat } from '../hooks/useContentChat';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
+import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
 import { isContentResponse, synthesizeTriggerMessage } from '../utils/contentDetection';
 
@@ -25,80 +42,14 @@ interface Channel {
   config: Record<string, unknown>;
 }
 
-/** Inline AI command bar — the magic wand that lives between content and actions */
-function InlineAIBar({
-  onSubmit,
-  isProcessing,
-}: {
-  onSubmit: (text: string) => void;
-  isProcessing: boolean;
-}) {
-  const [input, setInput] = useState('');
-  const handleSend = () => {
-    if (!input.trim() || isProcessing) return;
-    onSubmit(input.trim());
-    setInput('');
-  };
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-  return (
-    <div className="shrink-0 px-6 lg:px-10 py-3 relative">
-      {/* Ambient glow behind the bar */}
-      <div className="absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-accent/15 to-transparent" />
-      <div className="max-w-4xl ai-bar rounded-2xl px-4 py-3 flex items-center gap-3">
-        {/* Animated wand icon */}
-        <div
-          className={`flex items-center justify-center h-8 w-8 rounded-xl shrink-0 transition-all duration-300 ${
-            isProcessing
-              ? 'bg-accent/20 animate-pulse'
-              : 'bg-gradient-to-br from-accent/15 to-amber-600/10'
-          }`}
-        >
-          <Wand2 className={`h-4 w-4 text-accent ${isProcessing ? 'animate-spin' : ''}`} />
-        </div>
-        <div className="flex-1 flex flex-col gap-0.5">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder="Ask AI to help — make it shorter, add emojis, change tone..."
-            disabled={isProcessing}
-            className="flex-1 bg-transparent border-none text-sm text-text-primary placeholder:text-text-tertiary/40 focus:outline-none disabled:opacity-50 font-editor"
-          />
-          <span className="text-[9px] text-text-tertiary/40 font-mono">Enter to send</span>
-        </div>
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={!input.trim() || isProcessing}
-          className={`shrink-0 rounded-xl px-3 py-2 transition-all duration-300 ease-spring ${
-            isProcessing
-              ? 'bg-accent/20 text-accent'
-              : input.trim()
-                ? 'bg-gradient-to-r from-accent to-amber-600 text-text-inverse shadow-[0_0_15px_rgba(255,214,10,0.15)] hover:shadow-[0_0_25px_rgba(255,214,10,0.25)] hover:scale-[1.05] active:scale-[0.95]'
-                : 'bg-surface-3/30 text-text-tertiary/30'
-          }`}
-        >
-          {isProcessing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function ContentBuilderPage() {
-  const [activeDrawer, setActiveDrawer] = useState<'chat' | 'schedule' | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(false);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [promptModalOpen, setPromptModalOpen] = useState(false);
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
+  const pendingRelayRef = useRef<OrchestrationRelayPayload | null>(null);
   const [editingPrompt, setEditingPrompt] = useState<{
     id: string;
     name: string;
@@ -108,7 +59,13 @@ export function ContentBuilderPage() {
     defaultModel: string | null;
   } | null>(null);
 
+  const [isCopilotActive, setIsCopilotActive] = useState(false);
+
   const builder = useContentBuilder();
+
+  // When copilot is active but no content in editor yet, treat as WRITING
+  const effectiveFlowState =
+    isCopilotActive && builder.flowState === 'IDLE' ? 'WRITING' : builder.flowState;
   const promptsHook = usePrompts();
   const chat = useContentChat(builder.activePromptBody);
   const { user } = useAuth();
@@ -136,25 +93,31 @@ export function ContentBuilderPage() {
     async function fetchChannels() {
       try {
         const { data } = await api.get('/content/channels');
-        if (!cancelled) setChannels(data.data ?? data);
+        if (!cancelled) {
+          setChannels(data.data ?? data);
+        }
       } catch {
-        /* Channels will remain empty */
+        // Channels will remain empty
       }
     }
     async function fetchConnected() {
       try {
         const { data } = await api.get('/oauth/connected');
-        if (!cancelled) setConnectedPlatforms(data.data ?? []);
+        if (!cancelled) {
+          setConnectedPlatforms(data.data ?? []);
+        }
       } catch {
-        /* Connected platforms will remain empty */
+        // Connected platforms will remain empty
       }
     }
     async function fetchAccounts() {
       try {
         const { data } = await api.get('/oauth/accounts');
-        if (!cancelled) setSocialAccounts(data.data ?? []);
+        if (!cancelled) {
+          setSocialAccounts(data.data ?? []);
+        }
       } catch {
-        /* Social accounts will remain empty */
+        // Social accounts will remain empty
       }
     }
     fetchChannels();
@@ -181,6 +144,7 @@ export function ContentBuilderPage() {
       const accounts = accountsByChannel[channelId];
       if (!accounts) continue;
       const currentSelection = builder.selectedAccounts[channelId];
+      // Auto-select if exactly 1 account and nothing selected yet
       if (accounts.length === 1 && (!currentSelection || currentSelection.length === 0)) {
         builder.setAccountsForChannel(channelId, [accounts[0].id]);
       }
@@ -194,31 +158,28 @@ export function ContentBuilderPage() {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
 
-      // Ctrl+S -> save draft
+      // Ctrl+S / Cmd+S -> save draft
       if (e.key === 's' && !e.shiftKey) {
         e.preventDefault();
         if (builder.isDirty && !builder.isSaving) builder.saveAsDraft();
         return;
       }
-      // Ctrl+Shift+A -> adapt all
+      // Ctrl+Shift+A / Cmd+Shift+A -> adapt all
       if (e.key === 'A' && e.shiftKey) {
         e.preventDefault();
         if (!builder.isAdapting && builder.selectedChannels.length >= 2) builder.adaptAll();
         return;
       }
-      // Ctrl+Shift+S -> toggle schedule drawer
+      // Ctrl+Shift+S / Cmd+Shift+S -> focus schedule input
       if (e.key === 'S' && e.shiftKey) {
         e.preventDefault();
-        setActiveDrawer((d) => (d === 'schedule' ? null : 'schedule'));
+        const scheduleInput = document.querySelector<HTMLInputElement>(
+          'input[type="datetime-local"], input[type="date"]',
+        );
+        if (scheduleInput) scheduleInput.focus();
         return;
       }
-      // Ctrl+/ -> toggle chat drawer
-      if (e.key === '/') {
-        e.preventDefault();
-        setActiveDrawer((d) => (d === 'chat' ? null : 'chat'));
-        return;
-      }
-      // Ctrl+Z -> undo last AI command
+      // Ctrl+Z -> undo last AI command (only if previousContent exists)
       if (e.key === 'z' && !e.shiftKey && builder.previousContent !== null) {
         e.preventDefault();
         builder.undoLastAI();
@@ -234,23 +195,130 @@ export function ContentBuilderPage() {
     return () => window.removeEventListener('keydown', handleKeyboard);
   }, [handleKeyboard]);
 
+  // ── Orchestration relay detection ────────────────────────────────────
+  // Wait for channels to load so we can resolve slugs → IDs
+  const relayProcessedRef = useRef(false);
+
+  useEffect(() => {
+    if (relayProcessedRef.current) return;
+    if (searchParams.get('from') !== 'orchestration') return;
+    if (channels.length === 0) return; // wait for channels to load
+
+    relayProcessedRef.current = true;
+
+    // Clear URL param immediately (replace history so back button doesn't re-trigger)
+    const next = new URLSearchParams(searchParams);
+    next.delete('from');
+    setSearchParams(next, { replace: true });
+
+    let payload: OrchestrationRelayPayload;
+    try {
+      const raw = localStorage.getItem(ORCHESTRATION_RELAY_KEY);
+      if (!raw) {
+        toast('Nothing to load from orchestration', 'info');
+        return;
+      }
+      payload = JSON.parse(raw);
+    } catch {
+      localStorage.removeItem(ORCHESTRATION_RELAY_KEY);
+      toast('Could not load orchestration content', 'error');
+      return;
+    }
+
+    localStorage.removeItem(ORCHESTRATION_RELAY_KEY);
+
+    // Resolve channel slugs to channel IDs (skip if already IDs, e.g. from remix relay)
+    if (payload.channels && payload.channels.length > 0) {
+      const firstIsId = channels.some((ch) => ch.id === payload.channels[0]);
+      if (!firstIsId) {
+        const resolvedIds = payload.channels
+          .map((slug) => channels.find((ch) => ch.slug === slug)?.id)
+          .filter((id): id is string => !!id);
+        payload = { ...payload, channels: resolvedIds };
+      }
+    }
+
+    // Also resolve platformBodies keys from slugs to channel IDs
+    if (payload.platformBodies && Object.keys(payload.platformBodies).length > 0) {
+      const keys = Object.keys(payload.platformBodies);
+      const firstIsId = channels.some((ch) => ch.id === keys[0]);
+      if (!firstIsId) {
+        const resolvedBodies: Record<string, string> = {};
+        for (const [slug, body] of Object.entries(payload.platformBodies)) {
+          const ch = channels.find((c) => c.slug === slug);
+          if (ch) resolvedBodies[ch.id] = body;
+        }
+        payload = { ...payload, platformBodies: resolvedBodies };
+      }
+    }
+
+    // If editor has unsaved content, ask for confirmation
+    if (builder.isDirty || builder.mainBody.trim().length > 0) {
+      pendingRelayRef.current = payload;
+      setShowReplaceConfirm(true);
+    } else {
+      builder.loadFromOrchestration(payload);
+      if (payload.remixContext) {
+        toast(
+          `Remix loaded \u2022 ${payload.remixContext.sourceItems.length} source${payload.remixContext.sourceItems.length !== 1 ? 's' : ''} \u2022 Adapt to generate platform versions`,
+          'success',
+        );
+      } else {
+        toast(
+          `Loaded from "${payload.orchestrationName}" \u2022 ${payload.fieldCount} field${payload.fieldCount !== 1 ? 's' : ''} mapped`,
+          'success',
+        );
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channels]);
+
+  const handleConfirmReplace = useCallback(() => {
+    const payload = pendingRelayRef.current;
+    if (payload) {
+      builder.loadFromOrchestration(payload);
+      if (payload.remixContext) {
+        toast(
+          `Remix loaded \u2022 ${payload.remixContext.sourceItems.length} source${payload.remixContext.sourceItems.length !== 1 ? 's' : ''} \u2022 Adapt to generate platform versions`,
+          'success',
+        );
+      } else {
+        toast(
+          `Loaded from "${payload.orchestrationName}" \u2022 ${payload.fieldCount} field${payload.fieldCount !== 1 ? 's' : ''} mapped`,
+          'success',
+        );
+      }
+    }
+    pendingRelayRef.current = null;
+    setShowReplaceConfirm(false);
+  }, [builder, toast]);
+
+  const handleCancelReplace = useCallback(() => {
+    pendingRelayRef.current = null;
+    setShowReplaceConfirm(false);
+  }, []);
+
   // Compute selected channel objects from IDs
   const selectedChannelObjects = channels.filter((ch) => builder.selectedChannels.includes(ch.id));
 
   // Handle prompt selection from PromptBadge — auto-send trigger to AI
   const handleSelectPrompt = useCallback(
     async (promptId: string, name: string, body: string) => {
+      // Don't re-trigger if same prompt is already active
       if (promptId === builder.activePromptId) return;
 
+      setIsCopilotActive(true);
       const hadContent = !!builder.mainBody.trim();
       builder.loadPrompt(promptId, name, body);
       chat.clearChat();
 
+      // If prompt has no body, just load it passively
       if (!body?.trim()) {
         toast(`Prompt loaded: ${name}`, 'success');
         return;
       }
 
+      // Auto-send synthesized trigger message
       const trigger = synthesizeTriggerMessage(name);
       const response = await chat.sendMessage(trigger);
 
@@ -268,15 +336,17 @@ export function ContentBuilderPage() {
     [builder, chat, toast],
   );
 
-  // Apply AI chat response content to the editor
+  // Apply AI chat response content to the active editor tab
   const handleApplyToEditor = useCallback(
     (content: string) => {
       if (!content.trim()) return;
-      const hadContent = !!builder.mainBody.trim();
-      builder.setMainBody(content);
-      if (hadContent) {
-        toast('Previous draft replaced', 'info');
+      if (builder.activeTab) {
+        // Apply to the active platform tab
+        builder.setPlatformBody(builder.activeTab, content);
+        toast('Content applied to platform editor', 'success');
       } else {
+        // Apply to main body
+        builder.setMainBody(content);
         toast('Content applied to editor', 'success');
       }
     },
@@ -296,7 +366,14 @@ export function ContentBuilderPage() {
     category: string;
     defaultModel: string | null;
   }) => {
-    setEditingPrompt(prompt);
+    setEditingPrompt({
+      id: prompt.id,
+      name: prompt.name,
+      description: prompt.description,
+      body: prompt.body,
+      category: prompt.category,
+      defaultModel: prompt.defaultModel,
+    });
     setPromptModalOpen(true);
   };
 
@@ -322,70 +399,20 @@ export function ContentBuilderPage() {
     setEditingPrompt(null);
   };
 
-  // AI Command handler — sends through unified chat with editor context
-  const handleAICommand = useCallback(
-    async (instruction: string) => {
-      const currentContent = builder.activeTab
-        ? (builder.platformBodies[builder.activeTab] ?? '')
-        : builder.mainBody;
-
-      const activeChannel = builder.activeTab
-        ? selectedChannelObjects.find((ch) => ch.id === builder.activeTab)
-        : null;
-
-      const charLimit = activeChannel ? (activeChannel.config?.charLimit as number) || 0 : 0;
-      const platformName = activeChannel?.name ?? 'general';
-
-      const contextParts = [
-        'You are a content writer. Return ONLY the post content — no preamble, no explanations, no separators, no quotation marks. Just the ready-to-publish text.',
-        charLimit > 0
-          ? `STRICT CHARACTER LIMIT: ${charLimit} characters maximum for ${platformName}.`
-          : '',
-        currentContent.trim()
-          ? `The user has written the following content:\n---\n${currentContent}\n---\n\nInstruction: ${instruction}`
-          : instruction,
-      ]
-        .filter(Boolean)
-        .join('\n\n');
-
-      builder.storePreviousContent();
-      builder.setProcessing(true);
-
-      try {
-        const result = await chat.sendMessage(contextParts, {
-          displayContent: instruction,
-          systemPromptOverride: builder.activePromptBody,
-        });
-
-        if (result) {
-          if (builder.activeTab) {
-            builder.setPlatformBody(builder.activeTab, result);
-          } else {
-            builder.setMainBody(result);
-          }
-          builder.addCommand(instruction);
-          toast('AI content applied. Ctrl+Z to undo.', 'success');
-        }
-      } catch {
-        toast('AI command failed. Please try again.', 'error');
-      } finally {
-        builder.setProcessing(false);
-      }
-    },
-    [builder, chat, toast, selectedChannelObjects],
-  );
-
   // Whether to show the empty state
   const showEmptyState =
     builder.selectedChannels.length === 0 && !builder.mainBody.trim() && !builder.title.trim();
 
   // Empty state handlers
   const handleStartScratch = () => {
-    // Focus the editor — content will start flowing
+    setIsCopilotActive(true);
   };
 
   const handleOpenPrompts = () => {
-    setActiveDrawer('chat');
+    const promptBtn = document.querySelector<HTMLButtonElement>(
+      '[data-tour="ai-assistant"] button',
+    );
+    if (promptBtn) promptBtn.click();
   };
 
   const handleRepurpose = () => {
@@ -395,6 +422,7 @@ export function ContentBuilderPage() {
   const handleQuickStart = useCallback(
     async (category: string) => {
       if (isGeneratingTemplate) return;
+      setIsCopilotActive(true);
       setIsGeneratingTemplate(true);
       try {
         const { data } = await api.post<{
@@ -422,13 +450,23 @@ export function ContentBuilderPage() {
 
   // Image click handler
   const handleImageClick = () => {
-    if (builder.imageUrl) builder.setImageUrl(null);
+    if (builder.imageUrl) {
+      builder.setImageUrl(null);
+    }
   };
 
   // Schedule handlers
   const handleSchedule = async (date: string) => {
     if (builder.selectedChannels.length === 0) {
       toast('Select at least one platform first.', 'error');
+      return;
+    }
+    // Ensure every selected channel has at least one account picked
+    const channelsWithoutAccounts = builder.selectedChannels.filter(
+      (chId) => !builder.selectedAccounts[chId] || builder.selectedAccounts[chId].length === 0,
+    );
+    if (channelsWithoutAccounts.length > 0) {
+      toast('Select an account for each platform before scheduling.', 'error');
       return;
     }
     const content = builder.activeTab
@@ -458,20 +496,11 @@ export function ContentBuilderPage() {
       let totalScheduled = 0;
       for (const item of items) {
         const accountIds = builder.selectedAccounts[item.channelId];
-        if (accountIds && accountIds.length > 0) {
-          for (const socialAccountId of accountIds) {
-            await api.post('/schedule', {
-              contentItemId: item.id,
-              channelId: item.channelId,
-              socialAccountId,
-              scheduledAt: date,
-            });
-            totalScheduled++;
-          }
-        } else {
+        for (const socialAccountId of accountIds) {
           await api.post('/schedule', {
             contentItemId: item.id,
             channelId: item.channelId,
+            socialAccountId,
             scheduledAt: date,
           });
           totalScheduled++;
@@ -485,7 +514,6 @@ export function ContentBuilderPage() {
       chat.clearChat();
       setScheduleDate('');
       setCalendarRefreshKey((k) => k + 1);
-      setActiveDrawer(null);
     } catch (err) {
       console.error('Schedule failed:', err);
       toast('Failed to schedule. Please try again.', 'error');
@@ -505,6 +533,7 @@ export function ContentBuilderPage() {
       return;
     }
     toast('Publishing...', 'info');
+    // Schedule 30 seconds in the future to pass server-side validation
     const publishDate = new Date(Date.now() + 30_000).toISOString();
     await handleSchedule(publishDate);
   };
@@ -522,77 +551,290 @@ export function ContentBuilderPage() {
     }
   };
 
-  const handleToggleDrawer = useCallback((drawer: 'chat' | 'schedule') => {
-    setActiveDrawer((d) => (d === drawer ? null : drawer));
-  }, []);
-
-  const selectedAccountCount =
-    Object.values(builder.selectedAccounts).reduce((sum, ids) => sum + ids.length, 0) ||
-    builder.selectedChannels.length;
-
   return (
     <div className="flex h-full flex-col -m-6">
-      {/* ─── Header — premium branding bar ─── */}
-      <div className="relative flex items-center border-b border-white/[0.04] px-6 py-3 overflow-hidden">
-        {/* Ambient gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-r from-surface-2 via-surface-1 to-surface-2" />
-        <div className="absolute inset-0 bg-gradient-to-r from-accent/[0.03] via-transparent to-accent/[0.02]" />
-        {/* Bottom accent line */}
-        <div className="absolute bottom-0 left-[5%] right-[5%] h-px bg-gradient-to-r from-transparent via-accent/15 to-transparent" />
-
-        <div className="relative flex items-center gap-2.5">
-          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-accent/10 border border-accent/15">
-            <PenTool className="h-3.5 w-3.5 text-accent" />
-          </div>
-          <h1 className="text-base font-heading font-bold tracking-tight bg-gradient-to-r from-text-primary to-text-secondary bg-clip-text text-transparent">
-            Content Builder
+      {/* ─── Header ─── */}
+      <div className="flex items-center justify-between border-b border-accent/10 bg-gradient-to-r from-surface-2 to-surface-1 px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          <PenTool className="h-5 w-5 text-accent" />
+          <h1 className="text-lg font-semibold text-text-primary hidden lg:block">
+            Content Studio
           </h1>
+          <h1 className="text-lg font-semibold text-text-primary lg:hidden">CB</h1>
+
+          {/* Step indicator */}
+          <div className="hidden md:flex ml-2">
+            <StepIndicator flowState={effectiveFlowState} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Form Reset */}
+          <div className="flex flex-col items-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                builder.reset();
+                chat.clearChat();
+                setIsCopilotActive(false);
+                setScheduleDate('');
+                setCalendarRefreshKey((k) => k + 1);
+              }}
+              disabled={builder.isSaving}
+              title="Reset Content Studio"
+            >
+              <RotateCcw className="mr-1.5 h-4 w-4" />
+              Reset
+            </Button>
+          </div>
+
+          {/* Save Draft */}
+          <div className="flex flex-col items-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSaveDraft}
+              disabled={builder.isSaving || !builder.isDirty}
+              title="Save Draft (Ctrl+S)"
+            >
+              <Save className="mr-1.5 h-4 w-4" />
+              {builder.isSaving ? 'Saving...' : 'Save Draft'}
+            </Button>
+            <span className="text-[10px] text-text-secondary mt-0.5 hidden lg:block">
+              <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />
+              Ctrl+S
+            </span>
+          </div>
+          {builder.selectedChannels.length >= 2 &&
+            (builder.flowState === 'PLATFORMS_SELECTED' ||
+              builder.flowState === 'ADAPTED' ||
+              builder.flowState === 'MEDIA_ADDED' ||
+              builder.flowState === 'READY') && (
+              <div className="flex flex-col items-center" data-tour="adapt-all">
+                {builder.flowState === 'ADAPTED' ||
+                builder.flowState === 'MEDIA_ADDED' ||
+                builder.flowState === 'READY' ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={builder.adaptAll}
+                    disabled={builder.isAdapting}
+                    title="Re-adapt All (Ctrl+Shift+A)"
+                  >
+                    <Check className="mr-1.5 h-4 w-4 text-green-400" />
+                    <span className="text-green-400">Adapted</span>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={builder.adaptAll}
+                    disabled={builder.isAdapting || builder.selectedChannels.length === 0}
+                    title="Adapt All (Ctrl+Shift+A)"
+                  >
+                    <Sparkles className="mr-1.5 h-4 w-4" />
+                    {builder.isAdapting ? 'Adapting...' : 'Adapt All'}
+                  </Button>
+                )}
+                <span className="text-[10px] text-text-secondary mt-0.5 hidden lg:block">
+                  <Keyboard className="inline h-2.5 w-2.5 mr-0.5" />
+                  Ctrl+Shift+A
+                </span>
+              </div>
+            )}
+
+          {/* Right panel toggle moved inline to panel header */}
         </div>
       </div>
 
-      {/* ─── Main Content: Single Centered Column with atmospheric depth ─── */}
-      <div className="flex-1 overflow-y-auto page-spotlight">
-        {showEmptyState ? (
-          <div className="max-w-4xl px-6 lg:px-10 py-8">
-            <BuilderEmptyState
-              onStartScratch={handleStartScratch}
-              onOpenPrompts={handleOpenPrompts}
-              onRepurpose={handleRepurpose}
-              onQuickStart={handleQuickStart}
-              isGenerating={isGeneratingTemplate}
-            />
+      {/* ─── Mobile step indicator (below header) ─── */}
+      <div className="flex md:hidden items-center justify-center border-b border-border-subtle px-4 py-2 bg-surface-1/50">
+        <StepIndicator flowState={effectiveFlowState} />
+      </div>
+
+      {/* ─── 3-Column Layout ─── */}
+      {/*
+       * Responsive breakpoints:
+       *   xl (1280px+): 3 columns — left(260) + center(flex) + right(320)
+       *   lg (1024-1280px): 2 columns — center(flex) + right(320), platforms inline
+       *   below 1024px: 1 column, platforms inline, preview collapsed
+       */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* ─── LEFT COLUMN: Platform Selector (xl only) ─── */}
+        {leftOpen ? (
+          <div className="hidden xl:flex flex-shrink-0 flex-col border-r border-border-subtle bg-surface-1/50 transition-all duration-300 ease-in-out overflow-hidden w-[260px]">
+            <div className="flex h-full w-[260px] flex-col">
+              <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
+                <div className="group relative flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-text-secondary">Platforms</span>
+                  <Info className="h-3 w-3 text-text-tertiary/50 hover:text-accent transition-colors cursor-help" />
+                  <div className="absolute left-0 top-full mt-2 z-50 w-56 rounded-lg bg-surface-3 border border-border-subtle shadow-dark-lg p-3 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                      Choose where to publish. Select a platform, then pick the specific account or
+                      page to post to.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full font-medium">
+                    {Object.values(builder.selectedAccounts).reduce(
+                      (sum, ids) => sum + ids.length,
+                      0,
+                    ) || builder.selectedChannels.length}
+                  </span>
+                  <button
+                    onClick={() => setLeftOpen(false)}
+                    className="rounded-md p-1 text-text-tertiary hover:text-text-secondary hover:bg-surface-2/50 transition-colors"
+                    aria-label="Collapse platforms panel"
+                  >
+                    <PanelLeftClose className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3">
+                <PlatformSelector
+                  channels={channels}
+                  selectedIds={builder.selectedChannels}
+                  onToggle={builder.toggleChannel}
+                  connectedPlatforms={connectedPlatforms}
+                  layout="vertical"
+                  accountsByChannel={accountsByChannel}
+                  selectedAccounts={builder.selectedAccounts}
+                  onToggleAccount={builder.toggleAccount}
+                />
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="max-w-4xl px-6 lg:px-10 py-8 animate-fade-in relative z-[1]">
-            {/* ─── Unified Editor Surface (platforms + editor + media in one card) ─── */}
-            <div data-tour="composer">
-              <PostComposer
-                title={builder.title}
-                onTitleChange={builder.setTitle}
-                mainBody={builder.mainBody}
-                onMainBodyChange={builder.setMainBody}
-                platformBodies={builder.platformBodies}
-                onPlatformBodyChange={builder.setPlatformBody}
-                activeTab={builder.activeTab}
-                onTabChange={builder.setActiveTab}
-                selectedChannels={selectedChannelObjects}
-                imageUrl={builder.imageUrl}
-                onImageClick={handleImageClick}
-                isAdapting={builder.isAdapting}
-                onAdaptAll={builder.adaptAll}
-                flowState={builder.flowState}
-                headerSlot={
-                  <PlatformPillBar
+          <button
+            onClick={() => setLeftOpen(true)}
+            className="hidden xl:flex flex-shrink-0 flex-col items-center gap-2 w-10 border-r border-border-subtle bg-surface-1/50 hover:bg-surface-2/50 py-4 transition-colors cursor-pointer group relative"
+            aria-label="Expand platforms panel"
+          >
+            <PanelLeftClose className="h-4 w-4 text-text-tertiary group-hover:text-accent rotate-180 transition-colors" />
+            <span className="text-[10px] text-text-tertiary group-hover:text-text-secondary font-medium tracking-wider [writing-mode:vertical-lr]">
+              PLATFORMS
+            </span>
+            {builder.selectedChannels.length > 0 && (
+              <span className="text-[9px] bg-accent/15 text-accent w-5 h-5 rounded-full flex items-center justify-center font-medium">
+                {Object.values(builder.selectedAccounts).reduce(
+                  (sum, ids) => sum + ids.length,
+                  0,
+                ) || builder.selectedChannels.length}
+              </span>
+            )}
+            {/* Hover balloon */}
+            <div className="absolute left-full top-3 ml-2 z-50 w-52 rounded-lg bg-surface-3 border border-border-subtle shadow-dark-lg p-3 opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200">
+              <p className="text-[11px] font-medium text-text-primary mb-1">Platforms</p>
+              <p className="text-[10px] text-text-secondary leading-relaxed">
+                Choose where to publish. Select a platform, then pick the specific account or page
+                to post to.
+              </p>
+            </div>
+          </button>
+        )}
+
+        {/* ─── CENTER COLUMN: AI Co-pilot + Editor + Media ─── */}
+        <div
+          className="flex flex-1 flex-col overflow-hidden bg-surface-0"
+          style={{
+            background:
+              'radial-gradient(ellipse at center 40%, rgba(255,255,255,0.015) 0%, transparent 60%)',
+          }}
+        >
+          {/* ─── IDLE: Full-width empty state ─── */}
+          {!isCopilotActive && showEmptyState ? (
+            <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4">
+              <BuilderEmptyState
+                onStartScratch={handleStartScratch}
+                onOpenPrompts={handleOpenPrompts}
+                onRepurpose={handleRepurpose}
+                onQuickStart={handleQuickStart}
+                isGenerating={isGeneratingTemplate}
+              />
+            </div>
+          ) : (
+            /* ─── COPILOT: Side-by-side AI + Editor ─── */
+            <div className="flex flex-1 overflow-hidden">
+              {/* Left: AI Conversation */}
+              <div
+                className="w-1/2 flex flex-col border-r border-border-subtle"
+                data-tour="ai-assistant"
+              >
+                <CopilotChat
+                  messages={chat.messages}
+                  isSending={chat.isSending}
+                  onSendMessage={(text) => {
+                    setIsCopilotActive(true);
+                    chat.sendMessage(text);
+                  }}
+                  isProcessing={builder.isProcessing}
+                  activePromptId={builder.activePromptId}
+                  activePromptName={builder.activePromptName}
+                  isSendingPrompt={chat.isSending}
+                  onSelectPrompt={handleSelectPrompt}
+                  onClearPrompt={builder.clearPrompt}
+                  onCreateNewPrompt={handleCreateNewPrompt}
+                  prompts={promptsHook.prompts}
+                  promptsLoading={promptsHook.loading}
+                  onDeletePrompt={promptsHook.deletePrompt}
+                  onEditPrompt={handleEditPrompt}
+                  model={chat.model}
+                  onModelChange={chat.setModel}
+                  onApplyToEditor={handleApplyToEditor}
+                />
+              </div>
+
+              {/* Right: Editor — stretches to match AI chat height */}
+              <div className="w-1/2 flex flex-col overflow-y-auto px-4 py-4 min-h-0">
+                {/* Inline platform selector — visible below xl */}
+                <div className="xl:hidden mb-4" data-tour="platform-selector">
+                  <PlatformSelector
                     channels={channels}
                     selectedIds={builder.selectedChannels}
                     onToggle={builder.toggleChannel}
                     connectedPlatforms={connectedPlatforms}
+                    layout="horizontal"
                     accountsByChannel={accountsByChannel}
                     selectedAccounts={builder.selectedAccounts}
                     onToggleAccount={builder.toggleAccount}
                   />
-                }
-                mediaSlot={
+                </div>
+
+                {/* Main composer — grows to fill available space */}
+                <div data-tour="composer" className="flex-1 flex flex-col">
+                  <PostComposer
+                    title={builder.title}
+                    onTitleChange={builder.setTitle}
+                    mainBody={builder.mainBody}
+                    onMainBodyChange={builder.setMainBody}
+                    platformBodies={builder.platformBodies}
+                    onPlatformBodyChange={builder.setPlatformBody}
+                    activeTab={builder.activeTab}
+                    onTabChange={builder.setActiveTab}
+                    selectedChannels={selectedChannelObjects}
+                    imageUrl={builder.imageUrl}
+                    onImageClick={handleImageClick}
+                    isAdapting={builder.isAdapting}
+                    onAdaptAll={builder.adaptAll}
+                    flowState={builder.flowState}
+                  />
+                  {builder.activeTab && (
+                    <div className="mt-1.5 flex justify-end px-1">
+                      <CharacterCountBar
+                        text={builder.platformBodies[builder.activeTab] ?? builder.mainBody}
+                        platformSlug={
+                          selectedChannelObjects.find((ch) => ch.id === builder.activeTab)?.slug ??
+                          null
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Media Studio — compact */}
+                <div className="mt-3">
                   <MediaStudio
                     imageUrl={builder.imageUrl}
                     onImageChange={builder.setImageUrl}
@@ -600,79 +842,82 @@ export function ContentBuilderPage() {
                     flowState={builder.flowState}
                     nudge={builder.flowState === 'ADAPTED'}
                   />
-                }
-              />
-              {builder.activeTab && (
-                <div className="mt-1.5 flex justify-end px-1">
-                  <CharacterCountBar
-                    text={builder.platformBodies[builder.activeTab] ?? builder.mainBody}
-                    platformSlug={
-                      selectedChannelObjects.find((ch) => ch.id === builder.activeTab)?.slug ?? null
-                    }
-                  />
                 </div>
-              )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ─── RIGHT COLUMN: Schedule ─── */}
+        {rightOpen ? (
+          <div className="hidden lg:flex flex-shrink-0 flex-col border-l border-border-subtle bg-surface-1 transition-all duration-300 ease-in-out overflow-hidden w-[320px]">
+            <div className="flex h-full w-[320px] flex-col">
+              <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
+                <div className="group relative flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-text-secondary">Schedule</span>
+                  <Info className="h-3 w-3 text-text-tertiary/50 hover:text-accent transition-colors cursor-help" />
+                  <div className="absolute left-0 top-full mt-2 z-50 w-56 rounded-lg bg-surface-3 border border-border-subtle shadow-dark-lg p-3 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                      Pick a date and time to publish, or post immediately. Your calendar shows all
+                      upcoming scheduled posts.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setRightOpen(false)}
+                  className="rounded-md p-1 text-text-tertiary hover:text-text-secondary hover:bg-surface-2/50 transition-colors"
+                  aria-label="Collapse schedule panel"
+                >
+                  <PanelRightClose className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <SchedulePanel
+                  onSchedule={handleSchedule}
+                  onPublishNow={handlePublishNow}
+                  isSaving={builder.isSaving}
+                  selectedChannelCount={
+                    Object.values(builder.selectedAccounts).reduce(
+                      (sum, ids) => sum + ids.length,
+                      0,
+                    ) || builder.selectedChannels.length
+                  }
+                  allAccountsSelected={
+                    builder.selectedChannels.length > 0 &&
+                    builder.selectedChannels.every(
+                      (chId) => (builder.selectedAccounts[chId]?.length ?? 0) > 0,
+                    )
+                  }
+                  flowState={builder.flowState}
+                  scheduleDate={scheduleDate}
+                  onScheduleDateChange={setScheduleDate}
+                  refreshKey={calendarRefreshKey}
+                />
+              </div>
             </div>
           </div>
+        ) : (
+          <button
+            onClick={() => setRightOpen(true)}
+            className="hidden lg:flex flex-shrink-0 flex-col items-center gap-2 w-10 border-l border-border-subtle bg-surface-1 hover:bg-surface-2/50 py-4 transition-colors cursor-pointer group relative"
+            aria-label="Expand schedule panel"
+          >
+            <PanelRightClose className="h-4 w-4 text-text-tertiary group-hover:text-accent rotate-180 transition-colors" />
+            <span className="text-[10px] text-text-tertiary group-hover:text-text-secondary font-medium tracking-wider [writing-mode:vertical-lr]">
+              SCHEDULE
+            </span>
+            {scheduleDate && <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />}
+            {/* Hover balloon */}
+            <div className="absolute right-full top-3 mr-2 z-50 w-52 rounded-lg bg-surface-3 border border-border-subtle shadow-dark-lg p-3 opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200">
+              <p className="text-[11px] font-medium text-text-primary mb-1">Schedule</p>
+              <p className="text-[10px] text-text-secondary leading-relaxed">
+                Pick a date and time to publish, or post immediately. Your calendar shows all
+                upcoming scheduled posts.
+              </p>
+            </div>
+          </button>
         )}
       </div>
-
-      {/* ─── Inline AI Command Bar (page-level, always visible) ─── */}
-      {!showEmptyState && (
-        <InlineAIBar onSubmit={handleAICommand} isProcessing={builder.isProcessing} />
-      )}
-
-      {/* ─── Sticky Action Bar ─── */}
-      <ActionBar
-        activeDrawer={activeDrawer}
-        onToggleDrawer={handleToggleDrawer}
-        onSaveDraft={handleSaveDraft}
-        onPublishNow={handlePublishNow}
-        isSaving={builder.isSaving}
-        isDirty={builder.isDirty}
-        flowState={builder.flowState}
-        selectedChannelCount={selectedAccountCount}
-        isAdapting={builder.isAdapting}
-        onAdaptAll={builder.adaptAll}
-      />
-
-      {/* ─── Chat Drawer ─── */}
-      <ChatDrawer
-        isOpen={activeDrawer === 'chat'}
-        onClose={() => setActiveDrawer(null)}
-        messages={chat.messages}
-        isSending={chat.isSending}
-        onSendMessage={(text) => handleAICommand(text)}
-        isProcessing={builder.isProcessing}
-        activePromptId={builder.activePromptId}
-        activePromptName={builder.activePromptName}
-        isSendingPrompt={chat.isSending}
-        onSelectPrompt={handleSelectPrompt}
-        onClearPrompt={builder.clearPrompt}
-        onCreateNewPrompt={handleCreateNewPrompt}
-        prompts={promptsHook.prompts}
-        promptsLoading={promptsHook.loading}
-        onDeletePrompt={promptsHook.deletePrompt}
-        onEditPrompt={handleEditPrompt}
-        model={chat.model}
-        onModelChange={chat.setModel}
-        onApplyToEditor={handleApplyToEditor}
-      />
-
-      {/* ─── Schedule Drawer ─── */}
-      <ScheduleDrawer
-        isOpen={activeDrawer === 'schedule'}
-        onClose={() => setActiveDrawer(null)}
-        onSchedule={handleSchedule}
-        onPublishNow={handlePublishNow}
-        onSaveDraft={handleSaveDraft}
-        isSaving={builder.isSaving}
-        selectedChannelCount={selectedAccountCount}
-        flowState={builder.flowState}
-        scheduleDate={scheduleDate}
-        onScheduleDateChange={setScheduleDate}
-        refreshKey={calendarRefreshKey}
-      />
 
       {/* Prompt Editor Modal */}
       <PromptEditorModal
@@ -684,6 +929,20 @@ export function ContentBuilderPage() {
         onSave={handleSavePrompt}
         editPrompt={editingPrompt}
       />
+
+      {/* Orchestration replace confirmation */}
+      <Modal
+        isOpen={showReplaceConfirm}
+        onClose={handleCancelReplace}
+        title="Replace current content?"
+        confirmLabel="Replace"
+        onConfirm={handleConfirmReplace}
+      >
+        <p>
+          You have unsaved content in the editor. Loading orchestration output will replace it. Save
+          your current draft first if you want to keep it.
+        </p>
+      </Modal>
     </div>
   );
 }

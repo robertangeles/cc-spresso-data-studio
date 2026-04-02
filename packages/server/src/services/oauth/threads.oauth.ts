@@ -41,7 +41,9 @@ export class ThreadsOAuthProvider implements OAuthProvider {
     const redirectUri = `${redirectBase}/api/oauth/threads/callback`;
     const state = Buffer.from(JSON.stringify({ userId })).toString('base64url');
     const scopes = 'threads_basic,threads_content_publish,threads_manage_insights';
-    return `https://www.threads.net/oauth/authorize?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${state}&response_type=code`;
+    const authUrl = `https://threads.net/oauth/authorize?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&response_type=code&state=${state}`;
+    logger.info({ authUrl, appIdPrefix: appId.substring(0, 6) }, 'Threads OAuth URL generated');
+    return authUrl;
   }
 
   async exchangeCode(code: string, redirectBase: string): Promise<OAuthTokens> {

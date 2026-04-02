@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 
-interface ContentItem {
+export interface ContentItem {
   id: string;
   title: string;
   body: string;
@@ -11,11 +11,13 @@ interface ContentItem {
   flowId: string | null;
   tags: string[];
   metadata: Record<string, unknown>;
+  imageUrl?: string | null;
+  sourceContentId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-interface Channel {
+export interface Channel {
   id: string;
   name: string;
   slug: string;
@@ -64,14 +66,21 @@ export function useContent(options: UseContentOptions = {}) {
     setItems((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
-  return { items, isLoading, refresh, updateItem, deleteItem };
+  const deleteBatch = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    await api.post('/content/delete-batch', { ids });
+    setItems((prev) => prev.filter((item) => !ids.includes(item.id)));
+  }, []);
+
+  return { items, isLoading, refresh, updateItem, deleteItem, deleteBatch };
 }
 
 export function useChannels() {
   const [channels, setChannels] = useState<Channel[]>([]);
 
   useEffect(() => {
-    api.get('/content/channels')
+    api
+      .get('/content/channels')
       .then(({ data }) => setChannels(data.data))
       .catch(() => setChannels([]));
   }, []);

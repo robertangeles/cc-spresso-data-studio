@@ -44,13 +44,44 @@ export class ConflictError extends AppError {
   }
 }
 
-export class SessionQuotaExceededError extends AppError {
-  public remaining: number;
-  public limit: number;
-  constructor(message = 'Free session quota exceeded', remaining = 0, limit = 0) {
+export class CaptchaError extends AppError {
+  constructor(message = 'CAPTCHA verification failed. Please try again.') {
+    super(400, message);
+    this.name = 'CaptchaError';
+  }
+}
+
+export class TokenExpiredError extends AppError {
+  constructor(message = 'This link has expired. Please request a new one.') {
+    super(400, message);
+    this.name = 'TokenExpiredError';
+  }
+}
+
+export class TooManyRequestsError extends AppError {
+  constructor(
+    message = 'Too many requests. Please try again later.',
+    public retryAfter?: number,
+  ) {
     super(429, message);
+    this.name = 'TooManyRequestsError';
+  }
+}
+
+export class EmailConfigError extends AppError {
+  constructor(message = 'Email service is not configured. Contact your administrator.') {
+    super(503, message);
+    this.name = 'EmailConfigError';
+  }
+}
+
+export class SessionQuotaExceededError extends AppError {
+  constructor(
+    message = 'Free session limit reached. Upgrade your plan to continue using AI features.',
+    public remaining: number = 0,
+    public limit: number = 0,
+  ) {
+    super(402, message);
     this.name = 'SessionQuotaExceededError';
-    this.remaining = remaining;
-    this.limit = limit;
   }
 }

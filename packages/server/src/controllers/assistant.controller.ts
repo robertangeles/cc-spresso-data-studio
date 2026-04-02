@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import type { ApiResponse } from '@cc/shared';
 import { UnauthorizedError } from '../utils/errors.js';
 import { providerRegistry } from '../services/ai/provider.registry.js';
+import { withSessionGate } from '../services/session-gate.service.js';
 import { SITE_ASSISTANT_PROMPT } from '../prompts/site-assistant.js';
 import { logger } from '../config/logger.js';
 
@@ -14,7 +15,10 @@ export async function chat(req: Request, res: Response<ApiResponse<unknown>>, ne
       return res.status(400).json({ success: false, data: null, message: 'Message is required' });
     }
 
-    const systemPrompt = SITE_ASSISTANT_PROMPT.replace('{{currentPage}}', currentPage || '/unknown');
+    const systemPrompt = SITE_ASSISTANT_PROMPT.replace(
+      '{{currentPage}}',
+      currentPage || '/unknown',
+    );
 
     // Build message history
     const messages: Array<{ role: 'user' | 'system' | 'assistant'; content: string }> = [
@@ -30,12 +34,14 @@ export async function chat(req: Request, res: Response<ApiResponse<unknown>>, ne
 
     messages.push({ role: 'user', content: message });
 
-    const response = await providerRegistry.complete({
-      model: 'claude-haiku-4-5',
-      messages,
-      temperature: 0.5,
-      maxTokens: 1000,
-    });
+    const response = await withSessionGate(req.user.userId, req.user.role, () =>
+      providerRegistry.complete({
+        model: 'claude-haiku-4-5',
+        messages,
+        temperature: 0.5,
+        maxTokens: 1000,
+      }),
+    );
 
     logger.info({ currentPage, messageLength: message.length }, 'Site assistant chat');
 

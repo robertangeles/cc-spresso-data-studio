@@ -54,14 +54,26 @@ export function PromptBadge({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Position dropdown below the button using portal
+  // Position dropdown below or above the button using portal (flip if near bottom)
   const updatePosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
-    setDropdownPos({
-      top: rect.bottom,
-      left: rect.left,
-    });
+    const dropdownHeight = 340;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Open upward if not enough space below
+    if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+      setDropdownPos({
+        top: rect.top - Math.min(dropdownHeight, spaceAbove - 8),
+        left: rect.left,
+      });
+    } else {
+      setDropdownPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -156,7 +168,7 @@ export function PromptBadge({
           <div
             ref={dropdownRef}
             className="fixed w-[300px] max-h-[340px] flex flex-col rounded-xl border border-border-subtle bg-surface-1 shadow-xl shadow-black/30 z-50 overflow-hidden"
-            style={{ top: dropdownPos.top + 8, left: dropdownPos.left }}
+            style={{ top: dropdownPos.top, left: dropdownPos.left }}
           >
             {/* Search */}
             <div className="px-3 pt-3 pb-2">

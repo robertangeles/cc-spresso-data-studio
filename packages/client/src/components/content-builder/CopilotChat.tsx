@@ -42,6 +42,144 @@ interface CopilotChatProps {
   onApplyToEditor: (content: string) => void;
 }
 
+// ─── Knight Rider border CSS ───
+const knightRiderCSS = `
+@keyframes knight-rider {
+  0%   { background-position: -200% 0, 0 -200%, 200% 0, 0 200%; }
+  25%  { background-position: 200% 0, 0 -200%, 200% 0, 0 200%; }
+  50%  { background-position: 200% 0, 0 200%, 200% 0, 0 200%; }
+  75%  { background-position: 200% 0, 0 200%, -200% 0, 0 200%; }
+  100% { background-position: 200% 0, 0 200%, -200% 0, 0 -200%; }
+}
+.knight-rider-border {
+  position: relative;
+}
+.knight-rider-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background:
+    linear-gradient(90deg, transparent 30%, rgba(255,214,10,0.6) 50%, transparent 70%) top / 200% 1px no-repeat,
+    linear-gradient(180deg, transparent 30%, rgba(255,214,10,0.6) 50%, transparent 70%) right / 1px 200% no-repeat,
+    linear-gradient(270deg, transparent 30%, rgba(255,214,10,0.6) 50%, transparent 70%) bottom / 200% 1px no-repeat,
+    linear-gradient(0deg, transparent 30%, rgba(255,214,10,0.6) 50%, transparent 70%) left / 1px 200% no-repeat;
+  animation: knight-rider 4s linear infinite;
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+`;
+
+// ─── Neural Network Background Animation ───
+interface NeuralNode {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  pulse: number;
+}
+
+function NeuralNetworkBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const nodesRef = useRef<NeuralNode[]>([]);
+  const animRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const resize = () => {
+      const rect = canvas.parentElement?.getBoundingClientRect();
+      if (rect) {
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+      }
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const nodeCount = 15;
+    nodesRef.current = Array.from({ length: nodeCount }, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      radius: 2 + Math.random() * 2,
+      pulse: Math.random() * Math.PI * 2,
+    }));
+
+    const connectionDist = 140;
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const nodes = nodesRef.current;
+      const t = Date.now() * 0.001;
+
+      for (const node of nodes) {
+        node.x += node.vx;
+        node.y += node.vy;
+        node.pulse += 0.02;
+        if (node.x < 0 || node.x > canvas.width) node.vx *= -1;
+        if (node.y < 0 || node.y > canvas.height) node.vy *= -1;
+        node.x = Math.max(0, Math.min(canvas.width, node.x));
+        node.y = Math.max(0, Math.min(canvas.height, node.y));
+      }
+
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < connectionDist) {
+            const alpha = (1 - dist / connectionDist) * 0.2;
+            const pulseAlpha = Math.sin(t * 2 + i + j) * 0.5 + 0.5;
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.strokeStyle = `rgba(255, 214, 10, ${alpha * pulseAlpha})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+      }
+
+      for (const node of nodes) {
+        const glow = Math.sin(node.pulse) * 0.3 + 0.7;
+        const r = node.radius * glow;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r * 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 214, 10, ${0.03 * glow})`;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 214, 10, ${0.35 * glow})`;
+        ctx.fill();
+      }
+
+      animRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 pointer-events-none"
+      style={{ opacity: 0.5 }}
+    />
+  );
+}
+
 export function CopilotChat({
   messages,
   isSending,
@@ -112,17 +250,21 @@ export function CopilotChat({
 
   return (
     <div className="flex flex-col h-full">
+      <style>{knightRiderCSS}</style>
       {/* ─── Messages area ─── */}
       <div className="flex-1 overflow-y-auto scrollbar-thin px-3 py-3">
         {!hasMessages && !isSending ? (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center mb-3">
-              <Wand2 className="h-5 w-5 text-accent" />
+          <div className="relative flex flex-col items-center justify-center h-full text-center px-4 overflow-hidden">
+            <NeuralNetworkBg />
+            <div className="relative z-10">
+              <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center mb-3 mx-auto">
+                <Wand2 className="h-5 w-5 text-accent" />
+              </div>
+              <p className="text-sm font-medium text-text-secondary mb-1">AI Co-pilot</p>
+              <p className="text-xs text-text-tertiary max-w-[200px]">
+                Select a prompt or type below to start creating content.
+              </p>
             </div>
-            <p className="text-sm font-medium text-text-secondary mb-1">AI Co-pilot</p>
-            <p className="text-xs text-text-tertiary max-w-[200px]">
-              Select a prompt or type below to start creating content.
-            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -188,50 +330,10 @@ export function CopilotChat({
         )}
       </div>
 
-      {/* ─── Input area (sticky bottom) ─── */}
+      {/* ─── Input area (sticky bottom) — toolbar inside textarea container ─── */}
       <div className="shrink-0 border-t border-border-subtle px-3 py-2.5 bg-surface-1/50 backdrop-blur-sm">
-        {/* Toolbar row */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <PromptBadge
-              activePromptId={activePromptId}
-              activePromptName={activePromptName}
-              isSending={isSendingPrompt}
-              onSelectPrompt={onSelectPrompt}
-              onClearPrompt={onClearPrompt}
-              onCreateNew={onCreateNewPrompt}
-              prompts={prompts}
-              loading={promptsLoading}
-              onDeletePrompt={onDeletePrompt}
-              onEditPrompt={onEditPrompt}
-            />
-            <span className="text-accent">
-              <Wand2 className="h-3.5 w-3.5" />
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={model}
-              onChange={(e) => onModelChange(e.target.value)}
-              className="text-[10px] text-text-tertiary font-medium px-2 py-1 rounded-lg bg-surface-2 border border-border-subtle hover:border-border-default focus:border-accent/40 focus:outline-none cursor-pointer appearance-none pr-5 transition-colors"
-              style={{
-                backgroundImage:
-                  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 6px center',
-              }}
-            >
-              {configuredModels.map((m) => (
-                <option key={m.model} value={m.model}>
-                  {m.displayName}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Input row */}
-        <div className="flex items-end gap-2">
+        <div className="knight-rider-border rounded-lg border border-border-subtle bg-surface-2 focus-within:border-accent/40 transition-colors">
+          {/* Textarea */}
           <textarea
             ref={inputRef}
             value={input}
@@ -242,24 +344,60 @@ export function CopilotChat({
                 ? `Refine your ${activePromptName} output...`
                 : 'Tell Spresso what content to create...'
             }
-            rows={1}
+            rows={3}
             disabled={busy}
-            className="flex-1 resize-none bg-surface-2 rounded-lg border border-border-subtle text-sm text-text-primary placeholder:text-text-tertiary px-3 py-2 focus:outline-none focus:border-accent/40 disabled:opacity-50 min-h-[36px] max-h-[160px] leading-relaxed transition-colors"
+            className="w-full resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary px-3 pt-2.5 pb-1 focus:outline-none disabled:opacity-50 min-h-[72px] max-h-[160px] leading-relaxed"
           />
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!hasContent || busy}
-            className={`shrink-0 rounded-lg p-2 transition-all ${
-              busy
-                ? 'bg-accent/50 text-text-inverse'
-                : hasContent
-                  ? 'bg-accent text-text-inverse hover:bg-accent-hover shadow-[0_0_10px_rgba(255,214,10,0.2)]'
-                  : 'bg-surface-2 text-text-tertiary'
-            } disabled:opacity-30`}
-          >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </button>
+
+          {/* Toolbar row inside the textarea container */}
+          <div className="flex items-center justify-between px-2 pb-2">
+            <div className="flex items-center gap-1.5">
+              <PromptBadge
+                activePromptId={activePromptId}
+                activePromptName={activePromptName}
+                isSending={isSendingPrompt}
+                onSelectPrompt={onSelectPrompt}
+                onClearPrompt={onClearPrompt}
+                onCreateNew={onCreateNewPrompt}
+                prompts={prompts}
+                loading={promptsLoading}
+                onDeletePrompt={onDeletePrompt}
+                onEditPrompt={onEditPrompt}
+              />
+              <span className="text-accent">
+                <Wand2 className="h-3.5 w-3.5" />
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={model}
+                onChange={(e) => onModelChange(e.target.value)}
+                className="text-xs text-text-secondary font-medium pl-2.5 pr-7 py-1.5 rounded-lg bg-surface-3 border border-border-subtle hover:border-border-default focus:border-accent/40 focus:outline-none cursor-pointer transition-colors"
+              >
+                {configuredModels.map((m) => (
+                  <option key={m.model} value={m.model}>
+                    {m.displayName}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!hasContent || busy}
+                className={`shrink-0 rounded-lg p-2 transition-all ${
+                  busy
+                    ? 'bg-accent/50 text-text-inverse'
+                    : hasContent
+                      ? 'bg-accent text-text-inverse hover:bg-accent-hover shadow-[0_0_10px_rgba(255,214,10,0.2)]'
+                      : 'bg-surface-3/50 text-text-tertiary'
+                } disabled:opacity-30`}
+              >
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
         </div>
         <p className="text-[10px] text-text-tertiary/50 text-right mt-1">
           Enter to send · Shift+Enter for newline

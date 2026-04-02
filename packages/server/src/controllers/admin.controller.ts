@@ -225,6 +225,131 @@ export async function updateSiteSettings(
   }
 }
 
+// --- Google OAuth ---
+
+export async function getGoogleOAuthConfig(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const setting = await adminService.getSetting('google-oauth');
+    if (!setting) {
+      res.json({ success: true, data: null });
+      return;
+    }
+    const config = JSON.parse(setting.value);
+    res.json({
+      success: true,
+      data: {
+        clientId: config.clientId ?? '',
+        maskedSecret: config.clientSecret ? `****${config.clientSecret.slice(-4)}` : '',
+        redirectUriDev: config.redirectUriDev ?? '',
+        redirectUriProd: config.redirectUriProd ?? '',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateGoogleOAuthConfig(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const { clientId, clientSecret, redirectUriDev, redirectUriProd } = req.body;
+
+    // Preserve existing secret if not provided
+    const existing = await adminService.getSetting('google-oauth');
+    let existingSecret = '';
+    if (existing) {
+      const parsed = JSON.parse(existing.value);
+      existingSecret = parsed.clientSecret ?? '';
+    }
+
+    const config = {
+      clientId: clientId ?? '',
+      clientSecret: clientSecret || existingSecret,
+      redirectUriDev: redirectUriDev ?? '',
+      redirectUriProd: redirectUriProd ?? '',
+    };
+
+    await adminService.updateSetting('google-oauth', JSON.stringify(config), true);
+    res.json({ success: true, data: null, message: 'Google OAuth config saved' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function testGoogleOAuthConnection(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const setting = await adminService.getSetting('google-oauth');
+    if (!setting) {
+      res.status(400).json({ success: false, data: null, message: 'Google OAuth not configured' });
+      return;
+    }
+
+    const config = JSON.parse(setting.value);
+    if (!config.clientId || !config.clientSecret) {
+      res.status(400).json({
+        success: false,
+        data: null,
+        message: 'Missing Client ID or Client Secret',
+      });
+      return;
+    }
+
+    // Validate by attempting a token exchange with a dummy code.
+    // Google returns "invalid_grant" for valid credentials + bad code,
+    // vs "invalid_client" for bad credentials.
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: 'test_validation_code',
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        redirect_uri: config.redirectUriDev || config.redirectUriProd || 'http://localhost',
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+
+    const data = (await response.json()) as { error?: string; error_description?: string };
+
+    if (data.error === 'invalid_grant' || data.error === 'redirect_uri_mismatch') {
+      // These errors mean the credentials are valid — the code/redirect is just wrong (expected)
+      res.json({
+        success: true,
+        data: null,
+        message: `Google OAuth credentials verified. Client ID: ${config.clientId.slice(0, 20)}...`,
+      });
+    } else if (data.error === 'invalid_client') {
+      res.status(400).json({
+        success: false,
+        data: null,
+        message: 'Invalid Client ID or Client Secret. Check your Google Cloud Console.',
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        data: null,
+        message: `Unexpected response: ${data.error_description || data.error || 'Unknown error'}`,
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
 // --- Cloudinary ---
 
 export async function getCloudinaryConfig(
@@ -300,13 +425,11 @@ export async function testCloudinaryConnection(
 
     const config = JSON.parse(setting.value);
     if (!config.cloudName || !config.apiKey || !config.apiSecret) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          data: null,
-          message: 'Missing cloud name, API key, or API secret',
-        });
+      res.status(400).json({
+        success: false,
+        data: null,
+        message: 'Missing cloud name, API key, or API secret',
+      });
       return;
     }
 
@@ -328,14 +451,129 @@ export async function testCloudinaryConnection(
         .catch(() => ({ error: { message: 'Unknown error' } }))) as {
         error?: { message?: string };
       };
-      res
-        .status(400)
-        .json({
-          success: false,
-          data: null,
-          message: `Cloudinary error: ${errBody.error?.message ?? response.statusText}`,
-        });
+      res.status(400).json({
+        success: false,
+        data: null,
+        message: `Cloudinary error: ${errBody.error?.message ?? response.statusText}`,
+      });
     }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Resend Email ---
+
+export async function getResendConfig(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const setting = await adminService.getSetting('resend');
+    if (!setting) {
+      res.json({ success: true, data: null });
+      return;
+    }
+    const config = JSON.parse(setting.value);
+    res.json({
+      success: true,
+      data: {
+        maskedKey: config.apiKey ? `****${config.apiKey.slice(-4)}` : '',
+        fromAddress: config.fromAddress ?? '',
+        fromName: config.fromName ?? '',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateResendConfig(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const { apiKey, fromAddress, fromName } = req.body;
+
+    const existing = await adminService.getSetting('resend');
+    let existingKey = '';
+    if (existing) {
+      const parsed = JSON.parse(existing.value);
+      existingKey = parsed.apiKey ?? '';
+    }
+
+    const config = {
+      apiKey: apiKey || existingKey,
+      fromAddress: fromAddress ?? 'noreply@spresso.app',
+      fromName: fromName ?? 'Spresso',
+    };
+
+    await adminService.updateSetting('resend', JSON.stringify(config), true);
+
+    // Invalidate cached email config
+    const { invalidateEmailConfig } = await import('../services/email.service.js');
+    invalidateEmailConfig();
+
+    res.json({ success: true, data: null, message: 'Resend config saved' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Turnstile Bot Protection ---
+
+export async function getTurnstileConfig(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const setting = await adminService.getSetting('turnstile');
+    if (!setting) {
+      res.json({ success: true, data: null });
+      return;
+    }
+    const config = JSON.parse(setting.value);
+    res.json({
+      success: true,
+      data: {
+        siteKey: config.siteKey ?? '',
+        maskedSecret: config.secretKey ? `****${config.secretKey.slice(-4)}` : '',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateTurnstileConfig(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const { siteKey, secretKey } = req.body;
+
+    const existing = await adminService.getSetting('turnstile');
+    let existingSecret = '';
+    if (existing) {
+      const parsed = JSON.parse(existing.value);
+      existingSecret = parsed.secretKey ?? '';
+    }
+
+    const config = {
+      siteKey: siteKey ?? '',
+      secretKey: secretKey || existingSecret,
+    };
+
+    await adminService.updateSetting('turnstile', JSON.stringify(config), true);
+    res.json({ success: true, data: null, message: 'Turnstile config saved' });
   } catch (err) {
     next(err);
   }

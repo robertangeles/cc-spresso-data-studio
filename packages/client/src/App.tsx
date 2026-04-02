@@ -20,9 +20,14 @@ import { SiteSettingsPage } from './pages/settings/SiteSettingsPage';
 import UsageDashboardPage from './pages/settings/UsageDashboardPage';
 import { SystemPromptsPage } from './pages/settings/SystemPromptsPage';
 import { SocialMediaSettingsPage } from './pages/settings/SocialMediaSettingsPage';
+import { AuthSettingsPage } from './pages/settings/AuthSettingsPage';
+import { GoogleCallbackPage } from './pages/GoogleCallbackPage';
 import { ContentLibraryPage } from './pages/ContentLibraryPage';
 import { ContentBuilderPage } from './pages/ContentBuilderPage';
 import { ChatPage } from './pages/ChatPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
+import { VerifyTokenPage } from './pages/VerifyTokenPage';
+import { UpgradeModal } from './components/common/UpgradeModal';
 // ContentCalendarPage removed — calendar is now inline in Content Builder
 
 export function App() {
@@ -30,10 +35,15 @@ export function App() {
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
+          <UpgradeModal />
           <Routes>
-            {/* Public routes */}
+            {/* Public routes — landing page at root */}
+            <Route path="/" element={<LoginPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/verify/:token" element={<VerifyTokenPage />} />
 
             {/* Protected routes */}
             <Route element={<ProtectedRoute />}>
@@ -55,6 +65,7 @@ export function App() {
                   <Route path="integrations/ai-models" element={<LLMSettingsPage />} />
                   <Route path="integrations/media" element={<MediaSettingsPage />} />
                   <Route path="integrations/social-media" element={<SocialMediaSettingsPage />} />
+                  <Route path="integrations/auth" element={<AuthSettingsPage />} />
                   <Route path="admin/roles" element={<RoleManagementPage />} />
                   <Route path="admin/site" element={<SiteSettingsPage />} />
                   <Route path="admin/usage" element={<UsageDashboardPage />} />
@@ -64,7 +75,6 @@ export function App() {
             </Route>
 
             {/* Redirects */}
-            <Route path="/" element={<Navigate to="/chat" replace />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </ToastProvider>

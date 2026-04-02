@@ -13,6 +13,9 @@ router.put('/', validate(updateProfileSchema), profileController.updateProfile);
 router.put('/password', profileController.changePassword);
 router.post('/avatar', profileController.uploadAvatar);
 
+// Sessions
+router.get('/sessions', profileController.getSessionStatus);
+
 // Rules
 router.get('/rules', profileController.listRules);
 router.post('/rules', validate(createRuleSchema), profileController.createRule);

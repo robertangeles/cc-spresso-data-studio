@@ -8,9 +8,9 @@ interface ScheduleDrawerProps {
   // SchedulePanel passthrough
   onSchedule: (date: string) => void;
   onPublishNow: () => void;
-  onSaveDraft: () => void;
   isSaving: boolean;
   selectedChannelCount: number;
+  allAccountsSelected: boolean;
   flowState?: string;
   scheduleDate: string;
   onScheduleDateChange: (date: string) => void;

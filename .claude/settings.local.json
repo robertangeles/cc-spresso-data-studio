@@ -7,7 +7,15 @@
       "Bash(timeout 5 pnpm --filter @cc/server dev)",
       "Bash(pnpm --filter @cc/server add cookie-parser)",
       "Bash(pnpm --filter @cc/server add -D @types/cookie-parser)",
-      "Bash(pnpm -r build)"
-    ]
+      "Bash(pnpm -r build)",
+      "Bash(python3 -c \":*)",
+      "Bash(node -e:*)",
+      "Read(//d/My AI Projects/cc-content-builder/$USERPROFILE/.claude/plans/**)",
+      "Bash(python -c \":*)",
+      "mcp__plugin_context-mode_context-mode__ctx_index",
+      "Bash(pnpm --filter server add cheerio)",
+      "Bash(python .gstack/qa-run.py)"
+    ],
+    "additionalDirectories": ["\\tmp"]
   }
 }

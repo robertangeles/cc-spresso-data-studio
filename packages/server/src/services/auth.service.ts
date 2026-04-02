@@ -4,9 +4,17 @@ import type { TokenPayload, User } from '@cc/shared';
 import { db, schema } from '../db/index.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
-import { ConflictError, UnauthorizedError } from '../utils/errors.js';
+import { ConflictError, UnauthorizedError, ValidationError } from '../utils/errors.js';
+import { isDisposableEmail } from '../utils/disposable-emails.js';
 
 export async function createUser(email: string, password: string, name: string) {
+  // Block disposable email domains
+  if (isDisposableEmail(email)) {
+    throw new ValidationError({
+      email: ['Please use a permanent email address. Disposable email providers are not allowed.'],
+    });
+  }
+
   const existing = await db.query.users.findFirst({
     where: eq(schema.users.email, email),
   });
@@ -30,12 +38,14 @@ export async function createUser(email: string, password: string, name: string) 
       name,
       role: 'Subscriber',
       roleId: defaultRole?.id ?? null,
+      isEmailVerified: false,
     })
     .returning({
       id: schema.users.id,
       email: schema.users.email,
       name: schema.users.name,
       role: schema.users.role,
+      isEmailVerified: schema.users.isEmailVerified,
     });
 
   const tokens = await generateTokens({
@@ -43,6 +53,7 @@ export async function createUser(email: string, password: string, name: string) 
     email: user.email,
     name: user.name,
     role: user.role,
+    isEmailVerified: user.isEmailVerified,
   });
 
   return { user: { ...user, role: user.role as User['role'] }, ...tokens };
@@ -80,7 +91,7 @@ export async function findOrCreateGoogleUser(profile: {
   }
 
   if (!user) {
-    // New user via Google — no password needed
+    // New user via Google — no password needed, email already verified by Google
     const defaultRole = await db.query.roles.findFirst({
       where: eq(schema.roles.name, 'Subscriber'),
     });
@@ -93,7 +104,15 @@ export async function findOrCreateGoogleUser(profile: {
         googleId: profile.googleId,
         role: 'Subscriber',
         roleId: defaultRole?.id ?? null,
+        isEmailVerified: true,
       })
+      .returning();
+  } else if (!user.isEmailVerified) {
+    // Existing user linking Google — mark as verified (Google confirmed their email)
+    [user] = await db
+      .update(schema.users)
+      .set({ isEmailVerified: true, updatedAt: new Date() })
+      .where(eq(schema.users.id, user.id))
       .returning();
   }
 
@@ -106,6 +125,7 @@ export async function findOrCreateGoogleUser(profile: {
     email: user.email,
     name: user.name,
     role: user.role,
+    isEmailVerified: user.isEmailVerified,
   });
 
   return {
@@ -114,6 +134,7 @@ export async function findOrCreateGoogleUser(profile: {
       email: user.email,
       name: user.name,
       role: user.role as User['role'],
+      isEmailVerified: user.isEmailVerified,
     },
     ...tokens,
   };
@@ -146,6 +167,7 @@ export async function verifyCredentials(email: string, password: string) {
     email: user.email,
     name: user.name,
     role: user.role,
+    isEmailVerified: user.isEmailVerified,
   });
 
   return {
@@ -154,6 +176,7 @@ export async function verifyCredentials(email: string, password: string) {
       email: user.email,
       name: user.name,
       role: user.role as User['role'],
+      isEmailVerified: user.isEmailVerified,
     },
     ...tokens,
   };
@@ -201,12 +224,19 @@ export async function refreshTokens(refreshToken: string) {
     .set({ revokedAt: new Date() })
     .where(eq(schema.refreshTokens.id, storedToken.id));
 
-  // Issue new tokens
+  // Fetch current user state (isEmailVerified may have changed since JWT was issued)
+  const user = await db.query.users.findFirst({
+    where: eq(schema.users.id, payload.userId),
+    columns: { isEmailVerified: true, role: true },
+  });
+
+  // Issue new tokens with fresh state
   return generateTokens({
     userId: payload.userId,
     email: payload.email,
     name: payload.name,
-    role: payload.role,
+    role: user?.role ?? payload.role,
+    isEmailVerified: user?.isEmailVerified ?? false,
   });
 }
 
