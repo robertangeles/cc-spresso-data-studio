@@ -8,6 +8,13 @@ export interface ChatMessage {
   createdAt: string;
 }
 
+interface SendOptions {
+  /** What to display in the chat thread (defaults to the full text sent to API) */
+  displayContent?: string;
+  /** Override the system prompt for this message only */
+  systemPromptOverride?: string | null;
+}
+
 export function useContentChat(systemPrompt?: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -27,16 +34,19 @@ export function useContentChat(systemPrompt?: string | null) {
   }, [conversationId]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
-      if (!text.trim() || isSending) return;
+    async (text: string, options?: SendOptions): Promise<string | null> => {
+      if (!text.trim() || isSending) return null;
 
       setIsSending(true);
 
-      // Optimistically add user message
+      // Show displayContent in the thread if provided, otherwise show the full text
+      const threadContent = options?.displayContent ?? text.trim();
+
+      // Optimistically add user message (with display-friendly content)
       const tempUserMsg: ChatMessage = {
         id: `temp-${Date.now()}`,
         role: 'user',
-        content: text.trim(),
+        content: threadContent,
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, tempUserMsg]);
@@ -47,7 +57,7 @@ export function useContentChat(systemPrompt?: string | null) {
         const { data } = await api.post(`/chat/conversations/${convId}/messages`, {
           content: text.trim(),
           model,
-          systemPrompt: systemPrompt || undefined,
+          systemPrompt: options?.systemPromptOverride ?? systemPrompt ?? undefined,
           metadata: { source: 'content-builder' },
         });
 
@@ -72,45 +82,17 @@ export function useContentChat(systemPrompt?: string | null) {
             assistantMsg,
           ];
         });
+
+        return assistantMsg.content;
       } catch {
         // Remove optimistic message on failure
         setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
+        return null;
       } finally {
         setIsSending(false);
       }
     },
-    [isSending, ensureConversation, model],
-  );
-
-  const executeCommand = useCallback(
-    async (
-      instruction: string,
-      currentContent: string,
-      systemPromptOverride?: string | null,
-    ): Promise<string> => {
-      setIsSending(true);
-      try {
-        const convId = await ensureConversation();
-
-        // Build the command message: include current content as context
-        const contextPrefix = currentContent.trim()
-          ? `The user has written the following content:\n---\n${currentContent}\n---\n\nInstruction: ${instruction}`
-          : instruction;
-
-        const { data } = await api.post(`/chat/conversations/${convId}/messages`, {
-          content: contextPrefix,
-          model,
-          systemPrompt: systemPromptOverride ?? systemPrompt ?? undefined,
-          metadata: { source: 'content-builder-command' },
-        });
-
-        const msg = data.data.message ?? data.data;
-        return msg.content as string;
-      } finally {
-        setIsSending(false);
-      }
-    },
-    [ensureConversation, model, systemPrompt],
+    [isSending, ensureConversation, model, systemPrompt],
   );
 
   const clearChat = useCallback(() => {
@@ -124,7 +106,6 @@ export function useContentChat(systemPrompt?: string | null) {
     model,
     setModel,
     sendMessage,
-    executeCommand,
     clearChat,
     conversationId,
   };

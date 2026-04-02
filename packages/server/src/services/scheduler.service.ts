@@ -12,6 +12,7 @@ import { publishToBluesky } from './publishers/bluesky.publisher.js';
 import { publishToFacebook } from './publishers/facebook.publisher.js';
 import { publishToThreads } from './publishers/threads.publisher.js';
 import { publishToLinkedIn } from './publishers/linkedin.publisher.js';
+import { publishToTwitter } from './publishers/twitter.publisher.js';
 
 /**
  * List all scheduled posts for a user, ordered by scheduledAt asc, pending first.
@@ -31,8 +32,12 @@ export async function schedulePost(data: {
   contentItemId: string;
   channelId?: string;
   scheduledAt: string;
-  socialAccountId?: string;
+  socialAccountId: string;
 }) {
+  if (!data.socialAccountId) {
+    throw new Error('socialAccountId is required — select an account for the platform');
+  }
+
   const scheduledDate = new Date(data.scheduledAt);
   if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
     throw new Error('scheduledAt must be a valid future date');
@@ -44,7 +49,7 @@ export async function schedulePost(data: {
       userId: data.userId,
       contentItemId: data.contentItemId,
       channelId: data.channelId ?? null,
-      socialAccountId: data.socialAccountId ?? null,
+      socialAccountId: data.socialAccountId,
       scheduledAt: scheduledDate,
       status: 'pending',
     })
@@ -307,6 +312,23 @@ export async function processDuePosts(): Promise<number> {
           } else {
             publishError = result.error ?? 'LinkedIn publish failed';
             logger.warn({ postId: post.id, error: result.error }, 'LinkedIn auto-publish failed');
+          }
+        }
+        // Attempt auto-publish to Twitter/X
+        if (channelSlug === 'twitter') {
+          const result = await publishToTwitter({
+            accessToken: account.accessToken,
+            accountId: account.accountId,
+            text: contentItem.body,
+            imageUrl: contentItem.imageUrl ?? undefined,
+          });
+
+          if (result.success) {
+            autoPublished = true;
+            logger.info({ postId: post.id, tweetId: result.postId }, 'Auto-published to Twitter/X');
+          } else {
+            publishError = result.error ?? 'Twitter publish failed';
+            logger.warn({ postId: post.id, error: result.error }, 'Twitter auto-publish failed');
           }
         }
       } else if (channelSlug) {

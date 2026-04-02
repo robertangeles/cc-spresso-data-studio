@@ -6,6 +6,7 @@ import type { Prompt } from '../../hooks/usePrompts';
 interface PromptBadgeProps {
   activePromptId: string | null;
   activePromptName: string | null;
+  isSending?: boolean;
   onSelectPrompt: (promptId: string, name: string, body: string) => void;
   onClearPrompt: () => void;
   onCreateNew: () => void;
@@ -33,6 +34,7 @@ const CATEGORIES = [
 export function PromptBadge({
   activePromptId,
   activePromptName,
+  isSending,
   onSelectPrompt,
   onClearPrompt,
   onCreateNew,
@@ -48,6 +50,7 @@ export function PromptBadge({
     top: 0,
     left: 0,
   });
+  const [hoveredPromptId, setHoveredPromptId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -115,7 +118,11 @@ export function PromptBadge({
           ref={buttonRef}
           type="button"
           onClick={() => setOpen(!open)}
-          className="inline-flex items-center gap-1.5 shrink-0 text-xs font-medium text-accent bg-accent/10 rounded-full px-2.5 py-1 hover:bg-accent/20 transition-colors"
+          className={`inline-flex items-center gap-1.5 shrink-0 text-xs font-medium text-accent bg-accent/10 rounded-full px-2.5 py-1 hover:bg-accent/20 transition-all ${
+            isSending && activePromptId
+              ? 'animate-pulse shadow-[0_0_12px_rgba(255,214,10,0.3)]'
+              : ''
+          }`}
         >
           <Theater className="h-3 w-3" />
           <span className="max-w-[120px] truncate">{activePromptName}</span>
@@ -200,9 +207,11 @@ export function PromptBadge({
                 filtered.map((prompt) => (
                   <div
                     key={prompt.id}
-                    className={`group flex items-center justify-between rounded-lg px-3 py-2 hover:bg-surface-3 transition-colors ${
+                    className={`group relative flex items-center justify-between rounded-lg px-3 py-2 hover:bg-surface-3 transition-colors ${
                       prompt.id === activePromptId ? 'bg-accent/10 border border-accent/20' : ''
                     }`}
+                    onMouseEnter={() => setHoveredPromptId(prompt.id)}
+                    onMouseLeave={() => setHoveredPromptId(null)}
                   >
                     <button
                       type="button"
@@ -216,6 +225,15 @@ export function PromptBadge({
                         {prompt.category ?? 'custom'}
                       </span>
                     </button>
+                    {/* Prompt body preview tooltip */}
+                    {hoveredPromptId === prompt.id && prompt.body && (
+                      <div className="absolute left-full ml-2 top-0 z-[60] w-[220px] rounded-lg bg-surface-2 border border-border-subtle shadow-lg p-2.5 pointer-events-none animate-slide-up">
+                        <p className="text-[11px] text-text-secondary leading-relaxed line-clamp-4">
+                          {prompt.body.slice(0, 150)}
+                          {prompt.body.length > 150 ? '...' : ''}
+                        </p>
+                      </div>
+                    )}
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all ml-1">
                       {onEditPrompt && (
                         <button

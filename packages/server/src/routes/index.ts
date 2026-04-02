@@ -9,6 +9,7 @@ import { skillRoutes } from './skill.routes.js';
 import { executionRoutes, executionStreamRoutes } from './execution.routes.js';
 import { contentRoutes } from './content.routes.js';
 import roleRoutes from './role.routes.js';
+import userRoutes from './user.routes.js';
 import profileRoutes from './profile.routes.js';
 import { chatRoutes } from './chat.routes.js';
 import usageRoutes from './usage.routes.js';
@@ -22,6 +23,7 @@ import { facebookOAuthRoutes } from './oauth/facebook.routes.js';
 import { threadsOAuthRoutes } from './oauth/threads.routes.js';
 import { linkedinOAuthRoutes } from './oauth/linkedin.routes.js';
 import { pinterestOAuthRoutes } from './oauth/pinterest.routes.js';
+import { twitterOAuthRoutes } from './oauth/twitter.routes.js';
 import { uploadRoutes } from './upload.routes.js';
 
 const router = Router();
@@ -42,6 +44,7 @@ router.use('/skills', skillRoutes);
 router.use('/flows', executionRoutes);
 router.use('/content', contentRoutes);
 router.use('/roles', roleRoutes);
+router.use('/users', userRoutes);
 router.use('/profile', profileRoutes);
 router.use('/chat', chatRoutes);
 router.use('/admin/usage', usageRoutes);
@@ -55,6 +58,7 @@ router.use('/oauth/facebook', facebookOAuthRoutes);
 router.use('/oauth/threads', threadsOAuthRoutes);
 router.use('/oauth/linkedin', linkedinOAuthRoutes);
 router.use('/oauth/pinterest', pinterestOAuthRoutes);
+router.use('/oauth/twitter', twitterOAuthRoutes);
 router.use('/upload', uploadRoutes);
 
 // Connected-platforms lookup (used by Content Builder for status dots + hint banner)

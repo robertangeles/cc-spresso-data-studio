@@ -8,6 +8,7 @@ import { FacebookOAuthProvider } from './facebook.oauth.js';
 import { ThreadsOAuthProvider } from './threads.oauth.js';
 import { LinkedInOAuthProvider } from './linkedin.oauth.js';
 import { PinterestOAuthProvider } from './pinterest.oauth.js';
+import { TwitterOAuthProvider } from './twitter.oauth.js';
 
 // Registry of OAuth providers
 const providers: Record<string, OAuthProvider> = {
@@ -17,6 +18,7 @@ const providers: Record<string, OAuthProvider> = {
   threads: new ThreadsOAuthProvider(),
   linkedin: new LinkedInOAuthProvider(),
   pinterest: new PinterestOAuthProvider(),
+  twitter: new TwitterOAuthProvider(),
 };
 
 export function getOAuthProvider(platform: string): OAuthProvider {
@@ -240,6 +242,7 @@ export async function refreshExpiringTokens() {
         .update(schema.socialAccounts)
         .set({
           accessToken: newTokens.accessToken,
+          refreshToken: newTokens.refreshToken ?? account.refreshToken,
           tokenExpiresAt: newTokens.expiresAt ?? null,
           updatedAt: new Date(),
         })

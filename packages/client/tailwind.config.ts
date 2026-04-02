@@ -59,6 +59,9 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        display: ['Instrument Serif', 'Georgia', 'serif'],
+        editor: ['Source Serif 4', 'Georgia', 'serif'],
+        heading: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
       },
       backdropBlur: {
         glass: '20px',
@@ -81,9 +84,14 @@ export default {
         'scale-in': 'scale-in 200ms cubic-bezier(0.22, 1, 0.36, 1)',
         'slide-in-right': 'slide-in-right 250ms cubic-bezier(0.22, 1, 0.36, 1)',
         'glow-pulse': 'glow-pulse 3s ease infinite',
-        'shimmer': 'shimmer 2s linear infinite',
-        'float': 'float 3s ease-in-out infinite',
+        shimmer: 'shimmer 2s linear infinite',
+        float: 'float 3s ease-in-out infinite',
         'bounce-dots': 'bounce-dots 1.4s ease-in-out infinite',
+        'drawer-in': 'drawer-slide-in 300ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'drawer-out': 'drawer-slide-out 200ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'pill-select': 'pill-select 400ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'step-fill': 'step-fill 600ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'overlay-in': 'overlay-fade-in 200ms ease-out',
       },
       keyframes: {
         'fade-in': {
@@ -110,17 +118,38 @@ export default {
           '0%, 100%': { boxShadow: '0 0 20px rgba(255, 214, 10, 0.10)' },
           '50%': { boxShadow: '0 0 30px rgba(255, 214, 10, 0.25)' },
         },
-        'shimmer': {
+        shimmer: {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
         },
-        'float': {
+        float: {
           '0%, 100%': { transform: 'translateY(-2px)' },
           '50%': { transform: 'translateY(2px)' },
         },
         'bounce-dots': {
           '0%, 80%, 100%': { opacity: '0.3' },
           '40%': { opacity: '1' },
+        },
+        'drawer-slide-in': {
+          from: { opacity: '0', transform: 'translateX(100%)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
+        'drawer-slide-out': {
+          from: { opacity: '1', transform: 'translateX(0)' },
+          to: { opacity: '0', transform: 'translateX(100%)' },
+        },
+        'pill-select': {
+          '0%': { transform: 'scale(1)' },
+          '40%': { transform: 'scale(1.08)' },
+          '100%': { transform: 'scale(1)' },
+        },
+        'step-fill': {
+          from: { width: '0%' },
+          to: { width: '100%' },
+        },
+        'overlay-fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
         },
       },
     },

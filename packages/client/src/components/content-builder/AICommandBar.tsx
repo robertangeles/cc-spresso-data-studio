@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Check, Loader2, Wand2, RotateCcw } from 'lucide-react';
+import { Send, Loader2, Wand2 } from 'lucide-react';
 import { useConfiguredModels } from '../../hooks/useConfiguredModels';
 import { PromptBadge } from './PromptBadge';
 import type { Prompt } from '../../hooks/usePrompts';
@@ -7,7 +7,7 @@ import type { Prompt } from '../../hooks/usePrompts';
 interface AICommandBarProps {
   onCommand: (instruction: string) => void;
   isProcessing: boolean;
-  commandHistory: Array<{ instruction: string; timestamp: string }>;
+  isSending?: boolean;
   model: string;
   onModelChange: (model: string) => void;
   activePromptId: string | null;
@@ -26,24 +26,12 @@ interface AICommandBarProps {
     category: string;
     defaultModel: string | null;
   }) => void;
-  onRegenerate?: (instruction: string) => void;
-}
-
-function relativeTime(timestamp: string): string {
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
 }
 
 export function AICommandBar({
   onCommand,
   isProcessing,
-  commandHistory,
+  isSending,
   model,
   onModelChange,
   activePromptId,
@@ -55,7 +43,6 @@ export function AICommandBar({
   promptsLoading,
   onDeletePrompt,
   onEditPrompt,
-  onRegenerate,
 }: AICommandBarProps) {
   const { models: configuredModels } = useConfiguredModels();
   const [input, setInput] = useState('');
@@ -85,54 +72,9 @@ export function AICommandBar({
   };
 
   const hasContent = input.trim().length > 0;
-  const visibleHistory = commandHistory.slice(-3);
-  const showWelcome = visibleHistory.length === 0 && !isProcessing;
 
   return (
     <div className="space-y-2">
-      {/* Welcome hint — shown when no commands yet */}
-      {showWelcome && (
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-accent/[0.04] border border-accent/10 animate-slide-up">
-          <Wand2 className="h-3.5 w-3.5 text-accent/60 shrink-0" />
-          <p className="text-[11px] text-text-tertiary">
-            <span className="text-accent/80 font-medium">AI Co-pilot ready.</span> Try: &ldquo;Write
-            a launch post for my product&rdquo; or &ldquo;Make this more conversational&rdquo;
-          </p>
-        </div>
-      )}
-
-      {/* Command history — collapsed list above the bar */}
-      {visibleHistory.length > 0 && (
-        <div className="max-h-[90px] overflow-y-auto space-y-0.5 scrollbar-thin">
-          {visibleHistory.map((cmd, i) => {
-            const isLast = i === visibleHistory.length - 1;
-            return (
-              <div
-                key={`${cmd.timestamp}-${i}`}
-                className="flex items-center gap-2 text-xs text-text-secondary px-1 py-0.5"
-              >
-                <Check className="h-3 w-3 text-green-400 shrink-0" />
-                <span className="truncate flex-1">{cmd.instruction}</span>
-                {isLast && onRegenerate && !isProcessing && (
-                  <button
-                    type="button"
-                    onClick={() => onRegenerate(cmd.instruction)}
-                    className="shrink-0 flex items-center gap-1 text-[10px] text-accent hover:text-accent-hover transition-colors"
-                    title="Regenerate with this instruction"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    Retry
-                  </button>
-                )}
-                <span className="shrink-0 text-[10px] text-text-tertiary/60">
-                  {relativeTime(cmd.timestamp)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       {/* Knight Rider scanning border animation */}
       <style>{`
         @keyframes kr-cmd-scan {
@@ -175,6 +117,7 @@ export function AICommandBar({
             <PromptBadge
               activePromptId={activePromptId}
               activePromptName={activePromptName}
+              isSending={isSending}
               onSelectPrompt={onSelectPrompt}
               onClearPrompt={onClearPrompt}
               onCreateNew={onCreateNewPrompt}
@@ -233,7 +176,11 @@ export function AICommandBar({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Tell Spresso what content to create..."
+            placeholder={
+              activePromptName
+                ? `Refine your ${activePromptName} output...`
+                : 'Tell Spresso what content to create...'
+            }
             rows={4}
             disabled={isProcessing}
             className="w-full resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[96px] leading-6"

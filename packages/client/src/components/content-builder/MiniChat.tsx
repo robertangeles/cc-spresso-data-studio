@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, ArrowUp, Check, Wand2, X } from 'lucide-react';
+import { Send, FileOutput, Check, Wand2, X } from 'lucide-react';
 import { useConfiguredModels } from '../../hooks/useConfiguredModels';
 import { useThinkingMessage } from '../../lib/thinking-messages';
 
@@ -116,12 +116,12 @@ export function MiniChat({
                         {justInserted ? (
                           <>
                             <Check className="h-3 w-3" />
-                            Inserted
+                            Applied
                           </>
                         ) : (
                           <>
-                            <ArrowUp className="h-3 w-3" />
-                            Insert
+                            <FileOutput className="h-3 w-3" />
+                            Apply to editor
                           </>
                         )}
                       </button>

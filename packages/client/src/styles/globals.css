@@ -168,6 +168,132 @@
     animation-delay: 200ms;
     animation-fill-mode: both;
   }
+  .stagger-5 {
+    animation-delay: 250ms;
+    animation-fill-mode: both;
+  }
+  .stagger-6 {
+    animation-delay: 300ms;
+    animation-fill-mode: both;
+  }
+  .stagger-7 {
+    animation-delay: 350ms;
+    animation-fill-mode: both;
+  }
+  .stagger-8 {
+    animation-delay: 400ms;
+    animation-fill-mode: both;
+  }
+
+  /* Editor surface — borderless elevated writing sanctuary (Linear-style) */
+  .editor-surface {
+    background: #151518;
+    border: none;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.05),
+      0 2px 4px rgba(0, 0, 0, 0.2),
+      0 8px 24px rgba(0, 0, 0, 0.3),
+      0 24px 64px rgba(0, 0, 0, 0.3);
+  }
+
+  .editor-surface:focus-within {
+    box-shadow:
+      0 0 0 1px rgba(255, 214, 10, 0.08),
+      0 2px 4px rgba(0, 0, 0, 0.2),
+      0 8px 24px rgba(0, 0, 0, 0.3),
+      0 24px 64px rgba(0, 0, 0, 0.35),
+      0 0 80px -20px rgba(255, 214, 10, 0.06);
+  }
+
+  /* Drawer overlay — blurred backdrop */
+  .drawer-overlay {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: overlay-fade-in 200ms ease-out;
+  }
+
+  /* Pill glow — per-platform active state */
+  .pill-glow {
+    box-shadow:
+      0 0 12px var(--pill-glow-color, rgba(255, 214, 10, 0.2)),
+      0 0 4px var(--pill-glow-color, rgba(255, 214, 10, 0.1));
+  }
+
+  /* Action bar glass — premium frosted panel */
+  .action-bar-glass {
+    background: linear-gradient(180deg, rgba(14, 14, 16, 0.85) 0%, rgba(10, 10, 12, 0.95) 100%);
+    backdrop-filter: blur(30px) saturate(1.3);
+    -webkit-backdrop-filter: blur(30px) saturate(1.3);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  /* AI command bar — the magic input */
+  .ai-bar {
+    position: relative;
+    background: linear-gradient(135deg, #1a1a1e 0%, #141416 100%);
+    border: 1px solid rgba(255, 214, 10, 0.1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 2px 8px rgba(0, 0, 0, 0.3),
+      0 0 40px -10px rgba(255, 214, 10, 0.05);
+    transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .ai-bar:focus-within {
+    border-color: rgba(255, 214, 10, 0.22);
+    background: linear-gradient(135deg, #1c1c21 0%, #161618 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 2px 8px rgba(0, 0, 0, 0.3),
+      0 0 60px -8px rgba(255, 214, 10, 0.1),
+      0 0 100px -20px rgba(255, 214, 10, 0.06);
+    transform: translateY(-1px);
+  }
+
+  /* Page spotlight — deep atmospheric canvas with grain (Linear-style) */
+  .page-spotlight {
+    background:
+      radial-gradient(ellipse 60% 40% at 30% 10%, rgba(255, 214, 10, 0.025) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 50% at 70% 80%, rgba(255, 214, 10, 0.012) 0%, transparent 50%),
+      linear-gradient(180deg, #09090b 0%, #0b0b0d 100%);
+  }
+
+  /* Grain texture overlay */
+  .page-spotlight::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+  }
+
+  /* Platform pill — subtle left accent bar */
+  .pill-accent-bar {
+    position: relative;
+    overflow: hidden;
+  }
+  .pill-accent-bar::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 25%;
+    bottom: 25%;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--pill-accent-color, rgba(255, 214, 10, 0.3));
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .pill-accent-bar:hover::before,
+  .pill-accent-bar.pill-active::before {
+    opacity: 1;
+  }
 }
 
 /* Keyframes (also defined in tailwind config for JIT, kept here for @apply) */
@@ -249,6 +375,49 @@
     opacity: 0.3;
   }
   40% {
+    opacity: 1;
+  }
+}
+
+@keyframes drawer-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawer-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pill-select {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
     opacity: 1;
   }
 }
