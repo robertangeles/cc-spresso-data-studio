@@ -43,3 +43,14 @@ export class ConflictError extends AppError {
     this.name = 'ConflictError';
   }
 }
+
+export class SessionQuotaExceededError extends AppError {
+  public remaining: number;
+  public limit: number;
+  constructor(message = 'Free session quota exceeded', remaining = 0, limit = 0) {
+    super(429, message);
+    this.name = 'SessionQuotaExceededError';
+    this.remaining = remaining;
+    this.limit = limit;
+  }
+}

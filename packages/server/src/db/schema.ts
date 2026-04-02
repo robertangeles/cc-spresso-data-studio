@@ -26,12 +26,16 @@ export const users = pgTable(
   {
     id: uuid('id').defaultRandom().primaryKey(),
     email: varchar('email', { length: 255 }).notNull().unique(),
-    passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+    passwordHash: varchar('password_hash', { length: 255 }).notNull().default(''),
     name: varchar('name', { length: 255 }).notNull(),
     // DEPRECATED: role varchar — kept during migration, will be removed
     role: varchar('role', { length: 50 }).notNull().default('Subscriber'),
     // NEW: proper FK to roles table
     roleId: uuid('role_id'),
+    googleId: varchar('google_id', { length: 255 }),
+    isBlocked: boolean('is_blocked').notNull().default(false),
+    freeSessionsLimit: integer('free_sessions_limit').notNull().default(3),
+    freeSessionsUsed: integer('free_sessions_used').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -286,6 +290,22 @@ export const roles = pgTable('roles', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ============================================================
+// ROLE_USER (junction table)
+// Normal form: 2NF — many-to-many between users and roles
+// ============================================================
+
+export const roleUser = pgTable(
+  'role_user',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').notNull(),
+    roleId: uuid('role_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_role_user_user_id').on(t.userId), index('idx_role_user_role_id').on(t.roleId)],
+);
 
 // ============================================================
 // PERMISSIONS
