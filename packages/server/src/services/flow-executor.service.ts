@@ -4,6 +4,7 @@ import type { StepResult, FlowExecutionResponse, SSEEvent } from '@cc/shared';
 import { db, schema } from '../db/index.js';
 import { providerRegistry } from './ai/index.js';
 import { interpolate } from './skills/interpolate.js';
+import { withSessionGate, checkFlowQuota } from './session-gate.service.js';
 import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
 import { getActiveRules } from './profile.service.js';
@@ -30,6 +31,7 @@ export async function executeFlow(
   flowId: string,
   userId: string,
   inputs: Record<string, string>,
+  role: string = 'Subscriber',
 ): Promise<FlowExecutionResponse> {
   const start = Date.now();
 
@@ -47,6 +49,9 @@ export async function executeFlow(
     throw new AppError(400, 'Flow has no steps to execute');
   }
 
+  // Pre-check: ensure user has enough sessions for all AI steps
+  await checkFlowQuota(userId, role, steps.length);
+
   // Load global rules
   const activeRules = await getActiveRules(userId);
   const globalRules =
@@ -56,7 +61,7 @@ export async function executeFlow(
   const stepResults: StepResult[] = [];
 
   for (const step of steps) {
-    const stepResult = await executeStep(step, executionContext, globalRules);
+    const stepResult = await executeStep(step, executionContext, globalRules, userId, role);
     stepResults.push(stepResult);
 
     // Add step outputs to context for chaining
@@ -86,6 +91,8 @@ async function executeStep(
   step: FlowStep,
   context: Record<string, string>,
   globalRules?: string,
+  userId?: string,
+  role: string = 'Subscriber',
 ): Promise<StepResult> {
   const start = Date.now();
 
@@ -159,7 +166,9 @@ async function executeStep(
       maxTokens,
     };
 
-    const response = await providerRegistry.complete(request);
+    const response = userId
+      ? await withSessionGate(userId, role, () => providerRegistry.complete(request))
+      : await providerRegistry.complete(request);
     const durationMs = Date.now() - start;
 
     // Map response to skill outputs — strip thinking blocks from reasoning models
@@ -388,6 +397,7 @@ export async function executeFlowStreaming(
   inputs: Record<string, string>,
   emit: SSEEmitter,
   options: StreamingOptions = {},
+  role: string = 'Subscriber',
 ): Promise<void> {
   const start = Date.now();
 
@@ -403,6 +413,9 @@ export async function executeFlowStreaming(
   if (steps.length === 0) {
     throw new AppError(400, 'Orchestration has no steps to execute');
   }
+
+  // Pre-check: ensure user has enough sessions for all AI steps
+  await checkFlowQuota(userId, role, steps.length);
 
   // Load global rules
   const activeRules = await getActiveRules(userId);
@@ -434,7 +447,13 @@ export async function executeFlowStreaming(
 
     emit({ type: 'step_start', data: { stepIndex: i, skillName, model: step.model || 'auto' } });
 
-    const stepResult = await executeStepWithTimeout(step, executionContext, globalRules);
+    const stepResult = await executeStepWithTimeout(
+      step,
+      executionContext,
+      globalRules,
+      userId,
+      role,
+    );
 
     // Log execution
     await logExecution(flowId, userId, i, skillName, stepResult, 0, step.skillId);
@@ -455,6 +474,7 @@ export async function executeFlowStreaming(
           globalRules,
           flowId,
           userId,
+          role,
         );
         finalOutput = editorResult.outputs;
         editorRounds = editorResult.rounds;
@@ -616,6 +636,8 @@ async function executeStepWithTimeout(
   step: FlowStep,
   context: Record<string, string>,
   globalRules?: string,
+  userId?: string,
+  role: string = 'Subscriber',
 ): Promise<StepResult> {
   const timeoutMs = await getAITimeoutMs();
 
@@ -634,7 +656,7 @@ async function executeStepWithTimeout(
         });
       }, timeoutMs);
 
-      executeStep(step, context, globalRules)
+      executeStep(step, context, globalRules, userId, role)
         .then((result) => {
           clearTimeout(timer);
           resolve(result);
@@ -802,6 +824,7 @@ async function runEditorLoop(
   globalRules?: string,
   flowId?: string,
   userId?: string,
+  role: string = 'Subscriber',
 ): Promise<{ outputs: Record<string, string>; rounds: number }> {
   const editor = step.editor as EditorConfig;
   const maxRounds = Math.min(editor.maxRounds, MAX_EDITOR_ROUNDS);
@@ -849,12 +872,21 @@ ${editor.systemPrompt}`;
       const userMessage = `Round ${round} of ${maxRounds}.${roundContext}\n\nReview this output:\n\n${currentOutput}`;
       editorHistory.push({ role: 'user', content: userMessage });
 
-      const editorResponse = await providerRegistry.complete({
-        model: editor.model,
-        messages: [...editorHistory],
-        temperature: 0.3,
-        maxTokens: 4000,
-      });
+      const editorResponse = userId
+        ? await withSessionGate(userId, role, () =>
+            providerRegistry.complete({
+              model: editor.model,
+              messages: [...editorHistory],
+              temperature: 0.3,
+              maxTokens: 4000,
+            }),
+          )
+        : await providerRegistry.complete({
+            model: editor.model,
+            messages: [...editorHistory],
+            temperature: 0.3,
+            maxTokens: 4000,
+          });
 
       // Add editor's response to history for next round
       editorHistory.push({ role: 'assistant', content: editorResponse.content });
@@ -904,7 +936,7 @@ ${editor.systemPrompt}`;
       }
 
       // Generator revises based on feedback
-      const reviseResponse = await providerRegistry.complete({
+      const reviseRequest = {
         model: step.model,
         messages: [
           ...(globalRules
@@ -919,13 +951,16 @@ ${editor.systemPrompt}`;
             ? [{ role: 'system' as const, content: step.overrides.systemPrompt }]
             : []),
           {
-            role: 'user',
+            role: 'user' as const,
             content: `Here is your previous output:\n\n${currentOutput}\n\nEditor feedback:\n${verdict.feedback}\n\nPlease revise your output to address this feedback. Output only the revised content.`,
           },
         ],
         temperature: step.overrides?.temperature,
         maxTokens: step.overrides?.maxTokens,
-      });
+      };
+      const reviseResponse = userId
+        ? await withSessionGate(userId, role, () => providerRegistry.complete(reviseRequest))
+        : await providerRegistry.complete(reviseRequest);
 
       currentOutput = reviseResponse.content;
       // Update the first output key with revised content

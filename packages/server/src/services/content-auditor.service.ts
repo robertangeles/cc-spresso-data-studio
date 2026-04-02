@@ -1,6 +1,7 @@
 import { providerRegistry } from './ai/index.js';
 import { getActiveRules } from './profile.service.js';
 import { getSystemPromptBySlug } from './system-prompt.service.js';
+import { withSessionGate } from './session-gate.service.js';
 import { stripThinkingBlocks } from './flow-executor.service.js';
 import { logger } from '../config/logger.js';
 
@@ -352,7 +353,11 @@ export async function auditContent(content: string, userId: string): Promise<Aud
 
 // --- AI Audit (subjective rules) ---
 
-export async function aiAudit(content: string, userId: string): Promise<Violation[]> {
+export async function aiAudit(
+  content: string,
+  userId: string,
+  role: string = 'Subscriber',
+): Promise<Violation[]> {
   const rules = await getActiveRules(userId);
   const rulesText = rules
     .filter((r) => r.name !== 'Banned Words and Style Violations') // Handled programmatically
@@ -377,12 +382,14 @@ export async function aiAudit(content: string, userId: string): Promise<Violatio
   const prompt = promptTemplate.replace('{{rules}}', rulesText).replace('{{content}}', content);
 
   try {
-    const response = await providerRegistry.complete({
-      model: 'claude-haiku-4-5',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2,
-      maxTokens: 2000,
-    });
+    const response = await withSessionGate(userId, role, () =>
+      providerRegistry.complete({
+        model: 'claude-haiku-4-5',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,
+        maxTokens: 2000,
+      }),
+    );
 
     const cleaned = stripThinkingBlocks(response.content).trim();
 
@@ -423,9 +430,13 @@ function findLineNumber(content: string, sentence: string): number {
 
 // --- Full Audit (programmatic + AI) ---
 
-export async function fullAudit(content: string, userId: string): Promise<AuditResult> {
+export async function fullAudit(
+  content: string,
+  userId: string,
+  role: string = 'Subscriber',
+): Promise<AuditResult> {
   const programmatic = await auditContent(content, userId);
-  const subjective = await aiAudit(content, userId);
+  const subjective = await aiAudit(content, userId, role);
 
   const allViolations = [...programmatic.violations, ...subjective];
 
@@ -443,6 +454,8 @@ export async function reworkViolations(
   content: string,
   violations: Violation[],
   model: string,
+  userId?: string,
+  role: string = 'Subscriber',
 ): Promise<string> {
   if (violations.length === 0) return content;
 
@@ -474,12 +487,15 @@ export async function reworkViolations(
     .replace('{{violationList}}', violationList)
     .replace('{{content}}', content);
 
-  const response = await providerRegistry.complete({
-    model,
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.3,
-    maxTokens: 8000,
-  });
+  const reworkFn = () =>
+    providerRegistry.complete({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      maxTokens: 8000,
+    });
+
+  const response = userId ? await withSessionGate(userId, role, reworkFn) : await reworkFn();
 
   const result = stripThinkingBlocks(response.content);
 
@@ -508,6 +524,7 @@ export async function reworkLoop(
   model: string,
   maxRounds = 3,
   onRound?: (round: ReworkRound) => void,
+  role: string = 'Subscriber',
 ): Promise<{ finalContent: string; rounds: ReworkRound[]; remainingViolations: Violation[] }> {
   const rounds: ReworkRound[] = [];
   let currentContent = content;
@@ -520,7 +537,7 @@ export async function reworkLoop(
     const beforeCount = audit.total;
 
     // Rework
-    currentContent = await reworkViolations(currentContent, audit.violations, model);
+    currentContent = await reworkViolations(currentContent, audit.violations, model, userId, role);
 
     // Re-audit
     const afterAudit = await auditContent(currentContent, userId);

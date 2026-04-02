@@ -269,39 +269,32 @@ export default function MediaStudio({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Describe your image..."
-            rows={2}
-            className="w-full bg-surface-3 text-xs text-text-primary placeholder-text-tertiary rounded-lg border border-border-subtle focus:border-accent focus:ring-1 focus:ring-accent/30 px-2.5 py-2 resize-none transition-all duration-150 outline-none"
+            rows={3}
+            className="w-full flex-1 bg-surface-3 text-xs text-text-primary placeholder-text-tertiary rounded-lg border border-border-subtle focus:border-accent focus:ring-1 focus:ring-accent/30 px-2.5 py-2 resize-none transition-all duration-150 outline-none"
           />
-          <div className="flex flex-wrap gap-1">
-            {STYLE_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => setActivePreset(preset.id)}
-                className={`
-                  inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium
-                  border transition-all duration-150
-                  ${
-                    activePreset === preset.id
-                      ? 'bg-accent-dim text-accent border-accent'
-                      : 'bg-surface-3 text-text-secondary border-border-subtle hover:border-border-hover'
-                  }
-                `}
-              >
-                <span>{preset.icon}</span>
-                {preset.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            {/* Style dropdown — replaces pill buttons */}
+            <select
+              value={activePreset}
+              onChange={(e) => setActivePreset(e.target.value as StylePresetId)}
+              className="text-xs text-text-secondary font-medium px-2.5 py-1.5 rounded-lg bg-surface-3 border border-border-subtle hover:border-border-hover focus:border-accent/40 focus:outline-none cursor-pointer transition-colors flex-1"
+            >
+              {STYLE_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.icon} {preset.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={isGenerating || !prompt.trim()}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-text-inverse text-xs font-medium transition-all hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Image size={14} />}
+              Generate
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={isGenerating || !prompt.trim()}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-text-inverse text-xs font-medium transition-all hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Image size={14} />}
-            Generate
-          </button>
         </div>
       </div>
 

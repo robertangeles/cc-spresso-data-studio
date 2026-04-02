@@ -1,6 +1,7 @@
-import { eq, and, ilike, or, desc } from 'drizzle-orm';
+import { eq, and, ilike, or, desc, inArray } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { providerRegistry } from './ai/index.js';
+import { withSessionGate } from './session-gate.service.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
 
@@ -317,8 +318,53 @@ export async function updateContentItem(id: string, data: UpdateContentData, use
 }
 
 export async function deleteContentItem(id: string, userId: string) {
-  await getContentItem(id, userId);
+  const item = await getContentItem(id, userId);
+
+  // Clean up Cloudinary image if one exists
+  if (item.imageUrl) {
+    try {
+      const { deleteImage, extractPublicId } = await import('./cloudinary.service.js');
+      const publicId = extractPublicId(item.imageUrl);
+      if (publicId) await deleteImage(publicId);
+    } catch (err) {
+      logger.warn(
+        { err, contentId: id },
+        'Failed to delete Cloudinary image during content cleanup',
+      );
+    }
+  }
+
   await db.delete(schema.contentItems).where(eq(schema.contentItems.id, id));
+}
+
+export async function deleteBatchContentItems(ids: string[], userId: string) {
+  // Verify ownership: only delete items belonging to this user
+  const owned = await db
+    .select({ id: schema.contentItems.id, imageUrl: schema.contentItems.imageUrl })
+    .from(schema.contentItems)
+    .where(and(inArray(schema.contentItems.id, ids), eq(schema.contentItems.userId, userId)));
+
+  if (owned.length === 0) return 0;
+
+  // Clean up Cloudinary images
+  for (const item of owned) {
+    if (item.imageUrl) {
+      try {
+        const { deleteImage, extractPublicId } = await import('./cloudinary.service.js');
+        const publicId = extractPublicId(item.imageUrl);
+        if (publicId) await deleteImage(publicId);
+      } catch (err) {
+        logger.warn(
+          { err, contentId: item.id },
+          'Failed to delete Cloudinary image during batch cleanup',
+        );
+      }
+    }
+  }
+
+  const ownedIds = owned.map((o) => o.id);
+  await db.delete(schema.contentItems).where(inArray(schema.contentItems.id, ownedIds));
+  return ownedIds.length;
 }
 
 // --- Quick-start template generation ---
@@ -363,6 +409,8 @@ export async function generateTemplate(data: {
   category: string;
   model?: string;
   context?: string;
+  userId?: string;
+  role?: string;
 }): Promise<{ title: string; body: string; source: 'ai' | 'fallback' }> {
   if (!isValidTemplateCategory(data.category)) {
     throw new Error(
@@ -400,15 +448,20 @@ export async function generateTemplate(data: {
 
   try {
     const startTime = Date.now();
-    const response = await providerRegistry.complete({
-      model: data.model || 'claude-haiku-4-5-20251001',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      temperature: 0.8,
-      maxTokens: 1000,
-    });
+    const completeFn = () =>
+      providerRegistry.complete({
+        model: data.model || 'claude-haiku-4-5-20251001',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.8,
+        maxTokens: 1000,
+      });
+
+    const response = data.userId
+      ? await withSessionGate(data.userId, data.role ?? 'Subscriber', completeFn)
+      : await completeFn();
 
     const content = response.content.trim();
     const jsonStr = content.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
@@ -438,49 +491,42 @@ export async function generateTemplate(data: {
  * Generate platform-adapted content using AI.
  * Takes a main body and adapts it for multiple channels via the AI provider registry.
  */
-export async function generateMultiPlatformContent(data: {
-  mainBody: string;
-  channelIds: string[];
-  model?: string;
-  userId: string;
-}): Promise<Record<string, string>> {
-  // 1. Load all channel configs for the given channelIds
-  const channels: Array<{ id: string; name: string; config: Record<string, unknown> }> = [];
+// --- Shared helpers for AI-powered content generation ---
 
-  for (const channelId of data.channelIds) {
+interface ChannelInfo {
+  id: string;
+  name: string;
+  config: Record<string, unknown>;
+}
+
+/**
+ * Load channel records from DB for the given IDs.
+ * Skips channels that don't exist (logs a warning).
+ */
+async function loadChannels(channelIds: string[]): Promise<ChannelInfo[]> {
+  const channels: ChannelInfo[] = [];
+  for (const channelId of channelIds) {
     const channel = await db.query.channels.findFirst({
       where: eq(schema.channels.id, channelId),
     });
-
     if (!channel) {
-      logger.warn({ channelId }, 'Channel not found during multi-platform generation');
+      logger.warn({ channelId }, 'Channel not found during content generation');
       continue;
     }
-
     channels.push({
       id: channel.id,
       name: channel.name,
       config: channel.config as Record<string, unknown>,
     });
   }
+  return channels;
+}
 
-  // If no valid channels found, return mainBody for all requested IDs
-  if (channels.length === 0) {
-    const fallback: Record<string, string> = {};
-    for (const channelId of data.channelIds) {
-      fallback[channelId] = data.mainBody;
-    }
-    return fallback;
-  }
-
-  // 2. Build system prompt
-  const systemPrompt =
-    'You are a content adaptation expert. Adapt the following content for multiple social media platforms. ' +
-    'Return ONLY a valid JSON object where each key is the channel ID and the value is the adapted content. ' +
-    'Do not include any other text, markdown formatting, or code fences.';
-
-  // 3. Build user message with channel details
-  const channelDescriptions = channels
+/**
+ * Build platform-specific description strings for AI prompts.
+ */
+function buildChannelDescriptions(channels: ChannelInfo[]): string {
+  return channels
     .map((ch) => {
       const cfg = ch.config;
       const charLimit = typeof cfg.charLimit === 'number' ? cfg.charLimit : 'unlimited';
@@ -493,57 +539,134 @@ export async function generateMultiPlatformContent(data: {
       desc += `, format: ${format}`;
 
       // Platform-specific hints
-      if (ch.name.toLowerCase().includes('twitter') || ch.name.toLowerCase().includes('x')) {
+      const name = ch.name.toLowerCase();
+      if (name.includes('twitter') || name.includes('x')) {
         desc += '. Use hashtags, be punchy.';
-      } else if (ch.name.toLowerCase().includes('linkedin')) {
+      } else if (name.includes('linkedin')) {
         desc += '. Professional tone, use line breaks for readability.';
-      } else if (ch.name.toLowerCase().includes('instagram')) {
+      } else if (name.includes('instagram')) {
         desc += '. Use emojis, hashtags at the end, engaging caption style.';
-      } else if (ch.name.toLowerCase().includes('email')) {
+      } else if (name.includes('email')) {
         desc += '. Clear subject-worthy opening, conversational but professional.';
-      } else if (ch.name.toLowerCase().includes('blog')) {
+      } else if (name.includes('blog')) {
         desc += '. Long-form, well-structured with headers if appropriate.';
-      } else if (ch.name.toLowerCase().includes('tiktok')) {
+      } else if (name.includes('tiktok')) {
         desc += '. Casual, hook-driven, Gen-Z friendly tone.';
-      } else if (ch.name.toLowerCase().includes('facebook')) {
+      } else if (name.includes('facebook')) {
         desc += '. Conversational, encourage engagement.';
-      } else if (ch.name.toLowerCase().includes('threads')) {
+      } else if (name.includes('threads')) {
         desc += '. Concise, conversational, thread-friendly.';
-      } else if (ch.name.toLowerCase().includes('bluesky')) {
+      } else if (name.includes('bluesky')) {
         desc += '. Short and conversational, no hashtags.';
-      } else if (ch.name.toLowerCase().includes('pinterest')) {
+      } else if (name.includes('pinterest')) {
         desc += '. Descriptive, keyword-rich for search.';
-      } else if (ch.name.toLowerCase().includes('youtube')) {
+      } else if (name.includes('youtube')) {
         desc += '. SEO-friendly description with keywords.';
       }
 
       return desc;
     })
     .join('\n');
+}
 
+/**
+ * Call AI to generate content for a single channel, returning the adapted text.
+ * Used by remixContent() for streaming per-channel results.
+ */
+async function generateForSingleChannel(data: {
+  sourceText: string;
+  channel: ChannelInfo;
+  systemPrompt: string;
+  model: string;
+  userId: string;
+  role: string;
+}): Promise<string> {
+  const channelDesc = buildChannelDescriptions([data.channel]);
+  const userMessage =
+    `Source content:\n\n${data.sourceText}\n\n` +
+    `Generate adapted content for this platform:\n\n${channelDesc}\n\n` +
+    'Return ONLY the adapted content text. No JSON, no markdown fences, no extra commentary.';
+
+  const response = await withSessionGate(data.userId, data.role, () =>
+    providerRegistry.complete({
+      model: data.model,
+      messages: [
+        { role: 'system', content: data.systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      temperature: 0.7,
+      maxTokens: 2000,
+    }),
+  );
+
+  return response.content.trim();
+}
+
+/**
+ * Parse AI JSON response, stripping markdown fences. Returns null on failure.
+ */
+function parseAIJsonResponse(content: string): Record<string, string> | null {
+  try {
+    const jsonStr = content
+      .trim()
+      .replace(/^```(?:json)?\s*/, '')
+      .replace(/\s*```$/, '');
+    const parsed = JSON.parse(jsonStr);
+    if (typeof parsed === 'object' && parsed !== null) return parsed as Record<string, string>;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// --- Multi-platform generation (batch, original API) ---
+
+export async function generateMultiPlatformContent(data: {
+  mainBody: string;
+  channelIds: string[];
+  model?: string;
+  userId: string;
+  role?: string;
+}): Promise<Record<string, string>> {
+  const channels = await loadChannels(data.channelIds);
+
+  if (channels.length === 0) {
+    const fallback: Record<string, string> = {};
+    for (const channelId of data.channelIds) fallback[channelId] = data.mainBody;
+    return fallback;
+  }
+
+  const systemPrompt =
+    'You are a content adaptation expert. Adapt the following content for multiple social media platforms. ' +
+    'Return ONLY a valid JSON object where each key is the channel ID and the value is the adapted content. ' +
+    'Do not include any other text, markdown formatting, or code fences.';
+
+  const channelDescriptions = buildChannelDescriptions(channels);
   const userMessage =
     `Original content:\n\n${data.mainBody}\n\n` +
     `Adapt this content for the following platforms:\n\n${channelDescriptions}`;
 
-  // 4. Call AI provider registry
   try {
-    const response = await providerRegistry.complete({
-      model: data.model || 'claude-sonnet-4-6',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      temperature: 0.7,
-      maxTokens: 4000,
-    });
+    const response = await withSessionGate(data.userId, data.role ?? 'Subscriber', () =>
+      providerRegistry.complete({
+        model: data.model || 'claude-sonnet-4-6',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.7,
+        maxTokens: 4000,
+      }),
+    );
 
-    // 5. Parse the JSON response
-    const content = response.content.trim();
-    // Strip potential markdown code fences
-    const jsonStr = content.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-    const parsed = JSON.parse(jsonStr) as Record<string, string>;
+    const parsed = parseAIJsonResponse(response.content);
+    if (!parsed) {
+      logger.warn('AI returned unparseable JSON, falling back to original content');
+      const fallback: Record<string, string> = {};
+      for (const channelId of data.channelIds) fallback[channelId] = data.mainBody;
+      return fallback;
+    }
 
-    // Build result ensuring all requested channelIds have a value
     const result: Record<string, string> = {};
     for (const channelId of data.channelIds) {
       result[channelId] = typeof parsed[channelId] === 'string' ? parsed[channelId] : data.mainBody;
@@ -556,12 +679,320 @@ export async function generateMultiPlatformContent(data: {
 
     return result;
   } catch (err) {
-    // 6. Fallback: if AI call or JSON parse fails, return original mainBody for each channel
     logger.error({ err }, 'AI multi-platform generation failed, falling back to original content');
     const fallback: Record<string, string> = {};
-    for (const channelId of data.channelIds) {
-      fallback[channelId] = data.mainBody;
-    }
+    for (const channelId of data.channelIds) fallback[channelId] = data.mainBody;
     return fallback;
   }
+}
+
+// --- Remix: transform existing content with style + platform adaptation ---
+
+export interface RemixConfig {
+  sourceContentIds: string[];
+  targetChannelIds: string[];
+  style: string; // system prompt slug, e.g. 'remix-punchy'
+  customPrompt?: string; // used when style === 'custom'
+  userId: string;
+  role?: string;
+  model?: string;
+}
+
+export interface RemixProgressEvent {
+  type: 'progress' | 'complete' | 'error';
+  channelId?: string;
+  channelName?: string;
+  item?: Record<string, unknown>;
+  totalCreated?: number;
+  error?: string;
+}
+
+/**
+ * Remix content: stream results per-channel via a callback.
+ * Each channel is generated individually so the client can show real-time progress.
+ */
+export async function remixContent(
+  config: RemixConfig,
+  onProgress: (event: RemixProgressEvent) => void,
+): Promise<void> {
+  // 1. Load and verify source content ownership
+  const sourceItems = await db
+    .select()
+    .from(schema.contentItems)
+    .where(
+      and(
+        inArray(schema.contentItems.id, config.sourceContentIds),
+        eq(schema.contentItems.userId, config.userId),
+      ),
+    );
+
+  if (sourceItems.length === 0) {
+    throw new NotFoundError('No source content found or not authorized');
+  }
+
+  // 2. Combine source bodies (cap at 10k chars)
+  const combinedSource = sourceItems
+    .map((item) => `--- ${item.title} ---\n${item.body}`)
+    .join('\n\n')
+    .slice(0, 10000);
+
+  // 3. Load remix style system prompt from DB (or use custom prompt)
+  let styleInstruction: string;
+  if (config.style === 'custom' && config.customPrompt) {
+    styleInstruction = config.customPrompt;
+  } else {
+    try {
+      const { getSystemPromptBySlug } = await import('./system-prompt.service.js');
+      const prompt = await getSystemPromptBySlug(config.style);
+      styleInstruction = prompt.body;
+    } catch {
+      throw new NotFoundError(`Remix style '${config.style}' not found`);
+    }
+  }
+
+  // 4. Load target channels
+  const channels = await loadChannels(config.targetChannelIds);
+  if (channels.length === 0) {
+    throw new NotFoundError('No valid target channels found');
+  }
+
+  // 5. Build the remix system prompt
+  const systemPrompt =
+    `You are a content remix expert. Your task is to transform existing content into fresh, platform-optimized variations.\n\n` +
+    `REMIX STYLE INSTRUCTION:\n${styleInstruction}\n\n` +
+    `Apply this style transformation while adapting for each target platform's conventions and constraints. ` +
+    `Produce content that feels native to the platform, not just reformatted.`;
+
+  const model = config.model || 'claude-sonnet-4-6';
+  const role = config.role ?? 'Subscriber';
+  const primarySourceId = sourceItems[0].id;
+  let totalCreated = 0;
+
+  // 6. Generate per-channel (streaming progress)
+  for (const channel of channels) {
+    try {
+      const adaptedBody = await generateForSingleChannel({
+        sourceText: combinedSource,
+        channel,
+        systemPrompt,
+        model,
+        userId: config.userId,
+        role,
+      });
+
+      // Create content item
+      const title =
+        sourceItems.length === 1
+          ? `${sourceItems[0].title} (${channel.name} remix)`
+          : `Remix for ${channel.name}`;
+
+      const item = await createContentItem({
+        userId: config.userId,
+        channelId: channel.id,
+        title,
+        body: adaptedBody,
+        status: 'draft',
+        sourceContentId: primarySourceId,
+        metadata: {
+          remixStyle: config.style,
+          remixSourceIds: config.sourceContentIds,
+          remixedAt: new Date().toISOString(),
+          model,
+        },
+      });
+
+      totalCreated++;
+      onProgress({
+        type: 'progress',
+        channelId: channel.id,
+        channelName: channel.name,
+        item: item as unknown as Record<string, unknown>,
+      });
+
+      logger.info(
+        { channelId: channel.id, channelName: channel.name, contentId: item.id },
+        'Remix content generated for channel',
+      );
+    } catch (err) {
+      logger.error({ err, channelId: channel.id }, 'Remix generation failed for channel');
+      onProgress({
+        type: 'error',
+        channelId: channel.id,
+        channelName: channel.name,
+        error: err instanceof Error ? err.message : 'Generation failed',
+      });
+    }
+  }
+
+  onProgress({ type: 'complete', totalCreated });
+}
+
+// --- Seed remix style system prompts ---
+
+export async function seedRemixStylePrompts(): Promise<void> {
+  const styles = [
+    {
+      slug: 'remix-punchy',
+      name: 'Punchy & Concise',
+      description: 'Strip to the essence. Short sentences. Strong verbs. Maximum impact per word.',
+      category: 'remix',
+      body: 'Transform this content to be punchy and concise. Use short, impactful sentences. Strong verbs. No fluff. Every word earns its place. Think billboard copywriting meets social media. Lead with the hook.',
+    },
+    {
+      slug: 'remix-storytelling',
+      name: 'Storytelling',
+      description: 'Reframe the content as a narrative with tension, character, and resolution.',
+      category: 'remix',
+      body: 'Transform this content into a compelling story. Open with a hook that creates tension or curiosity. Build a narrative arc — setup, conflict/challenge, resolution/insight. Make it personal and relatable. End with a takeaway that sticks.',
+    },
+    {
+      slug: 'remix-takeaways',
+      name: 'Key Takeaways',
+      description: 'Extract the most valuable insights and present them as a scannable list.',
+      category: 'remix',
+      body: 'Extract the most valuable insights from this content and present them as clear, actionable takeaways. Use numbered points or bullet format. Each takeaway should stand alone as valuable. Open with a headline that promises value. Close with a call to action.',
+    },
+    {
+      slug: 'remix-hot-take',
+      name: 'Hot Take',
+      description: 'Reframe with a bold, contrarian angle that sparks conversation.',
+      category: 'remix',
+      body: 'Reframe this content as a bold, contrarian hot take. Challenge conventional wisdom. Be provocative but substantive — not clickbait. Take a strong stance and back it up. The goal is to spark conversation and debate. Use confident, direct language.',
+    },
+    {
+      slug: 'remix-thread',
+      name: 'Thread / Carousel',
+      description: 'Break into a multi-part series with hooks between each segment.',
+      category: 'remix',
+      body: 'Break this content into a thread or carousel format. Start with a powerful hook that stops the scroll. Each segment (3-8 parts) should deliver one clear idea. End each part with a reason to keep reading. Close with a summary and call to action. Number each part.',
+    },
+    {
+      slug: 'remix-recap',
+      name: 'Professional Recap',
+      description: 'Distill into a polished, business-friendly summary with clear structure.',
+      category: 'remix',
+      body: 'Transform this content into a polished, professional recap. Use clear structure with headers or sections. Maintain an authoritative but approachable tone. Include context for why this matters. Suitable for LinkedIn, newsletters, or business audiences. Focus on insights and implications.',
+    },
+  ];
+
+  for (const style of styles) {
+    const existing = await db.query.systemPrompts.findFirst({
+      where: eq(schema.systemPrompts.slug, style.slug),
+    });
+    if (!existing) {
+      await db.insert(schema.systemPrompts).values(style);
+      logger.info({ slug: style.slug }, 'Seeded remix style system prompt');
+    }
+  }
+}
+
+// --- Repurpose: transform external content into platform-native posts ---
+
+export interface RepurposeConfig {
+  sourceText: string;
+  sourceUrl?: string;
+  targetChannelIds: string[];
+  style: string;
+  customPrompt?: string;
+  userId: string;
+  role?: string;
+  model?: string;
+}
+
+/**
+ * Repurpose external content: stream results per-channel via a callback.
+ */
+export async function repurposeContent(
+  config: RepurposeConfig,
+  onProgress: (event: RemixProgressEvent) => void,
+): Promise<void> {
+  // Truncate source to 10k chars
+  const sourceText = config.sourceText.slice(0, 10_000);
+
+  // Load style system prompt or use custom
+  let styleInstruction: string;
+  if (config.style === 'custom' && config.customPrompt) {
+    styleInstruction = config.customPrompt;
+  } else {
+    try {
+      const { getSystemPromptBySlug } = await import('./system-prompt.service.js');
+      const prompt = await getSystemPromptBySlug(config.style);
+      styleInstruction = prompt.body;
+    } catch {
+      throw new NotFoundError(`Repurpose style '${config.style}' not found`);
+    }
+  }
+
+  const channels = await loadChannels(config.targetChannelIds);
+  if (channels.length === 0) {
+    throw new NotFoundError('No valid target channels found');
+  }
+
+  const systemPrompt =
+    `You are a content repurposing expert. Your task is to transform source material into fresh, platform-optimized content.\n\n` +
+    `STYLE INSTRUCTION:\n${styleInstruction}\n\n` +
+    `The source material is from an external source (article, blog post, transcript, or notes). ` +
+    `Extract the core ideas and transform them into content that feels native to each target platform — not just reformatted. ` +
+    `Add your own angle, don't just summarize.`;
+
+  const model = config.model || 'claude-sonnet-4-6';
+  const role = config.role ?? 'Subscriber';
+  let totalCreated = 0;
+
+  for (const channel of channels) {
+    try {
+      const adaptedBody = await generateForSingleChannel({
+        sourceText,
+        channel,
+        systemPrompt,
+        model,
+        userId: config.userId,
+        role,
+      });
+
+      const title = config.sourceUrl
+        ? `Repurposed for ${channel.name}`
+        : `Repurposed content (${channel.name})`;
+
+      const item = await createContentItem({
+        userId: config.userId,
+        channelId: channel.id,
+        title,
+        body: adaptedBody,
+        status: 'draft',
+        metadata: {
+          repurposeSource: {
+            url: config.sourceUrl ?? null,
+            originalTextSnippet: sourceText.slice(0, 200),
+          },
+          repurposeStyle: config.style,
+          repurposedAt: new Date().toISOString(),
+          model,
+        },
+      });
+
+      totalCreated++;
+      onProgress({
+        type: 'progress',
+        channelId: channel.id,
+        channelName: channel.name,
+        item: item as unknown as Record<string, unknown>,
+      });
+
+      logger.info(
+        { channelId: channel.id, channelName: channel.name, contentId: item.id },
+        'Repurposed content generated for channel',
+      );
+    } catch (err) {
+      logger.error({ err, channelId: channel.id }, 'Repurpose generation failed for channel');
+      onProgress({
+        type: 'error',
+        channelId: channel.id,
+        channelName: channel.name,
+        error: err instanceof Error ? err.message : 'Generation failed',
+      });
+    }
+  }
+
+  onProgress({ type: 'complete', totalCreated });
 }

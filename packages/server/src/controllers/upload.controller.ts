@@ -1,7 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { ApiResponse } from '@cc/shared';
+import { randomUUID } from 'crypto';
 import { UnauthorizedError } from '../utils/errors.js';
-import { config } from '../config/index.js';
+import { uploadImage as cloudinaryUpload } from '../services/cloudinary.service.js';
 
 export async function uploadImage(
   req: Request,
@@ -15,12 +16,16 @@ export async function uploadImage(
       return;
     }
 
-    const serverUrl = config.isDev
-      ? `http://localhost:${config.port}`
-      : process.env.SERVER_URL || `http://localhost:${config.port}`;
+    // Convert buffer to base64 data URI for Cloudinary
+    const base64 = req.file.buffer.toString('base64');
+    const dataUri = `data:${req.file.mimetype};base64,${base64}`;
 
-    const url = `${serverUrl}/uploads/${req.file.filename}`;
-    res.json({ success: true, data: { url } });
+    const result = await cloudinaryUpload(dataUri, {
+      folder: 'content',
+      publicId: `content_${randomUUID()}`,
+    });
+
+    res.json({ success: true, data: { url: result.url } });
   } catch (err) {
     next(err);
   }

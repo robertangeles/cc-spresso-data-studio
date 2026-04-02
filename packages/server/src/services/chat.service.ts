@@ -2,6 +2,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { providerRegistry } from './ai/index.js';
 import { getActiveRules } from './profile.service.js';
+import { withSessionGate } from './session-gate.service.js';
 import { NotFoundError } from '../utils/errors.js';
 import { stripThinkingBlocks } from './flow-executor.service.js';
 import { logger } from '../config/logger.js';
@@ -64,6 +65,7 @@ export async function sendMessage(
   content: string,
   model?: string,
   systemPrompt?: string,
+  role: string = 'Subscriber',
 ) {
   // Verify ownership
   const conversation = await db.query.conversations.findFirst({
@@ -125,10 +127,12 @@ export async function sendMessage(
     'Chat completion',
   );
 
-  const response = await providerRegistry.complete({
-    model: activeModel,
-    messages: aiMessages,
-  });
+  const response = await withSessionGate(userId, role, () =>
+    providerRegistry.complete({
+      model: activeModel,
+      messages: aiMessages,
+    }),
+  );
 
   // Detect image response — strip thinking blocks from reasoning models
   const contentType = response.contentType ?? 'text';

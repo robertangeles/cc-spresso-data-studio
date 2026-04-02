@@ -59,7 +59,8 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
-        display: ['Instrument Serif', 'Georgia', 'serif'],
+        brand: ['Bricolage Grotesque', 'Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+        display: ['DM Serif Display', 'Georgia', 'serif'],
         editor: ['Source Serif 4', 'Georgia', 'serif'],
         heading: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
       },
@@ -92,6 +93,12 @@ export default {
         'pill-select': 'pill-select 400ms cubic-bezier(0.22, 1, 0.36, 1)',
         'step-fill': 'step-fill 600ms cubic-bezier(0.22, 1, 0.36, 1)',
         'overlay-in': 'overlay-fade-in 200ms ease-out',
+        'marquee-left': 'marquee-left 40s linear infinite',
+        'marquee-right': 'marquee-right 40s linear infinite',
+        'gradient-sweep': 'gradient-sweep 4s ease infinite',
+        'slide-up-lg': 'slide-up-lg 700ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'check-pop': 'check-pop 400ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'pulse-ring': 'pulse-ring 2s ease-in-out infinite',
       },
       keyframes: {
         'fade-in': {
@@ -150,6 +157,33 @@ export default {
         'overlay-fade-in': {
           from: { opacity: '0' },
           to: { opacity: '1' },
+        },
+        'marquee-left': {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(-50%)' },
+        },
+        'marquee-right': {
+          '0%': { transform: 'translateX(-50%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
+        'gradient-sweep': {
+          '0%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
+          '100%': { backgroundPosition: '0% 50%' },
+        },
+        'slide-up-lg': {
+          from: { opacity: '0', transform: 'translateY(32px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'check-pop': {
+          '0%': { transform: 'scale(0)', opacity: '0' },
+          '60%': { transform: 'scale(1.2)' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        'pulse-ring': {
+          '0%': { transform: 'scale(0.95)', opacity: '0.5' },
+          '50%': { transform: 'scale(1)', opacity: '1' },
+          '100%': { transform: 'scale(0.95)', opacity: '0.5' },
         },
       },
     },

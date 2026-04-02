@@ -16,7 +16,12 @@
       "Read(//d//**)",
       "Bash(xargs grep:*)",
       "Bash(grep -r api/content 'd:/My AI Projects/cc-content-builder/packages/client/src' --include=*.ts --include=*.tsx)",
-      "mcp__plugin_context-mode_context-mode__ctx_stats"
+      "mcp__plugin_context-mode_context-mode__ctx_stats",
+      "Bash(xargs wc:*)",
+      "Bash(ls \"C:\\\\Users\\\\PC\\\\.claude\\\\plans\"\" 2>/dev/null || echo \"no plans dir \")",
+      "Bash(node -e \"console.log\\(''node works''\\)\")",
+      "Bash(ls \"d:\\\\My AI Projects\\\\cc-content-builder\"/packages/server/.env*)",
+      "Bash(node -e \":*)"
     ],
     "additionalDirectories": ["\\tmp"]
   }

@@ -1,8 +1,6 @@
 import axios from 'axios';
 
-const apiBaseUrl = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : '/api';
+const apiBaseUrl = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
 const api = axios.create({
   baseURL: apiBaseUrl,
@@ -67,7 +65,11 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const { data } = await axios.post(`${apiBaseUrl}/auth/refresh`, {}, { withCredentials: true });
+        const { data } = await axios.post(
+          `${apiBaseUrl}/auth/refresh`,
+          {},
+          { withCredentials: true },
+        );
         const newToken = data.data.accessToken;
         setAccessToken(newToken);
         processQueue(null, newToken);
@@ -85,6 +87,16 @@ api.interceptors.response.use(
       } finally {
         isRefreshing = false;
       }
+    }
+
+    // Handle 402 — session quota exceeded
+    if (error.response?.status === 402) {
+      window.dispatchEvent(
+        new CustomEvent('session-quota-exceeded', {
+          detail: { message: error.response?.data?.message },
+        }),
+      );
+      return Promise.reject(error);
     }
 
     return Promise.reject(error);

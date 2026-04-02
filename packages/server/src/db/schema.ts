@@ -26,15 +26,16 @@ export const users = pgTable(
   {
     id: uuid('id').defaultRandom().primaryKey(),
     email: varchar('email', { length: 255 }).notNull().unique(),
-    passwordHash: varchar('password_hash', { length: 255 }).notNull().default(''),
+    passwordHash: varchar('password_hash', { length: 255 }),
+    googleId: varchar('google_id', { length: 255 }).unique(),
     name: varchar('name', { length: 255 }).notNull(),
     // DEPRECATED: role varchar — kept during migration, will be removed
     role: varchar('role', { length: 50 }).notNull().default('Subscriber'),
     // NEW: proper FK to roles table
     roleId: uuid('role_id'),
-    googleId: varchar('google_id', { length: 255 }),
     isBlocked: boolean('is_blocked').notNull().default(false),
-    freeSessionsLimit: integer('free_sessions_limit').notNull().default(3),
+    isEmailVerified: boolean('is_email_verified').notNull().default(false),
+    freeSessionsLimit: integer('free_sessions_limit').notNull().default(10),
     freeSessionsUsed: integer('free_sessions_used').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -62,6 +63,29 @@ export const refreshTokens = pgTable(
   (t) => [
     // Index: lookup tokens by user for cleanup
     index('idx_refresh_tokens_user_id').on(t.userId),
+  ],
+);
+
+// ============================================================
+// EMAIL VERIFICATIONS
+// Normal form: 2NF
+// ============================================================
+
+export const emailVerifications = pgTable(
+  'email_verifications',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: varchar('token_hash', { length: 255 }).notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: lookup verification tokens by user for cooldown check and cleanup
+    index('idx_email_verifications_user_id').on(t.userId),
   ],
 );
 
@@ -292,22 +316,6 @@ export const roles = pgTable('roles', {
 });
 
 // ============================================================
-// ROLE_USER (junction table)
-// Normal form: 2NF — many-to-many between users and roles
-// ============================================================
-
-export const roleUser = pgTable(
-  'role_user',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id').notNull(),
-    roleId: uuid('role_id').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index('idx_role_user_user_id').on(t.userId), index('idx_role_user_role_id').on(t.roleId)],
-);
-
-// ============================================================
 // PERMISSIONS
 // Normal form: 2NF
 // ============================================================
@@ -341,6 +349,30 @@ export const rolePermissions = pgTable(
     // Index: lookup permissions by role, roles by permission
     index('idx_role_permissions_role_id').on(t.roleId),
     index('idx_role_permissions_permission_id').on(t.permissionId),
+  ],
+);
+
+// ============================================================
+// ROLE_USER (junction table — many-to-many users ↔ roles)
+// Normal form: 2NF — composite unique on user_id + role_id
+// ============================================================
+
+export const roleUser = pgTable(
+  'role_user',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: lookup roles by user, users by role
+    index('idx_role_user_user_id').on(t.userId),
+    index('idx_role_user_role_id').on(t.roleId),
   ],
 );
 

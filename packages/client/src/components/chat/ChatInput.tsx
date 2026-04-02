@@ -29,8 +29,10 @@ export function ChatInput({
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [showTools, setShowTools] = useState(false);
+  const [toolsPos, setToolsPos] = useState<{ left: number; bottom: number } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const toolsRef = useRef<HTMLDivElement>(null);
+  const plusBtnRef = useRef<HTMLButtonElement>(null);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -45,11 +47,16 @@ export function ChatInput({
     textareaRef.current?.focus();
   }, []);
 
-  // Close tools on click outside
+  // Close tools on click outside (check both the button container and the fixed dropdown)
   useEffect(() => {
     if (!showTools) return;
     const handler = (e: MouseEvent) => {
-      if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) setShowTools(false);
+      const target = e.target as Node;
+      const inRef = toolsRef.current?.contains(target);
+      // Also check if click is inside the fixed dropdown
+      const dropdown = document.querySelector('.fixed.w-56.rounded-xl');
+      const inDropdown = dropdown?.contains(target);
+      if (!inRef && !inDropdown) setShowTools(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -138,7 +145,7 @@ export function ChatInput({
 
         {/* Input box */}
         <div
-          className={`relative rounded-2xl border bg-surface-2 overflow-hidden transition-all duration-300 ease-spring ${
+          className={`relative rounded-2xl border bg-surface-2 transition-all duration-300 ease-spring ${
             hasContent
               ? 'border-accent/40 shadow-glow-accent'
               : 'border-border-default focus-within:border-accent/40 focus-within:shadow-glow-accent'
@@ -168,27 +175,44 @@ export function ChatInput({
             {/* Left: + button */}
             <div ref={toolsRef} className="relative">
               <button
+                ref={plusBtnRef}
                 type="button"
-                onClick={() => setShowTools(!showTools)}
-                className={`rounded-full p-1.5 transition-colors ${showTools ? 'bg-surface-4 text-text-primary' : 'text-text-tertiary hover:bg-surface-3 hover:text-text-secondary'}`}
+                onClick={() => {
+                  if (!showTools && plusBtnRef.current) {
+                    const rect = plusBtnRef.current.getBoundingClientRect();
+                    setToolsPos({ left: rect.left, bottom: window.innerHeight - rect.top + 8 });
+                  }
+                  setShowTools(!showTools);
+                }}
+                className={`rounded-lg p-1.5 border transition-all duration-200 ${showTools ? 'bg-accent/10 border-accent/30 text-accent rotate-45' : 'border-border-subtle bg-surface-3/60 text-text-secondary hover:bg-surface-3 hover:text-text-primary hover:border-border-hover'}`}
               >
                 <Plus className="h-4 w-4" />
               </button>
 
-              {/* Tools dropdown */}
-              {showTools && (
-                <div className="absolute bottom-full left-0 mb-2 w-52 rounded-xl border border-border-default bg-surface-2 py-1.5 shadow-dark-lg backdrop-blur-glass z-50 animate-scale-in">
+              {/* Tools dropdown — fixed position to escape stacking contexts */}
+              {showTools && toolsPos && (
+                <div
+                  className="fixed w-56 rounded-xl border border-border-hover bg-surface-3 py-2 shadow-dark-lg backdrop-blur-glass z-[100] animate-scale-in"
+                  style={{ left: toolsPos.left, bottom: toolsPos.bottom }}
+                >
+                  <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                    Tools
+                  </p>
                   <button
                     type="button"
                     onClick={() => {
                       onResearchToggle?.();
                       setShowTools(false);
                     }}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-surface-3 transition-colors ${researchMode ? 'text-accent font-medium' : 'text-text-secondary'}`}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all duration-150 ${researchMode ? 'bg-accent/10 text-accent font-medium' : 'text-text-primary hover:bg-surface-4'}`}
                   >
-                    <Search className="h-4 w-4" />
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg ${researchMode ? 'bg-accent/20' : 'bg-surface-2 border border-border-subtle'}`}
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                    </span>
                     Research
-                    {researchMode && <span className="ml-auto text-accent">&#10003;</span>}
+                    {researchMode && <span className="ml-auto text-accent text-xs">&#10003;</span>}
                   </button>
                   <button
                     type="button"
@@ -196,11 +220,15 @@ export function ChatInput({
                       onWebSearchToggle?.();
                       setShowTools(false);
                     }}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-surface-3 transition-colors ${webSearchMode ? 'text-accent font-medium' : 'text-text-secondary'}`}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all duration-150 ${webSearchMode ? 'bg-accent/10 text-accent font-medium' : 'text-text-primary hover:bg-surface-4'}`}
                   >
-                    <Globe className="h-4 w-4" />
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg ${webSearchMode ? 'bg-accent/20' : 'bg-surface-2 border border-border-subtle'}`}
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                    </span>
                     Web search
-                    {webSearchMode && <span className="ml-auto text-accent">&#10003;</span>}
+                    {webSearchMode && <span className="ml-auto text-accent text-xs">&#10003;</span>}
                   </button>
                   <button
                     type="button"
@@ -208,11 +236,15 @@ export function ChatInput({
                       onImageModeToggle?.();
                       setShowTools(false);
                     }}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-surface-3 transition-colors ${imageMode ? 'text-accent font-medium' : 'text-text-secondary'}`}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all duration-150 ${imageMode ? 'bg-accent/10 text-accent font-medium' : 'text-text-primary hover:bg-surface-4'}`}
                   >
-                    <ImageIcon className="h-4 w-4" />
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg ${imageMode ? 'bg-accent/20' : 'bg-surface-2 border border-border-subtle'}`}
+                    >
+                      <ImageIcon className="h-3.5 w-3.5" />
+                    </span>
                     Generate image
-                    {imageMode && <span className="ml-auto text-accent">&#10003;</span>}
+                    {imageMode && <span className="ml-auto text-accent text-xs">&#10003;</span>}
                   </button>
                 </div>
               )}

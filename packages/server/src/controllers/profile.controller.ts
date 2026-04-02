@@ -2,10 +2,15 @@ import type { Request, Response, NextFunction } from 'express';
 import type { ApiResponse } from '@cc/shared';
 import { UnauthorizedError } from '../utils/errors.js';
 import * as profileService from '../services/profile.service.js';
+import * as sessionGate from '../services/session-gate.service.js';
 
 // --- Profile ---
 
-export async function getProfile(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function getProfile(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const profile = await profileService.getProfile(req.user.userId);
@@ -15,7 +20,11 @@ export async function getProfile(req: Request, res: Response<ApiResponse<unknown
   }
 }
 
-export async function updateProfile(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function updateProfile(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const profile = await profileService.updateProfile(req.user.userId, req.body);
@@ -27,7 +36,11 @@ export async function updateProfile(req: Request, res: Response<ApiResponse<unkn
 
 // --- Rules ---
 
-export async function listRules(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function listRules(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const rules = await profileService.listRules(req.user.userId);
@@ -37,7 +50,11 @@ export async function listRules(req: Request, res: Response<ApiResponse<unknown>
   }
 }
 
-export async function createRule(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function createRule(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const rule = await profileService.createRule(req.user.userId, req.body);
@@ -47,7 +64,11 @@ export async function createRule(req: Request, res: Response<ApiResponse<unknown
   }
 }
 
-export async function updateRule(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function updateRule(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const rule = await profileService.updateRule(req.user.userId, req.params.id, req.body);
@@ -57,7 +78,11 @@ export async function updateRule(req: Request, res: Response<ApiResponse<unknown
   }
 }
 
-export async function deleteRule(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function deleteRule(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     await profileService.deleteRule(req.user.userId, req.params.id);
@@ -67,9 +92,29 @@ export async function deleteRule(req: Request, res: Response<ApiResponse<unknown
   }
 }
 
+// --- Sessions ---
+
+export async function getSessionStatus(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const status = await sessionGate.getSessionStatus(req.user.userId, req.user.role);
+    res.json({ success: true, data: status });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // --- Password change ---
 
-export async function changePassword(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function changePassword(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { changePassword: doChange } = await import('../services/auth.service.js');
@@ -82,78 +127,31 @@ export async function changePassword(req: Request, res: Response<ApiResponse<unk
 
 // --- Avatar upload ---
 
-export async function uploadAvatar(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
+export async function uploadAvatar(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
 
-    // Read base64 body
     const { image } = req.body;
     if (!image || typeof image !== 'string') {
       res.status(400).json({ success: false, data: null, message: 'Image data required' });
       return;
     }
 
-    // Get Cloudinary config
-    const { getSetting } = await import('../services/admin.service.js');
-    const setting = await getSetting('cloudinary');
-    if (!setting) {
-      res.status(400).json({ success: false, data: null, message: 'Cloudinary not configured' });
-      return;
-    }
-
-    const cloudConfig = JSON.parse(setting.value);
-    if (!cloudConfig.cloudName || !cloudConfig.apiKey || !cloudConfig.apiSecret) {
-      res.status(400).json({ success: false, data: null, message: 'Cloudinary credentials incomplete' });
-      return;
-    }
-
-    // Upload to Cloudinary
-    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudConfig.cloudName}/image/upload`;
-    const folder = `${cloudConfig.uploadFolder || 'draftpunk'}/avatars`;
-
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        file: image,
-        upload_preset: undefined,
-        folder,
-        public_id: `avatar_${req.user.userId}`,
-        overwrite: true,
-        api_key: cloudConfig.apiKey,
-        timestamp: Math.floor(Date.now() / 1000),
-        signature: await generateCloudinarySignature(
-          { folder, public_id: `avatar_${req.user.userId}`, overwrite: 'true', timestamp: String(Math.floor(Date.now() / 1000)) },
-          cloudConfig.apiSecret,
-        ),
-      }),
+    const { uploadImage } = await import('../services/cloudinary.service.js');
+    const result = await uploadImage(image, {
+      folder: 'avatars',
+      publicId: `avatar_${req.user.userId}`,
+      overwrite: true,
     });
 
-    if (!uploadRes.ok) {
-      const err = await uploadRes.text();
-      res.status(400).json({ success: false, data: null, message: `Upload failed: ${err}` });
-      return;
-    }
+    await profileService.updateProfile(req.user.userId, { avatarUrl: result.url });
 
-    const uploadData = await uploadRes.json() as { secure_url: string };
-    const avatarUrl = uploadData.secure_url;
-
-    // Save to profile
-    await profileService.updateProfile(req.user.userId, { avatarUrl });
-
-    res.json({ success: true, data: { avatarUrl }, message: 'Avatar uploaded' });
+    res.json({ success: true, data: { avatarUrl: result.url }, message: 'Avatar uploaded' });
   } catch (err) {
     next(err);
   }
-}
-
-async function generateCloudinarySignature(params: Record<string, string>, apiSecret: string): Promise<string> {
-  const sorted = Object.entries(params).sort(([a], [b]) => a.localeCompare(b));
-  const toSign = sorted.map(([k, v]) => `${k}=${v}`).join('&') + apiSecret;
-
-  const encoder = new TextEncoder();
-  const data = encoder.encode(toSign);
-  const hashBuffer = await crypto.subtle.digest('SHA-1', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }

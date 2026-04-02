@@ -17,6 +17,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
 
@@ -30,13 +31,13 @@ const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/flows', label: 'Orchestrations', icon: Workflow },
   { to: '/skills', label: 'Skills', icon: Zap },
-  { to: '/content', label: 'Content Builder', icon: PenTool },
+  { to: '/content', label: 'Content Studio', icon: PenTool },
   { to: '/content/library', label: 'Content Library', icon: Library },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function Sidebar() {
-  const { user, logout } = useAuth();
+  const { user, logout, sessionStatus } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [showMenu, setShowMenu] = useState(false);
@@ -211,6 +212,57 @@ export function Sidebar() {
         ))}
       </nav>
 
+      {/* Session counter — visible only for metered (free) users */}
+      {sessionStatus && !sessionStatus.unlimited && (
+        <div className="mx-3 mb-2 rounded-lg border border-border-subtle bg-surface-2/50 backdrop-blur-glass p-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-accent" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                AI Sessions
+              </span>
+            </div>
+            <span
+              className={`text-[11px] font-bold tabular-nums ${
+                sessionStatus.remaining <= 0
+                  ? 'text-status-error'
+                  : sessionStatus.remaining <= 2
+                    ? 'text-amber-400'
+                    : 'text-accent'
+              }`}
+            >
+              {sessionStatus.remaining}/{sessionStatus.limit}
+            </span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-surface-3 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ease-spring ${
+                sessionStatus.remaining <= 0
+                  ? 'bg-status-error'
+                  : sessionStatus.remaining <= 2
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-400'
+                    : sessionStatus.remaining <= Math.floor(sessionStatus.limit * 0.5)
+                      ? 'bg-gradient-to-r from-accent to-amber-500'
+                      : 'bg-gradient-to-r from-emerald-500 to-accent'
+              }`}
+              style={{
+                width: `${Math.max(0, (sessionStatus.remaining / sessionStatus.limit) * 100)}%`,
+              }}
+            />
+          </div>
+          {sessionStatus.remaining <= 2 && sessionStatus.remaining > 0 && (
+            <p className="mt-1.5 text-[10px] text-amber-400/80">
+              {sessionStatus.remaining} session{sessionStatus.remaining !== 1 ? 's' : ''} remaining
+            </p>
+          )}
+          {sessionStatus.remaining <= 0 && (
+            <p className="mt-1.5 text-[10px] text-status-error/80">
+              Sessions exhausted — upgrade to continue
+            </p>
+          )}
+        </div>
+      )}
+
       {/* User profile */}
       {user && (
         <div ref={menuRef} className="relative border-t border-border-subtle p-3">
@@ -233,6 +285,23 @@ export function Sidebar() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-[12px] font-medium text-text-primary">{user.name}</p>
               <p className="truncate text-[10px] text-text-tertiary">{user.email}</p>
+              {sessionStatus && (
+                <p
+                  className={`text-[10px] font-medium ${
+                    sessionStatus.unlimited
+                      ? 'text-emerald-400'
+                      : sessionStatus.remaining <= 0
+                        ? 'text-status-error'
+                        : sessionStatus.remaining <= 2
+                          ? 'text-amber-400'
+                          : 'text-accent'
+                  }`}
+                >
+                  {sessionStatus.unlimited
+                    ? 'Unlimited sessions'
+                    : `${sessionStatus.remaining} free session${sessionStatus.remaining !== 1 ? 's' : ''} left`}
+                </p>
+              )}
             </div>
           </button>
 

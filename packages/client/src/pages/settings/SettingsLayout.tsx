@@ -8,6 +8,7 @@ const settingsNav = [
       { to: '/settings/integrations/ai-models', label: 'AI Models' },
       { to: '/settings/integrations/media', label: 'Media (Cloudinary)' },
       { to: '/settings/integrations/social-media', label: 'Social Media' },
+      { to: '/settings/integrations/auth', label: 'Authentication' },
     ],
   },
   {

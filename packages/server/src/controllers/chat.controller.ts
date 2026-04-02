@@ -78,6 +78,7 @@ export async function sendMessage(
       content,
       model,
       systemPrompt,
+      req.user.role,
     );
     res.json({ success: true, data: result });
   } catch (err) {

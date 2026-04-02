@@ -14,6 +14,10 @@ router.post('/generate-multi', contentController.generateMulti);
 router.post('/templates', contentController.generateTemplate);
 router.get('/:id', contentController.getContent);
 router.put('/:id', contentController.updateContent);
+router.post('/remix', contentController.remixContent);
+router.post('/scrape-url', contentController.scrapeUrlHandler);
+router.post('/repurpose', contentController.repurposeContent);
+router.post('/delete-batch', contentController.deleteBatch);
 router.delete('/:id', contentController.deleteContent);
 
 export { router as contentRoutes };

@@ -22,15 +22,17 @@ export async function publishToFacebook(params: {
     let postId: string;
 
     if (imageUrl) {
-      // Photo post: upload image with caption
+      // Photo post: Facebook Graph API requires form-encoded data, not JSON
+      const formBody = new URLSearchParams({
+        url: imageUrl,
+        caption: message,
+        access_token: accessToken,
+      });
+
       const res = await fetch(`https://graph.facebook.com/v22.0/${pageId}/photos`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: imageUrl,
-          caption: message,
-          access_token: accessToken,
-        }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formBody.toString(),
       });
 
       const data = (await res.json()) as any;
