@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './components/ui/Toast';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { AdminRoute } from './components/auth/AdminRoute';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
@@ -59,17 +60,19 @@ export function App() {
                 <Route path="/content/library" element={<ContentLibraryPage />} />
                 <Route path="/content/calendar" element={<Navigate to="/content" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/settings" element={<SettingsLayout />}>
-                  <Route index element={<Navigate to="integrations/database" replace />} />
-                  <Route path="integrations/database" element={<DatabaseSettingsPage />} />
-                  <Route path="integrations/ai-models" element={<LLMSettingsPage />} />
-                  <Route path="integrations/media" element={<MediaSettingsPage />} />
-                  <Route path="integrations/social-media" element={<SocialMediaSettingsPage />} />
-                  <Route path="integrations/auth" element={<AuthSettingsPage />} />
-                  <Route path="admin/roles" element={<RoleManagementPage />} />
-                  <Route path="admin/site" element={<SiteSettingsPage />} />
-                  <Route path="admin/usage" element={<UsageDashboardPage />} />
-                  <Route path="admin/system-prompts" element={<SystemPromptsPage />} />
+                <Route element={<AdminRoute />}>
+                  <Route path="/settings" element={<SettingsLayout />}>
+                    <Route index element={<Navigate to="integrations/database" replace />} />
+                    <Route path="integrations/database" element={<DatabaseSettingsPage />} />
+                    <Route path="integrations/ai-models" element={<LLMSettingsPage />} />
+                    <Route path="integrations/media" element={<MediaSettingsPage />} />
+                    <Route path="integrations/social-media" element={<SocialMediaSettingsPage />} />
+                    <Route path="integrations/auth" element={<AuthSettingsPage />} />
+                    <Route path="admin/roles" element={<RoleManagementPage />} />
+                    <Route path="admin/site" element={<SiteSettingsPage />} />
+                    <Route path="admin/usage" element={<UsageDashboardPage />} />
+                    <Route path="admin/system-prompts" element={<SystemPromptsPage />} />
+                  </Route>
                 </Route>
               </Route>
             </Route>

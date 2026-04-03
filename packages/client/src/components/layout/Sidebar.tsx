@@ -33,7 +33,6 @@ const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/skills', label: 'Skills', icon: Zap },
   { to: '/content', label: 'Content Studio', icon: PenTool },
   { to: '/content/library', label: 'Content Library', icon: Library },
-  { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function Sidebar() {
@@ -260,6 +259,25 @@ export function Sidebar() {
               Sessions exhausted — upgrade to continue
             </p>
           )}
+        </div>
+      )}
+
+      {/* Admin: Settings — above user profile */}
+      {user?.role === 'Administrator' && (
+        <div className="mx-3 mb-2">
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200 ease-spring ${
+                isActive
+                  ? 'bg-accent-dim text-accent border-l-2 border-accent'
+                  : 'text-text-secondary hover:bg-surface-3 hover:text-text-primary border-l-2 border-transparent'
+              }`
+            }
+          >
+            <Settings className="h-4 w-4" />
+            Settings
+          </NavLink>
         </div>
       )}
 
