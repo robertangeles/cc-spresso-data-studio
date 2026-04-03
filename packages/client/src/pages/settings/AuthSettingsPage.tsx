@@ -12,8 +12,12 @@ interface GoogleOAuthConfig {
   redirectUriProd: string;
 }
 
-interface ResendConfig {
-  apiKey: string;
+interface SmtpConfig {
+  host: string;
+  port: string;
+  secure: boolean;
+  user: string;
+  pass: string;
   fromAddress: string;
   fromName: string;
 }
@@ -37,15 +41,19 @@ export function AuthSettingsPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Resend email config
-  const [resendConfig, setResendConfig] = useState<ResendConfig>({
-    apiKey: '',
-    fromAddress: 'noreply@spresso.app',
+  // SMTP email config
+  const [smtpConfig, setSmtpConfig] = useState<SmtpConfig>({
+    host: '',
+    port: '465',
+    secure: true,
+    user: '',
+    pass: '',
+    fromAddress: '',
     fromName: 'Spresso',
   });
-  const [resendMaskedKey, setResendMaskedKey] = useState('');
-  const [resendSaving, setResendSaving] = useState(false);
-  const [resendSaved, setResendSaved] = useState(false);
+  const [smtpMaskedPass, setSmtpMaskedPass] = useState('');
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [smtpSaved, setSmtpSaved] = useState(false);
 
   // Turnstile config
   const [turnstileConfig, setTurnstileConfig] = useState<TurnstileConfig>({
@@ -58,7 +66,7 @@ export function AuthSettingsPage() {
 
   useEffect(() => {
     loadConfig();
-    loadResendConfig();
+    loadSmtpConfig();
     loadTurnstileConfig();
   }, []);
 
@@ -118,38 +126,68 @@ export function AuthSettingsPage() {
     }
   };
 
-  const loadResendConfig = async () => {
+  const loadSmtpConfig = async () => {
     try {
-      const { data } = await api.get('/admin/settings/resend');
+      const { data } = await api.get('/admin/settings/smtp');
       if (data.data) {
-        setResendConfig({
-          apiKey: '',
-          fromAddress: data.data.fromAddress ?? 'noreply@spresso.app',
+        setSmtpConfig({
+          host: data.data.host ?? '',
+          port: String(data.data.port ?? 465),
+          secure: data.data.secure !== false,
+          user: data.data.user ?? '',
+          pass: '',
+          fromAddress: data.data.fromAddress ?? '',
           fromName: data.data.fromName ?? 'Spresso',
         });
-        setResendMaskedKey(data.data.maskedKey ?? '');
+        setSmtpMaskedPass(data.data.maskedPass ?? '');
       }
     } catch {
       // First time — no config yet
     }
   };
 
-  const handleResendSave = async () => {
-    setResendSaving(true);
-    setResendSaved(false);
+  const handleSmtpSave = async () => {
+    setSmtpSaving(true);
+    setSmtpSaved(false);
     try {
-      await api.put('/admin/settings/resend', {
-        apiKey: resendConfig.apiKey || undefined,
-        fromAddress: resendConfig.fromAddress,
-        fromName: resendConfig.fromName,
+      await api.put('/admin/settings/smtp', {
+        host: smtpConfig.host,
+        port: parseInt(smtpConfig.port) || 465,
+        secure: smtpConfig.secure,
+        user: smtpConfig.user,
+        pass: smtpConfig.pass || undefined,
+        fromAddress: smtpConfig.fromAddress || smtpConfig.user,
+        fromName: smtpConfig.fromName,
       });
-      setResendSaved(true);
-      setTimeout(() => setResendSaved(false), 3000);
-      await loadResendConfig();
+      setSmtpSaved(true);
+      setTimeout(() => setSmtpSaved(false), 3000);
+      await loadSmtpConfig();
     } catch {
       // Error handling
     } finally {
-      setResendSaving(false);
+      setSmtpSaving(false);
+    }
+  };
+
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
+  const handleSmtpTest = async () => {
+    setSmtpTesting(true);
+    setSmtpTestResult(null);
+    try {
+      const { data } = await api.post('/admin/settings/smtp/test');
+      setSmtpTestResult({ success: true, message: data.message || 'Test email sent!' });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        'Failed to send test email';
+      setSmtpTestResult({ success: false, message: msg });
+    } finally {
+      setSmtpTesting(false);
     }
   };
 
@@ -186,6 +224,69 @@ export function AuthSettingsPage() {
     }
   };
 
+  const [activeTab, setActiveTab] = useState<'google' | 'smtp' | 'turnstile'>('google');
+
+  const tabs = [
+    {
+      id: 'google' as const,
+      label: 'Google OAuth',
+      icon: (
+        <svg className="h-4 w-4" viewBox="0 0 24 24">
+          <path
+            fill="#4285F4"
+            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+          />
+          <path
+            fill="#34A853"
+            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+          />
+          <path
+            fill="#FBBC05"
+            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A11.96 11.96 0 0 0 0 12c0 1.94.46 3.77 1.28 5.4l3.56-2.77.01-.54z"
+          />
+          <path
+            fill="#EA4335"
+            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+          />
+        </svg>
+      ),
+      status: maskedSecret ? 'Connected' : undefined,
+    },
+    {
+      id: 'smtp' as const,
+      label: 'Email (SMTP)',
+      icon: (
+        <div className="flex h-4 w-4 items-center justify-center rounded bg-blue-500/20 text-blue-400">
+          <svg
+            className="h-3 w-3"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <path d="M22 4L12 13 2 4" />
+          </svg>
+        </div>
+      ),
+      status: smtpMaskedPass ? 'Connected' : undefined,
+    },
+    {
+      id: 'turnstile' as const,
+      label: 'Bot Protection',
+      icon: (
+        <div className="flex h-4 w-4 items-center justify-center rounded bg-orange-500/20 text-orange-400">
+          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          </svg>
+        </div>
+      ),
+      status: turnstileMaskedSecret ? 'Active' : undefined,
+    },
+  ];
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -198,236 +299,347 @@ export function AuthSettingsPage() {
     <div>
       <h3 className="text-lg font-semibold text-text-primary">Authentication</h3>
       <p className="mt-1 text-sm text-text-secondary mb-6">
-        Configure third-party login providers. Users can sign in with Google alongside
-        email/password.
+        Configure login providers, email verification, and bot protection.
       </p>
 
-      <Card padding="lg">
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 mb-4">
-            <svg className="h-6 w-6" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A11.96 11.96 0 0 0 0 12c0 1.94.46 3.77 1.28 5.4l3.56-2.77.01-.54z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              />
-            </svg>
-            <div>
-              <h4 className="font-medium text-text-primary">Google OAuth 2.0</h4>
-              <p className="text-xs text-text-tertiary">
-                Allow users to sign in with their Google account
-              </p>
-            </div>
-            {maskedSecret && (
-              <span className="ml-auto rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
-                Connected
-              </span>
+      {/* Tab bar */}
+      <div className="flex gap-1 rounded-xl bg-surface-2/50 backdrop-blur-sm border border-white/5 p-1 mb-6">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`
+              group relative flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium
+              transition-all duration-200 ease-out flex-1 justify-center
+              ${
+                activeTab === tab.id
+                  ? 'bg-surface-3 text-text-primary shadow-[0_0_12px_rgba(255,214,10,0.1)] border border-white/10'
+                  : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-2/50'
+              }
+            `}
+          >
+            {tab.icon}
+            <span>{tab.label}</span>
+            {tab.status && (
+              <span className="ml-1 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]" />
             )}
-          </div>
-
-          <SecureInput
-            label="Client ID"
-            value={config.clientId}
-            onChange={(val) => setConfig({ ...config, clientId: val })}
-            placeholder="123456789.apps.googleusercontent.com"
-          />
-
-          <SecureInput
-            label="Client Secret"
-            value={config.clientSecret}
-            onChange={(val) => setConfig({ ...config, clientSecret: val })}
-            placeholder={maskedSecret ? 'Leave blank to keep current' : 'Enter client secret'}
-            hint={maskedSecret ? `Current: ${maskedSecret}` : undefined}
-          />
-
-          <Input
-            label="Redirect URI (Development)"
-            value={config.redirectUriDev || ''}
-            onChange={(e) => setConfig({ ...config, redirectUriDev: e.target.value })}
-            placeholder="http://localhost:5173/auth/google/callback"
-          />
-
-          <Input
-            label="Redirect URI (Production)"
-            value={config.redirectUriProd || ''}
-            onChange={(e) => setConfig({ ...config, redirectUriProd: e.target.value })}
-            placeholder="https://spresso.xyz/auth/google/callback"
-          />
-          <p className="text-xs text-text-tertiary -mt-2">
-            Both URIs must be added as authorized redirect URIs in your Google Cloud Console. The
-            system automatically uses the correct one based on the environment.
-          </p>
-
-          {testResult && (
-            <div
-              className={`rounded-lg border px-3 py-2 text-sm ${
-                testResult.success
-                  ? 'border-green-500/20 bg-green-500/10 text-green-400'
-                  : 'border-red-500/20 bg-red-500/10 text-red-400'
-              }`}
-            >
-              {testResult.message}
-            </div>
-          )}
-
-          <div className="flex items-center gap-3">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-            <Button variant="secondary" onClick={handleTest} disabled={testing || !config.clientId}>
-              {testing ? 'Testing...' : 'Test Connection'}
-            </Button>
-            {saved && <span className="text-sm text-status-success">Saved</span>}
-          </div>
-        </div>
-      </Card>
-
-      <div className="mt-6 rounded-lg border border-border-subtle bg-surface-2/30 p-4">
-        <h4 className="text-sm font-medium text-text-primary mb-2">Setup Guide</h4>
-        <ol className="text-xs text-text-secondary space-y-1.5 list-decimal list-inside">
-          <li>Go to Google Cloud Console and create or select a project</li>
-          <li>Navigate to APIs & Services &rarr; OAuth consent screen &rarr; choose External</li>
-          <li>
-            Add scopes: <code className="text-accent/80">email</code>,{' '}
-            <code className="text-accent/80">profile</code>,{' '}
-            <code className="text-accent/80">openid</code>
-          </li>
-          <li>Go to Credentials &rarr; Create OAuth 2.0 Client ID (Web application)</li>
-          <li>Add your redirect URI(s) under Authorized redirect URIs</li>
-          <li>Copy Client ID and Client Secret into the fields above</li>
-        </ol>
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-full bg-gradient-to-r from-accent to-amber-600" />
+            )}
+          </button>
+        ))}
       </div>
 
-      {/* Resend Email Integration */}
-      <h3 className="text-lg font-semibold text-text-primary mt-10">Email Verification</h3>
-      <p className="mt-1 text-sm text-text-secondary mb-6">
-        Configure Resend for transactional emails (verification, password reset).
-      </p>
+      {/* Google OAuth Tab */}
+      {activeTab === 'google' && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <Card padding="lg">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 mb-4">
+                <svg className="h-6 w-6" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A11.96 11.96 0 0 0 0 12c0 1.94.46 3.77 1.28 5.4l3.56-2.77.01-.54z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  />
+                </svg>
+                <div>
+                  <h4 className="font-medium text-text-primary">Google OAuth 2.0</h4>
+                  <p className="text-xs text-text-tertiary">
+                    Allow users to sign in with their Google account
+                  </p>
+                </div>
+                {maskedSecret && (
+                  <span className="ml-auto rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
+                    Connected
+                  </span>
+                )}
+              </div>
 
-      <Card padding="lg">
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-violet-500/20 text-violet-400 text-xs font-bold">
-              R
-            </div>
-            <div>
-              <h4 className="font-medium text-text-primary">Resend</h4>
-              <p className="text-xs text-text-tertiary">
-                Transactional email for verification and notifications
+              <SecureInput
+                label="Client ID"
+                value={config.clientId}
+                onChange={(val) => setConfig({ ...config, clientId: val })}
+                placeholder="123456789.apps.googleusercontent.com"
+              />
+
+              <SecureInput
+                label="Client Secret"
+                value={config.clientSecret}
+                onChange={(val) => setConfig({ ...config, clientSecret: val })}
+                placeholder={maskedSecret ? 'Leave blank to keep current' : 'Enter client secret'}
+                hint={maskedSecret ? `Current: ${maskedSecret}` : undefined}
+              />
+
+              <Input
+                label="Redirect URI (Development)"
+                value={config.redirectUriDev || ''}
+                onChange={(e) => setConfig({ ...config, redirectUriDev: e.target.value })}
+                placeholder="http://localhost:5173/auth/google/callback"
+              />
+
+              <Input
+                label="Redirect URI (Production)"
+                value={config.redirectUriProd || ''}
+                onChange={(e) => setConfig({ ...config, redirectUriProd: e.target.value })}
+                placeholder="https://spresso.xyz/auth/google/callback"
+              />
+              <p className="text-xs text-text-tertiary -mt-2">
+                Both URIs must be added as authorized redirect URIs in your Google Cloud Console.
+                The system automatically uses the correct one based on the environment.
               </p>
+
+              {testResult && (
+                <div
+                  className={`rounded-lg border px-3 py-2 text-sm ${
+                    testResult.success
+                      ? 'border-green-500/20 bg-green-500/10 text-green-400'
+                      : 'border-red-500/20 bg-red-500/10 text-red-400'
+                  }`}
+                >
+                  {testResult.message}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving...' : 'Save'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleTest}
+                  disabled={testing || !config.clientId}
+                >
+                  {testing ? 'Testing...' : 'Test Connection'}
+                </Button>
+                {saved && <span className="text-sm text-status-success">Saved</span>}
+              </div>
             </div>
-            {resendMaskedKey && (
-              <span className="ml-auto rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
-                Connected
-              </span>
-            )}
-          </div>
+          </Card>
 
-          <SecureInput
-            label="API Key"
-            value={resendConfig.apiKey}
-            onChange={(val) => setResendConfig({ ...resendConfig, apiKey: val })}
-            placeholder={resendMaskedKey ? 'Leave blank to keep current' : 're_xxxxxxxxxxxx'}
-            hint={resendMaskedKey ? `Current: ${resendMaskedKey}` : undefined}
-          />
-
-          <Input
-            label="From Address"
-            value={resendConfig.fromAddress}
-            onChange={(e) => setResendConfig({ ...resendConfig, fromAddress: e.target.value })}
-            placeholder="noreply@spresso.app"
-          />
-
-          <Input
-            label="From Name"
-            value={resendConfig.fromName}
-            onChange={(e) => setResendConfig({ ...resendConfig, fromName: e.target.value })}
-            placeholder="Spresso"
-          />
-
-          <div className="flex items-center gap-3">
-            <Button onClick={handleResendSave} disabled={resendSaving}>
-              {resendSaving ? 'Saving...' : 'Save'}
-            </Button>
-            {resendSaved && <span className="text-sm text-status-success">Saved</span>}
+          <div className="mt-6 rounded-lg border border-border-subtle bg-surface-2/30 p-4">
+            <h4 className="text-sm font-medium text-text-primary mb-2">Setup Guide</h4>
+            <ol className="text-xs text-text-secondary space-y-1.5 list-decimal list-inside">
+              <li>Go to Google Cloud Console and create or select a project</li>
+              <li>
+                Navigate to APIs & Services &rarr; OAuth consent screen &rarr; choose External
+              </li>
+              <li>
+                Add scopes: <code className="text-accent/80">email</code>,{' '}
+                <code className="text-accent/80">profile</code>,{' '}
+                <code className="text-accent/80">openid</code>
+              </li>
+              <li>Go to Credentials &rarr; Create OAuth 2.0 Client ID (Web application)</li>
+              <li>Add your redirect URI(s) under Authorized redirect URIs</li>
+              <li>Copy Client ID and Client Secret into the fields above</li>
+            </ol>
           </div>
         </div>
-      </Card>
+      )}
 
-      {/* Turnstile Bot Protection */}
-      <h3 className="text-lg font-semibold text-text-primary mt-10">Bot Protection</h3>
-      <p className="mt-1 text-sm text-text-secondary mb-6">
-        Cloudflare Turnstile prevents bots from creating accounts. Free and privacy-respecting.
-      </p>
+      {/* SMTP Email Tab */}
+      {activeTab === 'smtp' && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <Card padding="lg">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-6 w-6 items-center justify-center rounded bg-blue-500/20 text-blue-400">
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <path d="M22 4L12 13 2 4" />
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="font-medium text-text-primary">SMTP Email</h4>
+                  <p className="text-xs text-text-tertiary">
+                    Send verification emails and notifications via your mail server
+                  </p>
+                </div>
+                {smtpMaskedPass && (
+                  <span className="ml-auto rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
+                    Connected
+                  </span>
+                )}
+              </div>
 
-      <Card padding="lg">
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-orange-500/20 text-orange-400">
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg>
-            </div>
-            <div>
-              <h4 className="font-medium text-text-primary">Cloudflare Turnstile</h4>
-              <p className="text-xs text-text-tertiary">
-                Invisible CAPTCHA that stops bots without annoying users
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="SMTP Host"
+                  value={smtpConfig.host}
+                  onChange={(e) => setSmtpConfig({ ...smtpConfig, host: e.target.value })}
+                  placeholder="smtpout.secureserver.net"
+                />
+                <Input
+                  label="Port"
+                  value={smtpConfig.port}
+                  onChange={(e) => setSmtpConfig({ ...smtpConfig, port: e.target.value })}
+                  placeholder="465"
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    checked={smtpConfig.secure}
+                    onChange={(e) => setSmtpConfig({ ...smtpConfig, secure: e.target.checked })}
+                    className="peer sr-only"
+                  />
+                  <div className="h-5 w-9 rounded-full bg-surface-3 transition-colors peer-checked:bg-accent/80 peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform after:content-[''] peer-checked:after:translate-x-4" />
+                </label>
+                <span className="text-sm text-text-secondary">SSL/TLS</span>
+                <span className="text-xs text-text-tertiary">(recommended for port 465)</span>
+              </div>
+
+              <Input
+                label="Username"
+                value={smtpConfig.user}
+                onChange={(e) => setSmtpConfig({ ...smtpConfig, user: e.target.value })}
+                placeholder="you@yourdomain.com"
+              />
+
+              <SecureInput
+                label="Password"
+                value={smtpConfig.pass}
+                onChange={(val) => setSmtpConfig({ ...smtpConfig, pass: val })}
+                placeholder={smtpMaskedPass ? 'Leave blank to keep current' : 'SMTP password'}
+                hint={smtpMaskedPass ? `Current: ${smtpMaskedPass}` : undefined}
+              />
+
+              <div className="border-t border-border-subtle my-2" />
+
+              <Input
+                label="From Address"
+                value={smtpConfig.fromAddress}
+                onChange={(e) => setSmtpConfig({ ...smtpConfig, fromAddress: e.target.value })}
+                placeholder="noreply@yourdomain.com"
+              />
+              <p className="text-xs text-text-tertiary -mt-2">
+                Defaults to your SMTP username if left blank.
               </p>
+
+              <Input
+                label="From Name"
+                value={smtpConfig.fromName}
+                onChange={(e) => setSmtpConfig({ ...smtpConfig, fromName: e.target.value })}
+                placeholder="Spresso"
+              />
+
+              {smtpTestResult && (
+                <div
+                  className={`rounded-lg border px-3 py-2 text-sm ${
+                    smtpTestResult.success
+                      ? 'border-green-500/20 bg-green-500/10 text-green-400'
+                      : 'border-red-500/20 bg-red-500/10 text-red-400'
+                  }`}
+                >
+                  {smtpTestResult.message}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <Button onClick={handleSmtpSave} disabled={smtpSaving}>
+                  {smtpSaving ? 'Saving...' : 'Save'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleSmtpTest}
+                  disabled={smtpTesting || !smtpConfig.host}
+                >
+                  {smtpTesting ? 'Sending...' : 'Test Connection'}
+                </Button>
+                {smtpSaved && <span className="text-sm text-status-success">Saved</span>}
+              </div>
             </div>
-            {turnstileMaskedSecret && (
-              <span className="ml-auto rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
-                Active
-              </span>
-            )}
-          </div>
+          </Card>
+        </div>
+      )}
 
-          <Input
-            label="Site Key"
-            value={turnstileConfig.siteKey}
-            onChange={(e) => setTurnstileConfig({ ...turnstileConfig, siteKey: e.target.value })}
-            placeholder="0x4AAAAAAA..."
-          />
-          <p className="text-xs text-text-tertiary -mt-2">
-            This key is public and embedded in the registration form.
-          </p>
+      {/* Turnstile Bot Protection Tab */}
+      {activeTab === 'turnstile' && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <Card padding="lg">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-6 w-6 items-center justify-center rounded bg-orange-500/20 text-orange-400">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="font-medium text-text-primary">Cloudflare Turnstile</h4>
+                  <p className="text-xs text-text-tertiary">
+                    Invisible CAPTCHA that stops bots without annoying users
+                  </p>
+                </div>
+                {turnstileMaskedSecret && (
+                  <span className="ml-auto rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
+                    Active
+                  </span>
+                )}
+              </div>
 
-          <SecureInput
-            label="Secret Key"
-            value={turnstileConfig.secretKey}
-            onChange={(val) => setTurnstileConfig({ ...turnstileConfig, secretKey: val })}
-            placeholder={turnstileMaskedSecret ? 'Leave blank to keep current' : '0x4AAAAAAA...'}
-            hint={turnstileMaskedSecret ? `Current: ${turnstileMaskedSecret}` : undefined}
-          />
+              <Input
+                label="Site Key"
+                value={turnstileConfig.siteKey}
+                onChange={(e) =>
+                  setTurnstileConfig({ ...turnstileConfig, siteKey: e.target.value })
+                }
+                placeholder="0x4AAAAAAA..."
+              />
+              <p className="text-xs text-text-tertiary -mt-2">
+                This key is public and embedded in the registration form.
+              </p>
 
-          <div className="flex items-center gap-3">
-            <Button onClick={handleTurnstileSave} disabled={turnstileSaving}>
-              {turnstileSaving ? 'Saving...' : 'Save'}
-            </Button>
-            {turnstileSaved && <span className="text-sm text-status-success">Saved</span>}
+              <SecureInput
+                label="Secret Key"
+                value={turnstileConfig.secretKey}
+                onChange={(val) => setTurnstileConfig({ ...turnstileConfig, secretKey: val })}
+                placeholder={
+                  turnstileMaskedSecret ? 'Leave blank to keep current' : '0x4AAAAAAA...'
+                }
+                hint={turnstileMaskedSecret ? `Current: ${turnstileMaskedSecret}` : undefined}
+              />
+
+              <div className="flex items-center gap-3">
+                <Button onClick={handleTurnstileSave} disabled={turnstileSaving}>
+                  {turnstileSaving ? 'Saving...' : 'Save'}
+                </Button>
+                {turnstileSaved && <span className="text-sm text-status-success">Saved</span>}
+              </div>
+            </div>
+          </Card>
+
+          <div className="mt-6 rounded-lg border border-border-subtle bg-surface-2/30 p-4">
+            <h4 className="text-sm font-medium text-text-primary mb-2">Turnstile Setup</h4>
+            <ol className="text-xs text-text-secondary space-y-1.5 list-decimal list-inside">
+              <li>Go to the Cloudflare dashboard &rarr; Turnstile</li>
+              <li>Click &ldquo;Add site&rdquo; and enter your domain</li>
+              <li>Choose widget mode (Managed is recommended)</li>
+              <li>Copy the Site Key and Secret Key into the fields above</li>
+            </ol>
           </div>
         </div>
-      </Card>
-
-      <div className="mt-6 rounded-lg border border-border-subtle bg-surface-2/30 p-4">
-        <h4 className="text-sm font-medium text-text-primary mb-2">Turnstile Setup</h4>
-        <ol className="text-xs text-text-secondary space-y-1.5 list-decimal list-inside">
-          <li>Go to the Cloudflare dashboard &rarr; Turnstile</li>
-          <li>Click &ldquo;Add site&rdquo; and enter your domain</li>
-          <li>Choose widget mode (Managed is recommended)</li>
-          <li>Copy the Site Key and Secret Key into the fields above</li>
-        </ol>
-      </div>
+      )}
     </div>
   );
 }

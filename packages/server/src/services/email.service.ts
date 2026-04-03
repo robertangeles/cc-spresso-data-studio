@@ -1,73 +1,111 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 import { logger } from '../config/logger.js';
 import { getSetting } from './admin.service.js';
 import { EmailConfigError } from '../utils/errors.js';
 
-interface EmailConfig {
-  apiKey: string;
+interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
   fromAddress: string;
   fromName: string;
 }
 
-let resendClient: Resend | null = null;
-let cachedConfig: EmailConfig | null = null;
+let transporter: Transporter | null = null;
+let cachedConfig: SmtpConfig | null = null;
 
-async function getEmailConfig(): Promise<EmailConfig> {
+async function getEmailConfig(): Promise<SmtpConfig> {
   if (cachedConfig) return cachedConfig;
 
-  const setting = await getSetting('resend');
+  const setting = await getSetting('smtp');
   if (!setting) {
     throw new EmailConfigError(
-      'Resend email service is not configured. Set it up in Settings > Integrations.',
+      'SMTP email service is not configured. Set it up in Settings > Authentication > Email.',
     );
   }
 
-  const parsed = JSON.parse(setting.value) as Partial<EmailConfig>;
-  if (!parsed.apiKey) {
+  const parsed = JSON.parse(setting.value) as Partial<SmtpConfig>;
+  if (!parsed.host || !parsed.user || !parsed.pass) {
     throw new EmailConfigError(
-      'Resend API key is missing. Configure it in Settings > Integrations.',
+      'SMTP configuration is incomplete. Check host, username, and password in Settings > Authentication > Email.',
     );
   }
 
   cachedConfig = {
-    apiKey: parsed.apiKey,
-    fromAddress: parsed.fromAddress || 'noreply@spresso.app',
+    host: parsed.host,
+    port: parsed.port || 465,
+    secure: parsed.secure !== false,
+    user: parsed.user,
+    pass: parsed.pass,
+    fromAddress: parsed.fromAddress || parsed.user,
     fromName: parsed.fromName || 'Spresso',
   };
   return cachedConfig;
 }
 
-function getClient(apiKey: string): Resend {
-  if (!resendClient) {
-    resendClient = new Resend(apiKey);
+function getTransporter(config: SmtpConfig): Transporter {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: {
+        user: config.user,
+        pass: config.pass,
+      },
+    });
   }
-  return resendClient;
+  return transporter;
 }
 
 /** Invalidate cached config (call when admin updates settings). */
 export function invalidateEmailConfig(): void {
   cachedConfig = null;
-  resendClient = null;
+  transporter = null;
 }
 
-/** Send a generic email via Resend. */
-export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+/** Send a generic email via SMTP. */
+export async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  text?: string,
+): Promise<void> {
   const config = await getEmailConfig();
-  const client = getClient(config.apiKey);
+  const transport = getTransporter(config);
 
-  const { error } = await client.emails.send({
-    from: `${config.fromName} <${config.fromAddress}>`,
-    to,
-    subject,
-    html,
-  });
-
-  if (error) {
-    logger.error({ err: error, to, subject }, 'Failed to send email via Resend');
-    throw new Error(`Email send failed: ${error.message}`);
+  try {
+    await transport.sendMail({
+      from: `${config.fromName} <${config.fromAddress}>`,
+      to,
+      subject,
+      html,
+      text: text || subject,
+    });
+  } catch (err) {
+    logger.error({ err, to, subject }, 'Failed to send email via SMTP');
+    throw new Error(`Email send failed: ${(err as Error).message}`);
   }
 
   logger.info({ to: maskEmail(to), subject }, 'Email sent successfully');
+}
+
+/** Send a test email to verify SMTP configuration. */
+export async function sendTestEmail(to: string): Promise<void> {
+  const subject = 'Spresso — SMTP Configuration Test';
+  const text = `Hi there,\n\nThis is a test email from your Spresso instance to confirm SMTP is configured correctly.\n\nSent at: ${new Date().toISOString()}\n\nCheers,\nSpresso Content Studio`;
+  const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; max-width:480px; margin:0 auto; padding:32px;">
+  <h2 style="color:#333; margin-bottom:16px;">SMTP Configuration Test</h2>
+  <p style="color:#555; line-height:1.6;">Hi there,</p>
+  <p style="color:#555; line-height:1.6;">This is a test email from your Spresso instance to confirm that SMTP is configured correctly.</p>
+  <p style="color:#999; font-size:13px; margin-top:24px;">Sent at: ${new Date().toISOString()}</p>
+  <p style="color:#555; line-height:1.6;">Cheers,<br/>Spresso Content Studio</p>
+</div>`;
+  await sendEmail(to, subject, html, text);
 }
 
 /** Send a branded verification email. */

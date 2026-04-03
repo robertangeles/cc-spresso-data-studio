@@ -151,9 +151,42 @@ export function AuthForm({ mode = 'login', onSuccess, compact = false }: AuthFor
           </div>
         )}
 
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? 'Brewing...' : mode === 'register' ? 'Create account' : 'Get in'}
-        </Button>
+        <div className="relative">
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                {mode === 'register' ? 'Creating your account...' : 'Signing in...'}
+              </span>
+            ) : mode === 'register' ? (
+              'Create account'
+            ) : (
+              'Get in'
+            )}
+          </Button>
+          {isSubmitting && (
+            <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface-3">
+              <div
+                className="h-full w-full origin-left animate-pulse rounded-full bg-gradient-to-r from-accent via-amber-500 to-accent"
+                style={{ animation: 'shimmer 1.5s ease-in-out infinite' }}
+              />
+            </div>
+          )}
+        </div>
       </form>
 
       {/* Divider */}

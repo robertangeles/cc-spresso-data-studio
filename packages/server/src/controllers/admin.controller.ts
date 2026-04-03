@@ -263,19 +263,22 @@ export async function updateGoogleOAuthConfig(
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { clientId, clientSecret, redirectUriDev, redirectUriProd } = req.body;
 
-    // Preserve existing secret if not provided
     const existing = await adminService.getSetting('google-oauth');
-    let existingSecret = '';
+    let existingConfig = {
+      clientId: '',
+      clientSecret: '',
+      redirectUriDev: '',
+      redirectUriProd: '',
+    };
     if (existing) {
-      const parsed = JSON.parse(existing.value);
-      existingSecret = parsed.clientSecret ?? '';
+      existingConfig = { ...existingConfig, ...JSON.parse(existing.value) };
     }
 
     const config = {
-      clientId: clientId ?? '',
-      clientSecret: clientSecret || existingSecret,
-      redirectUriDev: redirectUriDev ?? '',
-      redirectUriProd: redirectUriProd ?? '',
+      clientId: clientId ?? existingConfig.clientId,
+      clientSecret: clientSecret || existingConfig.clientSecret,
+      redirectUriDev: redirectUriDev ?? existingConfig.redirectUriDev,
+      redirectUriProd: redirectUriProd ?? existingConfig.redirectUriProd,
     };
 
     await adminService.updateSetting('google-oauth', JSON.stringify(config), true);
@@ -462,16 +465,16 @@ export async function testCloudinaryConnection(
   }
 }
 
-// --- Resend Email ---
+// --- SMTP Email ---
 
-export async function getResendConfig(
+export async function getSmtpConfig(
   req: Request,
   res: Response<ApiResponse<unknown>>,
   next: NextFunction,
 ) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
-    const setting = await adminService.getSetting('resend');
+    const setting = await adminService.getSetting('smtp');
     if (!setting) {
       res.json({ success: true, data: null });
       return;
@@ -480,7 +483,11 @@ export async function getResendConfig(
     res.json({
       success: true,
       data: {
-        maskedKey: config.apiKey ? `****${config.apiKey.slice(-4)}` : '',
+        host: config.host ?? '',
+        port: config.port ?? 465,
+        secure: config.secure !== false,
+        user: config.user ?? '',
+        maskedPass: config.pass ? `****${config.pass.slice(-4)}` : '',
         fromAddress: config.fromAddress ?? '',
         fromName: config.fromName ?? '',
       },
@@ -490,35 +497,62 @@ export async function getResendConfig(
   }
 }
 
-export async function updateResendConfig(
+export async function updateSmtpConfig(
   req: Request,
   res: Response<ApiResponse<unknown>>,
   next: NextFunction,
 ) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
-    const { apiKey, fromAddress, fromName } = req.body;
+    const { host, port, secure, user, pass, fromAddress, fromName } = req.body;
 
-    const existing = await adminService.getSetting('resend');
-    let existingKey = '';
+    const existing = await adminService.getSetting('smtp');
+    let existingConfig = {
+      host: '',
+      port: 465,
+      secure: true,
+      user: '',
+      pass: '',
+      fromAddress: '',
+      fromName: 'Spresso',
+    };
     if (existing) {
-      const parsed = JSON.parse(existing.value);
-      existingKey = parsed.apiKey ?? '';
+      existingConfig = { ...existingConfig, ...JSON.parse(existing.value) };
     }
 
     const config = {
-      apiKey: apiKey || existingKey,
-      fromAddress: fromAddress ?? 'noreply@spresso.app',
-      fromName: fromName ?? 'Spresso',
+      host: host ?? existingConfig.host,
+      port: port ?? existingConfig.port,
+      secure: secure ?? existingConfig.secure,
+      user: user ?? existingConfig.user,
+      pass: pass || existingConfig.pass,
+      fromAddress: fromAddress ?? (existingConfig.fromAddress || user) ?? existingConfig.user,
+      fromName: fromName ?? existingConfig.fromName,
     };
 
-    await adminService.updateSetting('resend', JSON.stringify(config), true);
+    await adminService.updateSetting('smtp', JSON.stringify(config), true);
 
     // Invalidate cached email config
     const { invalidateEmailConfig } = await import('../services/email.service.js');
     invalidateEmailConfig();
 
-    res.json({ success: true, data: null, message: 'Resend config saved' });
+    res.json({ success: true, data: null, message: 'SMTP config saved' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function testSmtpConnection(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const { sendTestEmail } = await import('../services/email.service.js');
+    const userEmail = req.user.email;
+    await sendTestEmail(userEmail);
+    res.json({ success: true, data: null, message: `Test email sent to ${userEmail}` });
   } catch (err) {
     next(err);
   }
@@ -561,15 +595,14 @@ export async function updateTurnstileConfig(
     const { siteKey, secretKey } = req.body;
 
     const existing = await adminService.getSetting('turnstile');
-    let existingSecret = '';
+    let existingConfig = { siteKey: '', secretKey: '' };
     if (existing) {
-      const parsed = JSON.parse(existing.value);
-      existingSecret = parsed.secretKey ?? '';
+      existingConfig = { ...existingConfig, ...JSON.parse(existing.value) };
     }
 
     const config = {
-      siteKey: siteKey ?? '',
-      secretKey: secretKey || existingSecret,
+      siteKey: siteKey ?? existingConfig.siteKey,
+      secretKey: secretKey || existingConfig.secretKey,
     };
 
     await adminService.updateSetting('turnstile', JSON.stringify(config), true);

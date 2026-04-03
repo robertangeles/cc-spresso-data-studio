@@ -20,8 +20,6 @@ export function VerifyTokenPage() {
       try {
         await api.get(`/auth/verify-email?token=${encodeURIComponent(token)}`);
         setStatus('success');
-        // Redirect to login after brief celebration
-        setTimeout(() => navigate('/login', { replace: true }), 2500);
       } catch (err: unknown) {
         setStatus('error');
         const axiosErr = err as { response?: { data?: { error?: string } } };
@@ -56,9 +54,15 @@ export function VerifyTokenPage() {
               <h1 className="font-heading text-xl font-semibold text-text-primary mb-2">
                 Email verified!
               </h1>
-              <p className="text-text-tertiary text-sm">
-                Your account is ready. Redirecting you to sign in...
+              <p className="text-text-tertiary text-sm mb-4">
+                Your account is ready. You can now sign in.
               </p>
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface-0 hover:bg-accent-hover transition-colors"
+              >
+                Sign in
+              </Link>
             </div>
           )}
 

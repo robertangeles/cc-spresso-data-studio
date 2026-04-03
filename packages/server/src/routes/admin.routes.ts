@@ -21,8 +21,9 @@ router.post('/settings/google-oauth/test', adminController.testGoogleOAuthConnec
 router.get('/settings/cloudinary', adminController.getCloudinaryConfig);
 router.put('/settings/cloudinary', adminController.updateCloudinaryConfig);
 router.post('/settings/cloudinary/test', adminController.testCloudinaryConnection);
-router.get('/settings/resend', adminController.getResendConfig);
-router.put('/settings/resend', adminController.updateResendConfig);
+router.get('/settings/smtp', adminController.getSmtpConfig);
+router.put('/settings/smtp', adminController.updateSmtpConfig);
+router.post('/settings/smtp/test', adminController.testSmtpConnection);
 router.get('/settings/turnstile', adminController.getTurnstileConfig);
 router.put('/settings/turnstile', adminController.updateTurnstileConfig);
 
