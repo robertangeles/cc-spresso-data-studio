@@ -11,12 +11,13 @@ import { AvatarUpload } from '../../components/ui/AvatarUpload';
 import { api, getAccessToken } from '../../lib/api';
 import type { CreateRuleDTO } from '@cc/shared';
 
-type Tab = 'info' | 'rules' | 'brand' | 'preferences' | 'social';
+type Tab = 'info' | 'rules' | 'brand' | 'billing' | 'preferences' | 'social';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'info', label: 'Profile' },
   { key: 'rules', label: 'Rules Engine' },
   { key: 'brand', label: 'Brand Kit' },
+  { key: 'billing', label: 'Billing' },
   { key: 'preferences', label: 'Preferences' },
   { key: 'social', label: 'Social Accounts' },
 ];
@@ -99,6 +100,7 @@ export function ProfilePage() {
       )}
       {activeTab === 'rules' && <RulesEngineTab />}
       {activeTab === 'brand' && <BrandKitTab profile={profile} updateProfile={updateProfile} />}
+      {activeTab === 'billing' && <UserBillingTab />}
       {activeTab === 'preferences' && (
         <PreferencesTab profile={profile} updateProfile={updateProfile} />
       )}
@@ -467,12 +469,21 @@ function BrandKitTab({
   const [brandVoice, setBrandVoice] = useState(profile?.brandVoice ?? '');
   const [targetAudience, setTargetAudience] = useState(profile?.targetAudience ?? '');
   const [keyMessaging, setKeyMessaging] = useState(profile?.keyMessaging ?? '');
+  const [taxId, setTaxId] = useState(profile?.taxId ?? '');
+  const [taxIdType, setTaxIdType] = useState(profile?.taxIdType ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
-    await updateProfile({ brandName, brandVoice, targetAudience, keyMessaging });
+    await updateProfile({
+      brandName,
+      brandVoice,
+      targetAudience,
+      keyMessaging,
+      taxId: taxId || undefined,
+      taxIdType: taxIdType || undefined,
+    });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -531,6 +542,54 @@ function BrandKitTab({
               className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
             />
           </div>
+
+          {/* Tax / Billing Identity */}
+          <div className="mt-6 pt-6 border-t border-white/5">
+            <h4 className="text-sm font-semibold text-text-primary mb-1">Billing Identity</h4>
+            <p className="text-xs text-text-tertiary mb-4">
+              Your business name and tax number will appear on all invoices. If no brand name is
+              set, your account name will be used.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
+                  Tax ID Type
+                </label>
+                <select
+                  value={taxIdType}
+                  onChange={(e) => setTaxIdType(e.target.value)}
+                  className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+                >
+                  <option value="">Select type...</option>
+                  <option value="au_abn">AU ABN</option>
+                  <option value="au_arn">AU ARN</option>
+                  <option value="eu_vat">EU VAT</option>
+                  <option value="gb_vat">GB VAT</option>
+                  <option value="us_ein">US EIN</option>
+                  <option value="nz_gst">NZ GST</option>
+                  <option value="sg_gst">SG GST</option>
+                  <option value="in_gst">IN GST</option>
+                  <option value="ca_bn">CA BN</option>
+                  <option value="jp_cn">JP CN</option>
+                  <option value="kr_brn">KR BRN</option>
+                  <option value="hk_br">HK BR</option>
+                </select>
+              </div>
+              <Input
+                label="Tax ID Number"
+                value={taxId}
+                onChange={(e) => setTaxId(e.target.value)}
+                placeholder={
+                  taxIdType === 'au_abn'
+                    ? '12 345 678 901'
+                    : taxIdType === 'eu_vat'
+                      ? 'DE123456789'
+                      : 'Enter your tax ID'
+                }
+              />
+            </div>
+          </div>
+
           <div className="flex items-center gap-3">
             <Button onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : 'Save Brand Kit'}
@@ -538,6 +597,159 @@ function BrandKitTab({
             {saved && <span className="text-sm text-status-success">Saved</span>}
           </div>
         </div>
+      </Card>
+    </div>
+  );
+}
+
+// --- User Billing Tab (Invoices + Plan Summary) ---
+
+interface InvoiceRow {
+  id: string;
+  date: number;
+  amount: number;
+  currency: string;
+  status: string | null;
+  description: string | null;
+  hostedUrl: string | null;
+  pdfUrl: string | null;
+}
+
+function UserBillingTab() {
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get('/billing/invoices');
+        if (!cancelled && data.success) {
+          setInvoices(data.data.invoices);
+        }
+      } catch {
+        // Invoices unavailable
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      {/* Invoice History */}
+      <Card padding="lg">
+        <div className="flex items-center gap-2 mb-4">
+          <svg
+            className="h-5 w-5 text-accent"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            />
+          </svg>
+          <h3 className="text-lg font-semibold text-text-primary">Invoice History</h3>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="h-6 w-6 animate-spin rounded-full border-4 border-accent border-t-transparent" />
+          </div>
+        ) : invoices.length === 0 ? (
+          <div className="flex flex-col items-center py-8 text-text-secondary">
+            <svg
+              className="h-8 w-8 mb-2 text-white/10"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <p className="text-sm">
+              No invoices yet. Invoices will appear here after your first payment.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/5 text-text-secondary">
+                  <th className="pb-3 pr-4 text-left font-medium">Date</th>
+                  <th className="pb-3 pr-4 text-left font-medium">Description</th>
+                  <th className="pb-3 pr-4 text-right font-medium">Amount</th>
+                  <th className="pb-3 pr-4 text-center font-medium">Status</th>
+                  <th className="pb-3 text-right font-medium">Invoice</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {invoices.map((inv) => (
+                  <tr key={inv.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="py-3 pr-4 text-text-secondary whitespace-nowrap">
+                      {new Date(inv.date * 1000).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 pr-4 text-text-primary">
+                      {inv.description ?? 'Subscription payment'}
+                    </td>
+                    <td className="py-3 pr-4 text-right font-medium text-text-primary whitespace-nowrap">
+                      ${(inv.amount / 100).toFixed(2)} {inv.currency.toUpperCase()}
+                    </td>
+                    <td className="py-3 pr-4 text-center">
+                      <span
+                        className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+                          inv.status === 'paid'
+                            ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                            : inv.status === 'open'
+                              ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                              : 'bg-white/5 text-text-secondary border-white/10'
+                        }`}
+                      >
+                        {(inv.status ?? 'unknown').toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="py-3 text-right">
+                      {inv.hostedUrl && (
+                        <a
+                          href={inv.hostedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all duration-200"
+                        >
+                          <svg
+                            className="h-3 w-3"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                            />
+                          </svg>
+                          View
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );

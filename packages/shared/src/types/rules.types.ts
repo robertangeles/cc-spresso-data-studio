@@ -43,6 +43,9 @@ export interface UserProfile {
   defaultEditorMaxRounds: number;
   defaultEditorApprovalMode: 'auto' | 'manual';
   timezone: string | null;
+  // Tax / billing identity
+  taxId: string | null;
+  taxIdType: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -60,4 +63,6 @@ export interface UpdateProfileDTO {
   defaultEditorMaxRounds?: number;
   defaultEditorApprovalMode?: 'auto' | 'manual';
   timezone?: string;
+  taxId?: string;
+  taxIdType?: string;
 }

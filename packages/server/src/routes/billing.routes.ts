@@ -35,6 +35,18 @@ router.post('/portal', billingController.createPortal);
 // Cancel subscription at period end
 router.post('/cancel', billingController.cancelSubscription);
 
+// Plan change: preview proration + credit delta
+router.post('/preview-change', billingController.previewPlanChange);
+
+// Plan change: execute upgrade or schedule downgrade
+router.post('/change-plan', billingController.changePlan);
+
+// Credit forecast (days remaining based on usage)
+router.get('/forecast', billingController.getForecast);
+
+// Invoice history (from Stripe)
+router.get('/invoices', billingController.getInvoices);
+
 // ---------------------------------------------------------------------------
 // Admin routes (TODO: add requireRole('Admin') when wired)
 // ---------------------------------------------------------------------------

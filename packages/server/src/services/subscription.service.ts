@@ -4,7 +4,7 @@ import { db, schema } from '../db/index.js';
 import { logger } from '../config/logger.js';
 import * as stripeService from './stripe.service.js';
 import { sendBillingEmail } from './emailTemplate.service.js';
-import { NotFoundError } from '../utils/errors.js';
+import { NotFoundError, ValidationError, ConflictError } from '../utils/errors.js';
 
 // ---------------------------------------------------------------------------
 // Plan queries
@@ -95,6 +95,15 @@ export async function createCheckout(
 ): Promise<string> {
   const plan = await getPlanById(planId);
 
+  // Guard: reject if user already has an active paid subscription.
+  // Existing subscribers must use the change-plan endpoint instead.
+  const { subscription: existingSub } = await getSubscription(userId);
+  if (existingSub && existingSub.status === 'active' && existingSub.stripeSubscriptionId) {
+    throw new ConflictError(
+      'You already have an active subscription. Use Change Plan to upgrade or downgrade.',
+    );
+  }
+
   // Resolve Stripe Price ID from settings (not hardcoded on the plan)
   const priceId = await stripeService.getPriceIdForPlan(plan.name);
 
@@ -160,7 +169,37 @@ export async function activateSubscription(
   });
 
   if (existing) {
-    // Update existing subscription (upgrade/reactivation)
+    // Delta-based credit calculation for plan changes:
+    // On upgrade: add the difference (newPlan.credits - oldPlan.credits) to remaining
+    // On reactivation/new period: full reset to new plan credits
+    const oldPlan = await db.query.subscriptionPlans.findFirst({
+      where: eq(schema.subscriptionPlans.id, existing.planId),
+    });
+
+    const isPlanChange = oldPlan && oldPlan.id !== plan.id && existing.status === 'active';
+    let newCreditsRemaining: number;
+    let creditDelta: number;
+
+    if (isPlanChange && oldPlan) {
+      // Mid-cycle plan change: add the credit difference
+      creditDelta = plan.creditsPerMonth - oldPlan.creditsPerMonth;
+      if (creditDelta > 0) {
+        // Upgrade: boost remaining credits by the delta
+        newCreditsRemaining = Math.min(
+          existing.creditsRemaining + creditDelta,
+          plan.creditsPerMonth,
+        );
+      } else {
+        // Downgrade: keep current remaining, but cap at new plan max
+        // (actual reset happens at period end via Stripe schedule)
+        newCreditsRemaining = Math.min(existing.creditsRemaining, plan.creditsPerMonth);
+      }
+    } else {
+      // New subscription or period renewal: full allocation
+      creditDelta = plan.creditsPerMonth;
+      newCreditsRemaining = plan.creditsPerMonth;
+    }
+
     await db
       .update(schema.subscriptions)
       .set({
@@ -168,7 +207,7 @@ export async function activateSubscription(
         stripeCustomerId,
         stripeSubscriptionId,
         status: 'active',
-        creditsRemaining: plan.creditsPerMonth,
+        creditsRemaining: newCreditsRemaining,
         creditsAllocated: plan.creditsPerMonth,
         currentPeriodStart,
         currentPeriodEnd,
@@ -177,14 +216,18 @@ export async function activateSubscription(
       })
       .where(eq(schema.subscriptions.id, existing.id));
 
-    // Log credit allocation
+    // Log credit transaction with accurate delta
+    const description = isPlanChange
+      ? `Plan change: ${oldPlan!.displayName} → ${plan.displayName} (${creditDelta > 0 ? '+' : ''}${creditDelta} credits)`
+      : `Subscription activated: ${plan.displayName}`;
+
     await db.insert(schema.creditTransactions).values({
       userId,
       subscriptionId: existing.id,
-      amount: plan.creditsPerMonth,
-      balanceAfter: plan.creditsPerMonth,
-      actionType: 'allocation',
-      description: `Subscription activated: ${plan.displayName}`,
+      amount: isPlanChange ? creditDelta : plan.creditsPerMonth,
+      balanceAfter: newCreditsRemaining,
+      actionType: isPlanChange ? 'plan_change' : 'allocation',
+      description,
     });
   } else {
     // Create new subscription
@@ -419,6 +462,12 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
         // Check if plan changed (upgrade/downgrade)
         const newPlan = await getPlanByStripePriceId(priceId);
         if (newPlan && newPlan.id !== subscription.planId) {
+          // Detect direction: compare sortOrder to determine upgrade vs downgrade
+          const oldPlan = await db.query.subscriptionPlans.findFirst({
+            where: eq(schema.subscriptionPlans.id, subscription.planId),
+          });
+          const isUpgrade = !oldPlan || newPlan.sortOrder > oldPlan.sortOrder;
+
           await activateSubscription(
             subscription.userId,
             stripeSub.id,
@@ -428,16 +477,23 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
             new Date(updatedItem.current_period_end * 1000),
           );
 
-          // Send plan change email
-          const upgradeUser = await db.query.users.findFirst({
+          // Send direction-appropriate email
+          const planChangeUser = await db.query.users.findFirst({
             where: eq(schema.users.id, subscription.userId),
           });
-          if (upgradeUser) {
-            sendBillingEmail(upgradeUser.email, 'subscription_upgraded', {
-              userName: upgradeUser.name,
-              userEmail: upgradeUser.email,
+          if (planChangeUser) {
+            const emailTemplate = isUpgrade ? 'subscription_upgraded' : 'subscription_downgraded';
+            const creditDelta = oldPlan
+              ? newPlan.creditsPerMonth - oldPlan.creditsPerMonth
+              : newPlan.creditsPerMonth;
+
+            sendBillingEmail(planChangeUser.email, emailTemplate, {
+              userName: planChangeUser.name,
+              userEmail: planChangeUser.email,
               planName: newPlan.displayName,
+              previousPlan: oldPlan?.displayName ?? 'Free',
               creditsAllocated: String(newPlan.creditsPerMonth),
+              creditDelta: `${creditDelta > 0 ? '+' : ''}${creditDelta.toLocaleString()}`,
               appName: 'Spresso',
               appUrl: 'https://spresso.xyz',
             });
@@ -508,7 +564,7 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
             );
           }
 
-          // Send payment confirmation email
+          // Send payment confirmation email with invoice link
           if (paidSub) {
             const paidUser = await db.query.users.findFirst({
               where: eq(schema.users.id, paidSub.userId),
@@ -519,6 +575,7 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
                 userEmail: paidUser.email,
                 invoiceAmount: `$${(invoice.amount_paid / 100).toFixed(2)}`,
                 invoiceDate: new Date().toLocaleDateString(),
+                invoicePdfUrl: invoice.hosted_invoice_url ?? '',
                 appName: 'Spresso',
                 appUrl: 'https://spresso.xyz',
               });
@@ -548,6 +605,8 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
             sendBillingEmail(failedUser.email, 'invoice_payment_failed', {
               userName: failedUser.name,
               userEmail: failedUser.email,
+              invoiceAmount: `$${(invoice.amount_due / 100).toFixed(2)}`,
+              invoicePdfUrl: invoice.hosted_invoice_url ?? '',
               appName: 'Spresso',
               appUrl: 'https://spresso.xyz',
             });
@@ -578,6 +637,247 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
 
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Plan change: preview + execute
+// ---------------------------------------------------------------------------
+
+/**
+ * Preview the impact of changing to a different plan.
+ * Returns proration cost for upgrades, or scheduled date for downgrades.
+ *
+ * Data flow:
+ *   INPUT ──▶ VALIDATE ──▶ STRIPE PREVIEW ──▶ CREDIT DELTA ──▶ RESPONSE
+ *     │           │              │                  │
+ *     ▼           ▼              ▼                  ▼
+ *   [no sub]  [same plan]    [timeout]         [negative delta]
+ *   [bad id]  [free target]  [rate limit]      [cap at max]
+ */
+export async function previewPlanChange(
+  userId: string,
+  targetPlanId: string,
+): Promise<{
+  isUpgrade: boolean;
+  isDowngrade: boolean;
+  currentPlan: { name: string; displayName: string; creditsPerMonth: number };
+  targetPlan: { name: string; displayName: string; creditsPerMonth: number; priceCents: number };
+  creditDelta: number;
+  newCreditsRemaining: number;
+  proratedAmountDue: number | null;
+  currency: string;
+  effectiveDate: string;
+  effectiveNow: boolean;
+}> {
+  const { subscription, plan: currentPlan } = await getSubscription(userId);
+  if (!subscription || !currentPlan) {
+    throw new NotFoundError('Active subscription');
+  }
+  if (!subscription.stripeSubscriptionId || !subscription.stripeCustomerId) {
+    throw new ValidationError({
+      subscription: ['No Stripe subscription found. Use checkout for initial subscription.'],
+    });
+  }
+
+  const targetPlan = await getPlanById(targetPlanId);
+
+  if (targetPlan.id === currentPlan.id) {
+    throw new ValidationError({ targetPlanId: ['You are already on this plan.'] });
+  }
+
+  if (targetPlan.name === 'free') {
+    throw new ValidationError({
+      targetPlanId: ['Use the cancel endpoint to revert to the free tier.'],
+    });
+  }
+
+  if (subscription.status === 'past_due') {
+    throw new ValidationError({
+      subscription: ['Please resolve your outstanding payment before changing plans.'],
+    });
+  }
+
+  const isUpgrade = targetPlan.sortOrder > currentPlan.sortOrder;
+  const isDowngrade = targetPlan.sortOrder < currentPlan.sortOrder;
+  const creditDelta = targetPlan.creditsPerMonth - currentPlan.creditsPerMonth;
+
+  let proratedAmountDue: number | null = null;
+  let currency = 'usd';
+  let effectiveDate: string;
+  let effectiveNow: boolean;
+
+  if (isUpgrade) {
+    // Preview proration cost from Stripe
+    const targetPriceId = await stripeService.getPriceIdForPlan(targetPlan.name);
+    const preview = await stripeService.previewInvoice(
+      subscription.stripeCustomerId,
+      subscription.stripeSubscriptionId,
+      targetPriceId,
+    );
+    proratedAmountDue = preview.proratedAmountDue;
+    currency = preview.currency;
+    effectiveDate = new Date().toISOString();
+    effectiveNow = true;
+  } else {
+    // Downgrade takes effect at period end
+    effectiveDate = subscription.currentPeriodEnd
+      ? new Date(subscription.currentPeriodEnd).toISOString()
+      : new Date().toISOString();
+    effectiveNow = false;
+  }
+
+  // Calculate what credits would look like after the change
+  let newCreditsRemaining: number;
+  if (isUpgrade) {
+    newCreditsRemaining = Math.min(
+      subscription.creditsRemaining + creditDelta,
+      targetPlan.creditsPerMonth,
+    );
+  } else {
+    // Downgrade: credits don't change until period end
+    newCreditsRemaining = subscription.creditsRemaining;
+  }
+
+  return {
+    isUpgrade,
+    isDowngrade,
+    currentPlan: {
+      name: currentPlan.name,
+      displayName: currentPlan.displayName,
+      creditsPerMonth: currentPlan.creditsPerMonth,
+    },
+    targetPlan: {
+      name: targetPlan.name,
+      displayName: targetPlan.displayName,
+      creditsPerMonth: targetPlan.creditsPerMonth,
+      priceCents: targetPlan.priceCents,
+    },
+    creditDelta,
+    newCreditsRemaining,
+    proratedAmountDue,
+    currency,
+    effectiveDate,
+    effectiveNow,
+  };
+}
+
+/**
+ * Execute a plan change (upgrade or downgrade).
+ *
+ * Upgrade flow:
+ *   stripe.subscriptions.update() → webhook fires → activateSubscription() with delta credits
+ *
+ * Downgrade flow:
+ *   stripe.subscriptionSchedules.create() → schedule price change at period end
+ *   → webhook fires at renewal → activateSubscription() with new plan credits
+ */
+export async function changePlan(
+  userId: string,
+  targetPlanId: string,
+): Promise<{
+  success: boolean;
+  isUpgrade: boolean;
+  scheduledDate: string | null;
+  portalUrl: string | null;
+}> {
+  const { subscription, plan: currentPlan } = await getSubscription(userId);
+  if (!subscription || !currentPlan) {
+    throw new NotFoundError('Active subscription');
+  }
+  if (!subscription.stripeSubscriptionId || !subscription.stripeCustomerId) {
+    throw new ValidationError({ subscription: ['No Stripe subscription to change.'] });
+  }
+
+  const targetPlan = await getPlanById(targetPlanId);
+
+  if (targetPlan.id === currentPlan.id) {
+    throw new ValidationError({ targetPlanId: ['Already on this plan.'] });
+  }
+  if (targetPlan.name === 'free') {
+    throw new ValidationError({ targetPlanId: ['Use cancel to revert to free tier.'] });
+  }
+  if (subscription.status === 'past_due') {
+    throw new ValidationError({ subscription: ['Resolve outstanding payment first.'] });
+  }
+
+  const isUpgrade = targetPlan.sortOrder > currentPlan.sortOrder;
+  const targetPriceId = await stripeService.getPriceIdForPlan(targetPlan.name);
+
+  if (isUpgrade) {
+    // Immediate upgrade via subscriptions.update()
+    try {
+      await stripeService.updateSubscriptionPrice(subscription.stripeSubscriptionId, targetPriceId);
+    } catch (error: unknown) {
+      // Handle card decline: return portal URL for payment method update
+      const stripeErr = error as { type?: string; code?: string };
+      if (stripeErr.type === 'StripeCardError' || stripeErr.code === 'card_declined') {
+        const portalUrl = await stripeService.createPortalSession(
+          subscription.stripeCustomerId,
+          'https://spresso.xyz/settings/billing',
+        );
+        return {
+          success: false,
+          isUpgrade: true,
+          scheduledDate: null,
+          portalUrl,
+        };
+      }
+      throw error;
+    }
+
+    // Webhook will handle credit allocation via activateSubscription()
+    return { success: true, isUpgrade: true, scheduledDate: null, portalUrl: null };
+  } else {
+    // Deferred downgrade via Stripe Subscription Schedules
+    const { scheduledDate } = await stripeService.scheduleDowngrade(
+      subscription.stripeSubscriptionId,
+      targetPriceId,
+    );
+
+    // Send downgrade scheduled email immediately (webhook fires later at renewal)
+    const user = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
+    if (user) {
+      sendBillingEmail(user.email, 'subscription_downgraded', {
+        userName: user.name,
+        userEmail: user.email,
+        planName: targetPlan.displayName,
+        previousPlan: currentPlan.displayName,
+        creditsAllocated: String(targetPlan.creditsPerMonth),
+        effectiveDate: new Date(scheduledDate * 1000).toLocaleDateString(),
+        appName: 'Spresso',
+        appUrl: 'https://spresso.xyz',
+      });
+    }
+
+    return {
+      success: true,
+      isUpgrade: false,
+      scheduledDate: new Date(scheduledDate * 1000).toISOString(),
+      portalUrl: null,
+    };
+  }
+}
+
+/**
+ * Apply a retention offer (coupon) to keep user on current plan instead of downgrading.
+ */
+export async function applyRetentionOffer(
+  userId: string,
+  couponId: string,
+): Promise<{ success: boolean; message: string }> {
+  const { subscription } = await getSubscription(userId);
+  if (!subscription?.stripeSubscriptionId) {
+    throw new NotFoundError('Active subscription');
+  }
+
+  await stripeService.applyCoupon(subscription.stripeSubscriptionId, couponId);
+
+  logger.info({ userId, couponId }, 'Retention offer accepted');
+
+  return {
+    success: true,
+    message: 'Discount applied to your subscription.',
+  };
 }
 
 // ---------------------------------------------------------------------------

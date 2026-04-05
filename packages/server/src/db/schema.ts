@@ -542,6 +542,9 @@ export const userProfiles = pgTable('user_profiles', {
     .notNull()
     .default('auto'),
   timezone: varchar('timezone', { length: 50 }),
+  // Tax / billing identity — synced to Stripe customer for invoices
+  taxId: varchar('tax_id', { length: 50 }),
+  taxIdType: varchar('tax_id_type', { length: 20 }), // Stripe tax ID type: au_abn, eu_vat, gb_vat, us_ein, etc.
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -19,7 +19,9 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSubscription } from '../../context/SubscriptionContext';
 import { CreditCounter } from '../CreditCounter';
+import { CreditForecast } from '../billing/CreditForecast';
 import { api } from '../../lib/api';
 
 interface Conversation {
@@ -38,6 +40,8 @@ const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
 
 export function Sidebar() {
   const { user, logout, sessionStatus } = useAuth();
+  const { plan, subscription, canUpgrade, canDowngrade, pendingDowngrade, openPlanSwitcher } =
+    useSubscription();
   const navigate = useNavigate();
   const location = useLocation();
   const [showMenu, setShowMenu] = useState(false);
@@ -304,14 +308,78 @@ export function Sidebar() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-[12px] font-medium text-text-primary">{user.name}</p>
               <p className="truncate text-[10px] text-text-tertiary">{user.email}</p>
-              <p className="truncate text-[10px] text-text-tertiary">
-                {user.role === 'Administrator'
-                  ? 'Administrator'
-                  : user.role === 'Paid Subscriber'
-                    ? `Paid Subscriber — ${user.subscriptionTier === 'ultra' ? 'Ultra' : 'Pro'}`
-                    : 'Subscriber'}
-              </p>
+              {/* Plan badge with upgrade CTA */}
+              {user.role === 'Administrator' ? (
+                <p className="truncate text-[10px] text-text-tertiary">Administrator</p>
+              ) : user.role === 'Paid Subscriber' ? (
+                canUpgrade ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openPlanSwitcher();
+                    }}
+                    className="flex items-center gap-1.5 group/upgrade"
+                  >
+                    <span className="text-[10px] font-semibold text-accent">
+                      {plan?.displayName ?? (user.subscriptionTier === 'ultra' ? 'Ultra' : 'Pro')}
+                    </span>
+                    <span className="text-[10px] font-medium text-accent/60 group-hover/upgrade:text-accent transition-colors">
+                      Upgrade →
+                    </span>
+                  </button>
+                ) : pendingDowngrade ? (
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-semibold text-accent">
+                      {plan?.displayName ?? 'Ultra'}
+                    </span>
+                    <span className="text-[9px] text-amber-400/80">
+                      → {pendingDowngrade.planName} on{' '}
+                      {new Date(pendingDowngrade.effectiveDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                ) : canDowngrade ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openPlanSwitcher();
+                    }}
+                    className="flex items-center gap-1.5 group/upgrade"
+                  >
+                    <span className="text-[10px] font-semibold text-accent">
+                      {plan?.displayName ?? 'Ultra'}
+                    </span>
+                    <span className="text-[10px] font-medium text-text-tertiary group-hover/upgrade:text-accent transition-colors">
+                      Downgrade →
+                    </span>
+                  </button>
+                ) : (
+                  <p className="text-[10px] font-semibold text-accent">
+                    {plan?.displayName ?? 'Ultra'}
+                  </p>
+                )
+              ) : (
+                <p className="truncate text-[10px] text-text-tertiary">Subscriber</p>
+              )}
               <CreditCounter />
+              <CreditForecast />
+              {/* Low-credit nudge: show when credits < 20% */}
+              {subscription &&
+                subscription.creditsAllocated > 0 &&
+                subscription.creditsRemaining / subscription.creditsAllocated < 0.2 &&
+                canUpgrade && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openPlanSwitcher();
+                    }}
+                    className="mt-1 w-full rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-1 text-[9px] text-amber-400 hover:bg-amber-500/15 transition-all"
+                  >
+                    Running low? Upgrade for more credits →
+                  </button>
+                )}
             </div>
           </button>
 

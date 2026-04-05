@@ -302,6 +302,301 @@ export async function getSubscription(stripeSubscriptionId: string): Promise<Str
 }
 
 // ---------------------------------------------------------------------------
+// Plan change (upgrade / downgrade)
+// ---------------------------------------------------------------------------
+
+/**
+ * Preview the proration cost for changing a subscription to a new price.
+ * Uses Stripe's invoice preview to show the user what they'd be charged.
+ */
+export async function previewInvoice(
+  customerId: string,
+  subscriptionId: string,
+  newPriceId: string,
+): Promise<{
+  proratedAmountDue: number;
+  currency: string;
+  periodEnd: number;
+}> {
+  try {
+    const stripe = await getStripe();
+
+    // Get current subscription to find the item ID
+    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+    const itemId = sub.items.data[0]?.id;
+    if (!itemId) throw new Error('Subscription has no items');
+
+    const preview = await stripe.invoices.createPreview({
+      customer: customerId,
+      subscription: subscriptionId,
+      subscription_details: {
+        items: [{ id: itemId, price: newPriceId }],
+        proration_behavior: 'create_prorations',
+      },
+    });
+
+    // In Stripe v22, period dates are on subscription items
+    const periodEnd = sub.items.data[0]?.current_period_end ?? Math.floor(Date.now() / 1000);
+
+    logger.info(
+      { customerId, subscriptionId, newPriceId, amount: preview.amount_due },
+      'Invoice preview created',
+    );
+
+    return {
+      proratedAmountDue: preview.amount_due,
+      currency: preview.currency,
+      periodEnd,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error({ error: message, subscriptionId }, 'Failed to preview invoice');
+    throw new Error(`Failed to preview plan change: ${message}`);
+  }
+}
+
+/**
+ * Update a subscription's price (immediate upgrade).
+ * Stripe will prorate the charge automatically.
+ */
+export async function updateSubscriptionPrice(
+  subscriptionId: string,
+  newPriceId: string,
+): Promise<Stripe.Response<Stripe.Subscription>> {
+  try {
+    const stripe = await getStripe();
+    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+    const itemId = sub.items.data[0]?.id;
+    if (!itemId) throw new Error('Subscription has no items');
+
+    const updated = await stripe.subscriptions.update(subscriptionId, {
+      items: [{ id: itemId, price: newPriceId }],
+      proration_behavior: 'create_prorations',
+    });
+
+    logger.info({ subscriptionId, newPriceId }, 'Subscription price updated (upgrade)');
+    return updated;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error({ error: message, subscriptionId }, 'Failed to update subscription price');
+    throw error; // Re-throw original for Stripe error type detection
+  }
+}
+
+/**
+ * Schedule a price change at the end of the current billing period (deferred downgrade).
+ * Uses Stripe Subscription Schedules to change price at renewal.
+ */
+export async function scheduleDowngrade(
+  subscriptionId: string,
+  newPriceId: string,
+): Promise<{ scheduledDate: number }> {
+  try {
+    const stripe = await getStripe();
+    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+
+    // In Stripe v22, period dates live on subscription items
+    const firstItem = sub.items.data[0];
+    const periodStart = firstItem?.current_period_start ?? Math.floor(Date.now() / 1000);
+    const periodEnd = firstItem?.current_period_end ?? Math.floor(Date.now() / 1000) + 30 * 86400;
+
+    // Create a subscription schedule from the existing subscription
+    const schedule = await stripe.subscriptionSchedules.create({
+      from_subscription: subscriptionId,
+    });
+
+    // Update the schedule: current phase stays, add new phase at period end with new price
+    await stripe.subscriptionSchedules.update(schedule.id, {
+      phases: [
+        {
+          items: [{ price: firstItem.price.id, quantity: 1 }],
+          start_date: periodStart,
+          end_date: periodEnd,
+        },
+        {
+          items: [{ price: newPriceId, quantity: 1 }],
+          start_date: periodEnd,
+        },
+      ],
+    });
+
+    logger.info(
+      { subscriptionId, newPriceId, scheduledDate: periodEnd },
+      'Downgrade scheduled at period end',
+    );
+
+    return { scheduledDate: periodEnd };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error({ error: message, subscriptionId }, 'Failed to schedule downgrade');
+    throw new Error(`Failed to schedule downgrade: ${message}`);
+  }
+}
+
+/**
+ * Apply a coupon to an existing subscription (retention offer).
+ */
+export async function applyCoupon(
+  subscriptionId: string,
+  couponId: string,
+): Promise<Stripe.Response<Stripe.Subscription>> {
+  try {
+    const stripe = await getStripe();
+    const updated = await stripe.subscriptions.update(subscriptionId, {
+      discounts: [{ coupon: couponId }],
+    });
+
+    logger.info({ subscriptionId, couponId }, 'Coupon applied to subscription');
+    return updated;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error({ error: message, subscriptionId, couponId }, 'Failed to apply coupon');
+    throw error; // Re-throw for Stripe error type detection
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pending schedule check (detect scheduled downgrades)
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a subscription has a pending schedule (e.g. scheduled downgrade).
+ * Returns the scheduled plan price ID and date, or null if no schedule.
+ */
+export async function getPendingSchedule(
+  subscriptionId: string,
+): Promise<{ scheduledPriceId: string; scheduledDate: number } | null> {
+  try {
+    const stripe = await getStripe();
+
+    // Subscription object has a `schedule` field linking to any active schedule
+    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+    if (!sub.schedule) return null;
+
+    const scheduleId = typeof sub.schedule === 'string' ? sub.schedule : sub.schedule.id;
+    const schedule = await stripe.subscriptionSchedules.retrieve(scheduleId);
+
+    if (schedule.status !== 'active') return null;
+
+    // Check if there's a future phase with a different price
+    const phases = schedule.phases;
+    if (phases.length < 2) return null;
+
+    const futurePhase = phases[phases.length - 1];
+    const futureItem = futurePhase.items[0];
+    if (!futureItem) return null;
+
+    const priceId = typeof futureItem.price === 'string' ? futureItem.price : futureItem.price;
+
+    return {
+      scheduledPriceId: priceId as string,
+      scheduledDate: futurePhase.start_date,
+    };
+  } catch {
+    // Schedule check is non-critical — fail silently
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Invoices
+// ---------------------------------------------------------------------------
+
+/**
+ * List invoices for a Stripe customer (for in-app invoice history).
+ */
+export async function listInvoices(
+  customerId: string,
+  limit = 20,
+): Promise<
+  Array<{
+    id: string;
+    date: number;
+    amount: number;
+    currency: string;
+    status: string | null;
+    description: string | null;
+    hostedUrl: string | null;
+    pdfUrl: string | null;
+  }>
+> {
+  try {
+    const stripe = await getStripe();
+    const invoices = await stripe.invoices.list({
+      customer: customerId,
+      limit,
+    });
+
+    return invoices.data.map((inv) => ({
+      id: inv.id,
+      date: inv.created,
+      amount: inv.amount_paid ?? inv.amount_due,
+      currency: inv.currency,
+      status: inv.status,
+      description: inv.lines.data[0]?.description ?? null,
+      hostedUrl: inv.hosted_invoice_url ?? null,
+      pdfUrl: inv.invoice_pdf ?? null,
+    }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error({ error: message, customerId }, 'Failed to list invoices');
+    throw new Error(`Failed to list invoices: ${message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Customer billing sync (business name + tax ID for invoices)
+// ---------------------------------------------------------------------------
+
+/**
+ * Sync business name and tax ID to a Stripe customer.
+ * - Updates customer name to brandName (or falls back to user name)
+ * - Creates a tax ID on the customer (Stripe displays it on invoices)
+ */
+export async function syncCustomerBilling(
+  customerId: string,
+  displayName: string,
+  taxId?: string | null,
+  taxIdType?: string | null,
+): Promise<void> {
+  try {
+    const stripe = await getStripe();
+
+    // Update customer name (shows on invoices)
+    await stripe.customers.update(customerId, {
+      name: displayName,
+    });
+
+    // Set tax ID if provided
+    if (taxId && taxIdType) {
+      // List existing tax IDs to avoid duplicates
+      const existing = await stripe.customers.listTaxIds(customerId, { limit: 10 });
+      const alreadySet = existing.data.some((t) => t.type === taxIdType && t.value === taxId);
+
+      if (!alreadySet) {
+        // Remove old tax IDs of same type before adding new
+        for (const t of existing.data) {
+          if (t.type === taxIdType) {
+            await stripe.customers.deleteTaxId(customerId, t.id);
+          }
+        }
+
+        await stripe.customers.createTaxId(customerId, {
+          type: taxIdType as Stripe.CustomerCreateTaxIdParams.Type,
+          value: taxId,
+        });
+      }
+    }
+
+    logger.info({ customerId, displayName, taxIdType }, 'Customer billing info synced');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error({ error: message, customerId }, 'Failed to sync customer billing');
+    throw new Error(`Failed to sync billing info: ${message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Connection test
 // ---------------------------------------------------------------------------
 

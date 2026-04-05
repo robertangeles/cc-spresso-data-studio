@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { api } from '../lib/api';
 
-interface Plan {
+export interface Plan {
   id: string;
   name: string;
   displayName: string;
@@ -31,12 +31,23 @@ interface SubscriptionState {
     canceledAt: string | null;
   } | null;
   creditCosts: CreditCost[];
+  allPlans: Plan[];
   isLoading: boolean;
+  /** True if current plan is not the highest tier */
+  canUpgrade: boolean;
+  /** True if current plan is above free tier */
+  canDowngrade: boolean;
+  /** Pending downgrade info (null if no downgrade scheduled) */
+  pendingDowngrade: { planName: string; effectiveDate: string } | null;
+  /** Whether the plan switcher modal is open */
+  planSwitcherOpen: boolean;
 }
 
 interface SubscriptionContextValue extends SubscriptionState {
   refreshSubscription: () => Promise<void>;
   getCostForAction: (actionType: string, isPremium?: boolean) => number;
+  openPlanSwitcher: () => void;
+  closePlanSwitcher: () => void;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextValue | null>(null);
@@ -46,7 +57,12 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     plan: null,
     subscription: null,
     creditCosts: [],
+    allPlans: [],
     isLoading: true,
+    canUpgrade: false,
+    canDowngrade: false,
+    pendingDowngrade: null,
+    planSwitcherOpen: false,
   });
 
   const refreshSubscription = useCallback(async () => {
@@ -56,11 +72,35 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         api.get('/billing/plans').catch(() => null),
       ]);
 
+      const currentPlan = subRes?.data?.data?.plan ?? null;
+      const allPlans: Plan[] = (plansRes?.data?.data?.plans ?? []).map(
+        (p: Record<string, unknown>) => ({
+          id: p.id as string,
+          name: p.name as string,
+          displayName: p.displayName as string,
+          priceCents: p.priceCents as number,
+          currency: (p.currency as string) ?? 'usd',
+          creditsPerMonth: p.creditsPerMonth as number,
+          features: p.features as string[],
+          sortOrder: p.sortOrder as number,
+        }),
+      );
+
+      const maxSortOrder = allPlans.length > 0 ? Math.max(...allPlans.map((p) => p.sortOrder)) : 0;
+      const pendingDowngrade = subRes?.data?.data?.pendingDowngrade ?? null;
+
       setState((prev) => ({
         ...prev,
         subscription: subRes?.data?.data?.subscription ?? null,
-        plan: subRes?.data?.data?.plan ?? null,
+        plan: currentPlan,
         creditCosts: plansRes?.data?.data?.creditCosts ?? [],
+        allPlans,
+        canUpgrade: currentPlan ? currentPlan.sortOrder < maxSortOrder : false,
+        canDowngrade:
+          currentPlan && !pendingDowngrade
+            ? currentPlan.sortOrder > 0 && currentPlan.priceCents > 0
+            : false,
+        pendingDowngrade,
         isLoading: false,
       }));
     } catch {
@@ -89,8 +129,24 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     [state.creditCosts],
   );
 
+  const openPlanSwitcher = useCallback(() => {
+    setState((prev) => ({ ...prev, planSwitcherOpen: true }));
+  }, []);
+
+  const closePlanSwitcher = useCallback(() => {
+    setState((prev) => ({ ...prev, planSwitcherOpen: false }));
+  }, []);
+
   return (
-    <SubscriptionContext.Provider value={{ ...state, refreshSubscription, getCostForAction }}>
+    <SubscriptionContext.Provider
+      value={{
+        ...state,
+        refreshSubscription,
+        getCostForAction,
+        openPlanSwitcher,
+        closePlanSwitcher,
+      }}
+    >
       {children}
     </SubscriptionContext.Provider>
   );

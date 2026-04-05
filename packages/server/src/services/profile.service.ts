@@ -2,6 +2,8 @@ import { eq } from 'drizzle-orm';
 import type { CreateRuleDTO, UpdateRuleDTO, UpdateProfileDTO } from '@cc/shared';
 import { db, schema } from '../db/index.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
+import * as stripeService from './stripe.service.js';
+import { logger } from '../config/logger.js';
 
 // --- Profile ---
 
@@ -15,10 +17,13 @@ export async function getProfile(userId: string) {
     const user = await db.query.users.findFirst({
       where: eq(schema.users.id, userId),
     });
-    const [created] = await db.insert(schema.userProfiles).values({
-      userId,
-      displayName: user?.name ?? '',
-    }).returning();
+    const [created] = await db
+      .insert(schema.userProfiles)
+      .values({
+        userId,
+        displayName: user?.name ?? '',
+      })
+      .returning();
     profile = created;
   }
 
@@ -34,6 +39,23 @@ export async function updateProfile(userId: string, data: UpdateProfileDTO) {
     .set({ ...data, updatedAt: new Date() })
     .where(eq(schema.userProfiles.userId, userId))
     .returning();
+
+  // Sync billing identity to Stripe if brandName or taxId changed
+  if (data.brandName !== undefined || data.taxId !== undefined || data.taxIdType !== undefined) {
+    const user = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
+    if (user?.stripeCustomerId) {
+      const displayName = updated.brandName || user.name;
+      stripeService
+        .syncCustomerBilling(user.stripeCustomerId, displayName, updated.taxId, updated.taxIdType)
+        .catch((err) => {
+          // Non-blocking: don't fail profile save if Stripe sync fails
+          logger.error(
+            { error: err instanceof Error ? err.message : String(err), userId },
+            'Failed to sync billing info to Stripe (non-blocking)',
+          );
+        });
+    }
+  }
 
   return updated;
 }
@@ -55,13 +77,16 @@ export async function getActiveRules(userId: string) {
 }
 
 export async function createRule(userId: string, data: CreateRuleDTO) {
-  const [rule] = await db.insert(schema.userRules).values({
-    userId,
-    name: data.name,
-    rules: data.rules,
-    category: data.category,
-    isActive: true,
-  }).returning();
+  const [rule] = await db
+    .insert(schema.userRules)
+    .values({
+      userId,
+      name: data.name,
+      rules: data.rules,
+      category: data.category,
+      isActive: true,
+    })
+    .returning();
 
   return rule;
 }

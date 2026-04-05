@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Sparkles, X, Zap, ArrowRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSubscription } from '../../context/SubscriptionContext';
 
 export function UpgradeModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
   const { refreshSessionStatus } = useAuth();
+  const { openPlanSwitcher } = useSubscription();
 
   const handleQuotaExceeded = useCallback((e: Event) => {
     const detail = (e as CustomEvent).detail;
@@ -74,14 +76,16 @@ export function UpgradeModal() {
 
           {/* Actions */}
           <div className="flex flex-col gap-2.5">
-            <a
-              href="/pricing"
-              onClick={handleClose}
-              className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-600 px-5 py-3 text-sm font-semibold text-text-inverse hover:shadow-glow-accent transition-all duration-200 ease-spring hover:-translate-y-0.5"
+            <button
+              onClick={() => {
+                handleClose();
+                openPlanSwitcher();
+              }}
+              className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-600 px-5 py-3 text-sm font-semibold text-text-inverse hover:shadow-glow-accent transition-all duration-200 ease-spring hover:-translate-y-0.5 w-full"
             >
               View Plans & Upgrade
               <ArrowRight className="h-4 w-4" />
-            </a>
+            </button>
             <button
               type="button"
               onClick={handleClose}

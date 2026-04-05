@@ -29,11 +29,21 @@ import { ChatPage } from './pages/ChatPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { VerifyTokenPage } from './pages/VerifyTokenPage';
 import { UpgradeModal } from './components/common/UpgradeModal';
+import { PlanSwitcherModal } from './components/billing/PlanSwitcherModal';
+import { UpgradeCelebration } from './components/billing/UpgradeCelebration';
 import { PricingPage } from './pages/PricingPage';
 import { BillingPage } from './pages/settings/BillingPage';
 import { EmailTemplatePage } from './pages/settings/EmailTemplatePage';
 import { SubscriptionProvider } from './context/SubscriptionContext';
 // ContentCalendarPage removed — calendar is now inline in Content Builder
+
+import { useSubscription } from './context/SubscriptionContext';
+
+/** Wrapper that connects PlanSwitcherModal to global SubscriptionContext state */
+function GlobalPlanSwitcher() {
+  const { planSwitcherOpen, closePlanSwitcher } = useSubscription();
+  return <PlanSwitcherModal isOpen={planSwitcherOpen} onClose={closePlanSwitcher} />;
+}
 
 export function App() {
   return (
@@ -42,6 +52,8 @@ export function App() {
         <SubscriptionProvider>
           <ToastProvider>
             <UpgradeModal />
+            <UpgradeCelebration />
+            <GlobalPlanSwitcher />
             <Routes>
               {/* Public routes — landing page at root */}
               <Route path="/" element={<LoginPage />} />

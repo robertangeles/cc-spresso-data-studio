@@ -274,6 +274,59 @@ export async function adjustCredits(
 }
 
 // ---------------------------------------------------------------------------
+// Credit forecast
+// ---------------------------------------------------------------------------
+
+/**
+ * Calculate estimated days remaining based on 7-day rolling average usage.
+ * Returns null if insufficient history to forecast.
+ *
+ * Algorithm: sum deductions over last 7 days → divide by days with activity
+ *            → extrapolate to creditsRemaining.
+ * Cached client-side (SubscriptionContext refreshes on focus, ~1hr effective TTL).
+ */
+export async function getCreditForecast(
+  userId: string,
+): Promise<{ daysRemaining: number | null; avgDailyUsage: number }> {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  // Sum deductions over the last 7 days
+  const result = await db.execute(
+    sql`SELECT COALESCE(ABS(SUM(amount)), 0) AS total_used,
+               COUNT(DISTINCT DATE(created_at)) AS active_days
+        FROM credit_transactions
+        WHERE user_id = ${userId}
+          AND action_type = 'deduction'
+          AND created_at >= ${sevenDaysAgo}`,
+  );
+
+  const row = (result as unknown as Array<{ total_used: number; active_days: number }>)[0];
+  const totalUsed = Number(row?.total_used ?? 0);
+  const activeDays = Number(row?.active_days ?? 0);
+
+  if (activeDays === 0 || totalUsed === 0) {
+    return { daysRemaining: null, avgDailyUsage: 0 };
+  }
+
+  // Average over 7 calendar days (not just active days) for realistic forecast
+  const avgDailyUsage = Math.round(totalUsed / 7);
+
+  // Get current balance
+  const sub = await db.query.subscriptions.findFirst({
+    where: eq(schema.subscriptions.userId, userId),
+  });
+
+  if (!sub || avgDailyUsage === 0) {
+    return { daysRemaining: null, avgDailyUsage };
+  }
+
+  const daysRemaining = Math.floor(sub.creditsRemaining / avgDailyUsage);
+
+  return { daysRemaining, avgDailyUsage };
+}
+
+// ---------------------------------------------------------------------------
 // Usage breakdown
 // ---------------------------------------------------------------------------
 

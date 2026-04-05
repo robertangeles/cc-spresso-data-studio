@@ -62,6 +62,23 @@ export async function getSubscription(
 
     const { subscription, plan } = await subscriptionService.getSubscription(req.user.userId);
 
+    // Check for pending downgrade schedule (non-blocking)
+    let pendingDowngrade: { planName: string; effectiveDate: string } | null = null;
+    if (subscription?.stripeSubscriptionId) {
+      const schedule = await stripeService.getPendingSchedule(subscription.stripeSubscriptionId);
+      if (schedule) {
+        const scheduledPlan = await subscriptionService.getPlanByStripePriceId(
+          schedule.scheduledPriceId,
+        );
+        if (scheduledPlan && plan && scheduledPlan.sortOrder < plan.sortOrder) {
+          pendingDowngrade = {
+            planName: scheduledPlan.displayName,
+            effectiveDate: new Date(schedule.scheduledDate * 1000).toISOString(),
+          };
+        }
+      }
+    }
+
     res.json({
       success: true,
       data: {
@@ -84,8 +101,10 @@ export async function getSubscription(
               priceCents: plan.priceCents,
               creditsPerMonth: plan.creditsPerMonth,
               features: plan.features,
+              sortOrder: plan.sortOrder,
             }
           : null,
+        pendingDowngrade,
       },
     });
   } catch (err) {
@@ -213,6 +232,112 @@ export async function cancelSubscription(
       success: true,
       data: { message: 'Subscription will cancel at the end of the current billing period.' },
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Invoices (authenticated)
+// ---------------------------------------------------------------------------
+
+export async function getInvoices(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+
+    const { subscription } = await subscriptionService.getSubscription(req.user.userId);
+
+    if (!subscription?.stripeCustomerId) {
+      // No Stripe customer — return empty list
+      res.json({ success: true, data: { invoices: [] } });
+      return;
+    }
+
+    const limit = parseInt(req.query.limit as string) || 20;
+    const invoices = await stripeService.listInvoices(subscription.stripeCustomerId, limit);
+
+    res.json({ success: true, data: { invoices } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Plan change: preview + execute (authenticated)
+// ---------------------------------------------------------------------------
+
+export async function previewPlanChange(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+
+    const { targetPlanId } = req.body;
+    if (!targetPlanId) {
+      throw new ValidationError({ targetPlanId: ['Target plan ID is required'] });
+    }
+
+    const preview = await subscriptionService.previewPlanChange(req.user.userId, targetPlanId);
+    res.json({ success: true, data: preview });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function changePlan(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+
+    const { targetPlanId, retention, couponId } = req.body;
+    if (!targetPlanId && !retention) {
+      throw new ValidationError({ targetPlanId: ['Target plan ID is required'] });
+    }
+
+    // Handle retention offer acceptance
+    if (retention && couponId) {
+      const result = await subscriptionService.applyRetentionOffer(req.user.userId, couponId);
+      res.json({ success: true, data: result });
+      return;
+    }
+
+    const result = await subscriptionService.changePlan(req.user.userId, targetPlanId);
+
+    if (!result.success && result.portalUrl) {
+      // Payment failed — return portal URL for card update
+      res.status(402).json({
+        success: false,
+        error: 'Payment failed. Please update your payment method.',
+        data: { portalUrl: result.portalUrl },
+      } as ApiResponse<unknown>);
+      return;
+    }
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getForecast(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+
+    const forecast = await creditService.getCreditForecast(req.user.userId);
+    res.json({ success: true, data: forecast });
   } catch (err) {
     next(err);
   }

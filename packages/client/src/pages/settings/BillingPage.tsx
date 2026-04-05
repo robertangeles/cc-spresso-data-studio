@@ -166,9 +166,7 @@ export function BillingPage() {
     }
   };
 
-  const handleUpgrade = () => {
-    window.location.href = '/pricing';
-  };
+  const { openPlanSwitcher } = useSubscription();
 
   if (subLoading) {
     return (
@@ -247,7 +245,7 @@ export function BillingPage() {
       {activeTab === 'stripe' && isAdmin && <StripeSettingsPage />}
 
       {/* Overview Tab Content */}
-      {activeTab !== 'stripe' && (
+      {activeTab === 'overview' && (
         <>
           {/* end of tab wrapper — closed at the bottom of overview content */}
 
@@ -320,13 +318,23 @@ export function BillingPage() {
                   Manage Billing
                 </button>
 
-                {plan && plan.sortOrder < 3 && (
+                {plan && plan.sortOrder < 2 && (
                   <button
-                    onClick={handleUpgrade}
+                    onClick={openPlanSwitcher}
                     className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-accent to-amber-600 px-4 py-2 text-sm font-semibold text-black hover:shadow-[0_0_16px_rgba(255,214,10,0.25)] transition-all duration-200"
                   >
                     <TrendingUp className="h-4 w-4" />
                     Upgrade
+                  </button>
+                )}
+
+                {/* Change Plan for all paid users (both upgrade and downgrade) */}
+                {plan && plan.priceCents > 0 && (
+                  <button
+                    onClick={openPlanSwitcher}
+                    className="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm font-medium text-text-primary hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all duration-200"
+                  >
+                    Change Plan
                   </button>
                 )}
 
