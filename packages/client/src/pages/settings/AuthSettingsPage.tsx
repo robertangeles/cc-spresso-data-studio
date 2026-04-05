@@ -12,12 +12,8 @@ interface GoogleOAuthConfig {
   redirectUriProd: string;
 }
 
-interface SmtpConfig {
-  host: string;
-  port: string;
-  secure: boolean;
-  user: string;
-  pass: string;
+interface EmailConfig {
+  apiKey: string;
   fromAddress: string;
   fromName: string;
 }
@@ -41,19 +37,15 @@ export function AuthSettingsPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // SMTP email config
-  const [smtpConfig, setSmtpConfig] = useState<SmtpConfig>({
-    host: '',
-    port: '465',
-    secure: true,
-    user: '',
-    pass: '',
+  // Email (Resend) config
+  const [emailConfig, setEmailConfig] = useState<EmailConfig>({
+    apiKey: '',
     fromAddress: '',
     fromName: 'Spresso',
   });
-  const [smtpMaskedPass, setSmtpMaskedPass] = useState('');
-  const [smtpSaving, setSmtpSaving] = useState(false);
-  const [smtpSaved, setSmtpSaved] = useState(false);
+  const [emailMaskedKey, setEmailMaskedKey] = useState('');
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailSaved, setEmailSaved] = useState(false);
 
   // Turnstile config
   const [turnstileConfig, setTurnstileConfig] = useState<TurnstileConfig>({
@@ -66,7 +58,7 @@ export function AuthSettingsPage() {
 
   useEffect(() => {
     loadConfig();
-    loadSmtpConfig();
+    loadEmailConfig();
     loadTurnstileConfig();
   }, []);
 
@@ -126,68 +118,60 @@ export function AuthSettingsPage() {
     }
   };
 
-  const loadSmtpConfig = async () => {
+  const loadEmailConfig = async () => {
     try {
       const { data } = await api.get('/admin/settings/smtp');
       if (data.data) {
-        setSmtpConfig({
-          host: data.data.host ?? '',
-          port: String(data.data.port ?? 465),
-          secure: data.data.secure !== false,
-          user: data.data.user ?? '',
-          pass: '',
+        setEmailConfig({
+          apiKey: '',
           fromAddress: data.data.fromAddress ?? '',
           fromName: data.data.fromName ?? 'Spresso',
         });
-        setSmtpMaskedPass(data.data.maskedPass ?? '');
+        setEmailMaskedKey(data.data.maskedPass ?? data.data.maskedApiKey ?? '');
       }
     } catch {
       // First time — no config yet
     }
   };
 
-  const handleSmtpSave = async () => {
-    setSmtpSaving(true);
-    setSmtpSaved(false);
+  const handleEmailSave = async () => {
+    setEmailSaving(true);
+    setEmailSaved(false);
     try {
       await api.put('/admin/settings/smtp', {
-        host: smtpConfig.host,
-        port: parseInt(smtpConfig.port) || 465,
-        secure: smtpConfig.secure,
-        user: smtpConfig.user,
-        pass: smtpConfig.pass || undefined,
-        fromAddress: smtpConfig.fromAddress || smtpConfig.user,
-        fromName: smtpConfig.fromName,
+        apiKey: emailConfig.apiKey || undefined,
+        fromAddress: emailConfig.fromAddress,
+        fromName: emailConfig.fromName,
       });
-      setSmtpSaved(true);
-      setTimeout(() => setSmtpSaved(false), 3000);
-      await loadSmtpConfig();
+      setEmailSaved(true);
+      setTimeout(() => setEmailSaved(false), 3000);
+      await loadEmailConfig();
     } catch {
       // Error handling
     } finally {
-      setSmtpSaving(false);
+      setEmailSaving(false);
     }
   };
 
-  const [smtpTesting, setSmtpTesting] = useState(false);
-  const [smtpTestResult, setSmtpTestResult] = useState<{
+  const [emailTesting, setEmailTesting] = useState(false);
+  const [emailTestResult, setEmailTestResult] = useState<{
     success: boolean;
     message: string;
   } | null>(null);
 
-  const handleSmtpTest = async () => {
-    setSmtpTesting(true);
-    setSmtpTestResult(null);
+  const handleEmailTest = async () => {
+    setEmailTesting(true);
+    setEmailTestResult(null);
     try {
       const { data } = await api.post('/admin/settings/smtp/test');
-      setSmtpTestResult({ success: true, message: data.message || 'Test email sent!' });
+      setEmailTestResult({ success: true, message: data.message || 'Test email sent!' });
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
         'Failed to send test email';
-      setSmtpTestResult({ success: false, message: msg });
+      setEmailTestResult({ success: false, message: msg });
     } finally {
-      setSmtpTesting(false);
+      setEmailTesting(false);
     }
   };
 
@@ -224,7 +208,7 @@ export function AuthSettingsPage() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'google' | 'smtp' | 'turnstile'>('google');
+  const [activeTab, setActiveTab] = useState<'google' | 'email' | 'turnstile'>('google');
 
   const tabs = [
     {
@@ -253,8 +237,8 @@ export function AuthSettingsPage() {
       status: maskedSecret ? 'Connected' : undefined,
     },
     {
-      id: 'smtp' as const,
-      label: 'Email (SMTP)',
+      id: 'email' as const,
+      label: 'Email (Resend)',
       icon: (
         <div className="flex h-4 w-4 items-center justify-center rounded bg-blue-500/20 text-blue-400">
           <svg
@@ -271,7 +255,7 @@ export function AuthSettingsPage() {
           </svg>
         </div>
       ),
-      status: smtpMaskedPass ? 'Connected' : undefined,
+      status: emailMaskedKey ? 'Connected' : undefined,
     },
     {
       id: 'turnstile' as const,
@@ -448,8 +432,8 @@ export function AuthSettingsPage() {
         </div>
       )}
 
-      {/* SMTP Email Tab */}
-      {activeTab === 'smtp' && (
+      {/* Email (Resend) Tab */}
+      {activeTab === 'email' && (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">
           <Card padding="lg">
             <div className="space-y-4">
@@ -469,108 +453,89 @@ export function AuthSettingsPage() {
                   </svg>
                 </div>
                 <div>
-                  <h4 className="font-medium text-text-primary">SMTP Email</h4>
+                  <h4 className="font-medium text-text-primary">Resend Email</h4>
                   <p className="text-xs text-text-tertiary">
-                    Send verification emails and notifications via your mail server
+                    Send verification emails and notifications via Resend API
                   </p>
                 </div>
-                {smtpMaskedPass && (
+                {emailMaskedKey && (
                   <span className="ml-auto rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
                     Connected
                   </span>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="SMTP Host"
-                  value={smtpConfig.host}
-                  onChange={(e) => setSmtpConfig({ ...smtpConfig, host: e.target.value })}
-                  placeholder="smtpout.secureserver.net"
-                />
-                <Input
-                  label="Port"
-                  value={smtpConfig.port}
-                  onChange={(e) => setSmtpConfig({ ...smtpConfig, port: e.target.value })}
-                  placeholder="465"
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    checked={smtpConfig.secure}
-                    onChange={(e) => setSmtpConfig({ ...smtpConfig, secure: e.target.checked })}
-                    className="peer sr-only"
-                  />
-                  <div className="h-5 w-9 rounded-full bg-surface-3 transition-colors peer-checked:bg-accent/80 peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform after:content-[''] peer-checked:after:translate-x-4" />
-                </label>
-                <span className="text-sm text-text-secondary">SSL/TLS</span>
-                <span className="text-xs text-text-tertiary">(recommended for port 465)</span>
-              </div>
-
-              <Input
-                label="Username"
-                value={smtpConfig.user}
-                onChange={(e) => setSmtpConfig({ ...smtpConfig, user: e.target.value })}
-                placeholder="you@yourdomain.com"
-              />
-
               <SecureInput
-                label="Password"
-                value={smtpConfig.pass}
-                onChange={(val) => setSmtpConfig({ ...smtpConfig, pass: val })}
-                placeholder={smtpMaskedPass ? 'Leave blank to keep current' : 'SMTP password'}
-                hint={smtpMaskedPass ? `Current: ${smtpMaskedPass}` : undefined}
+                label="API Key"
+                value={emailConfig.apiKey}
+                onChange={(val) => setEmailConfig({ ...emailConfig, apiKey: val })}
+                placeholder={emailMaskedKey ? 'Leave blank to keep current' : 're_...'}
+                hint={emailMaskedKey ? `Current: ${emailMaskedKey}` : undefined}
               />
 
               <div className="border-t border-border-subtle my-2" />
 
               <Input
                 label="From Address"
-                value={smtpConfig.fromAddress}
-                onChange={(e) => setSmtpConfig({ ...smtpConfig, fromAddress: e.target.value })}
-                placeholder="noreply@yourdomain.com"
+                value={emailConfig.fromAddress}
+                onChange={(e) => setEmailConfig({ ...emailConfig, fromAddress: e.target.value })}
+                placeholder="sparq@spresso.xyz"
               />
-              <p className="text-xs text-text-tertiary -mt-2">
-                Defaults to your SMTP username if left blank.
-              </p>
 
               <Input
                 label="From Name"
-                value={smtpConfig.fromName}
-                onChange={(e) => setSmtpConfig({ ...smtpConfig, fromName: e.target.value })}
-                placeholder="Spresso"
+                value={emailConfig.fromName}
+                onChange={(e) => setEmailConfig({ ...emailConfig, fromName: e.target.value })}
+                placeholder="Spresso Content Studio"
               />
 
-              {smtpTestResult && (
+              {emailTestResult && (
                 <div
                   className={`rounded-lg border px-3 py-2 text-sm ${
-                    smtpTestResult.success
+                    emailTestResult.success
                       ? 'border-green-500/20 bg-green-500/10 text-green-400'
                       : 'border-red-500/20 bg-red-500/10 text-red-400'
                   }`}
                 >
-                  {smtpTestResult.message}
+                  {emailTestResult.message}
                 </div>
               )}
 
               <div className="flex items-center gap-3">
-                <Button onClick={handleSmtpSave} disabled={smtpSaving}>
-                  {smtpSaving ? 'Saving...' : 'Save'}
+                <Button onClick={handleEmailSave} disabled={emailSaving}>
+                  {emailSaving ? 'Saving...' : 'Save'}
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={handleSmtpTest}
-                  disabled={smtpTesting || !smtpConfig.host}
+                  onClick={handleEmailTest}
+                  disabled={emailTesting || !emailMaskedKey}
                 >
-                  {smtpTesting ? 'Sending...' : 'Test Connection'}
+                  {emailTesting ? 'Sending...' : 'Send Test Email'}
                 </Button>
-                {smtpSaved && <span className="text-sm text-status-success">Saved</span>}
+                {emailSaved && <span className="text-sm text-status-success">Saved</span>}
               </div>
             </div>
           </Card>
+
+          <div className="mt-6 rounded-lg border border-border-subtle bg-surface-2/30 p-4">
+            <h4 className="text-sm font-medium text-text-primary mb-2">Setup Guide</h4>
+            <ol className="text-xs text-text-secondary space-y-1.5 list-decimal list-inside">
+              <li>
+                Sign up at{' '}
+                <a
+                  href="https://resend.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  resend.com
+                </a>
+              </li>
+              <li>Add your domain and configure DNS records (SPF, DKIM, DMARC)</li>
+              <li>Create an API key and paste it above</li>
+              <li>Set the From Address to match your verified domain</li>
+            </ol>
+          </div>
         </div>
       )}
 

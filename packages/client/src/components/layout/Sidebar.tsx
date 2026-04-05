@@ -19,6 +19,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { CreditCounter } from '../CreditCounter';
 import { api } from '../../lib/api';
 
 interface Conversation {
@@ -303,23 +304,14 @@ export function Sidebar() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-[12px] font-medium text-text-primary">{user.name}</p>
               <p className="truncate text-[10px] text-text-tertiary">{user.email}</p>
-              {sessionStatus && (
-                <p
-                  className={`text-[10px] font-medium ${
-                    sessionStatus.unlimited
-                      ? 'text-emerald-400'
-                      : sessionStatus.remaining <= 0
-                        ? 'text-status-error'
-                        : sessionStatus.remaining <= 2
-                          ? 'text-amber-400'
-                          : 'text-accent'
-                  }`}
-                >
-                  {sessionStatus.unlimited
-                    ? 'Unlimited sessions'
-                    : `${sessionStatus.remaining} free session${sessionStatus.remaining !== 1 ? 's' : ''} left`}
-                </p>
-              )}
+              <p className="truncate text-[10px] text-text-tertiary">
+                {user.role === 'Administrator'
+                  ? 'Administrator'
+                  : user.role === 'Paid Subscriber'
+                    ? `Paid Subscriber — ${user.subscriptionTier === 'ultra' ? 'Ultra' : 'Pro'}`
+                    : 'Subscriber'}
+              </p>
+              <CreditCounter />
             </div>
           </button>
 

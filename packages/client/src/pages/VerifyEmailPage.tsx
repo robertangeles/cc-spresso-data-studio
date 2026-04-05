@@ -25,9 +25,34 @@ export function VerifyEmailPage() {
       if (data.data?.isEmailVerified) {
         setVerified(true);
         if (pollRef.current) clearInterval(pollRef.current);
-        // Refresh auth context so ProtectedRoute allows through
-        await refreshVerificationStatus();
-        // Brief celebration delay before navigating
+
+        // Check for pending plan BEFORE refreshing auth context
+        // (refreshing auth triggers useEffect that navigates to /chat)
+        const pendingPlanId = data.data.pendingPlanId;
+        if (pendingPlanId) {
+          try {
+            const { data: checkoutData } = await api.post('/billing/checkout', {
+              planId: pendingPlanId,
+            });
+            if (checkoutData.success && checkoutData.data?.url) {
+              window.location.href = checkoutData.data.url;
+              return;
+            }
+          } catch (err) {
+            console.error('[VerifyEmail] Checkout failed:', err);
+            // Auth may have expired — user will need to login,
+            // pendingPlanId stays in DB so checkout triggers after login
+          }
+        }
+
+        // Try refreshing auth — if it fails, ProtectedRoute handles redirect
+        try {
+          await refreshVerificationStatus();
+        } catch {
+          // Auth expired — redirect to login
+          navigate('/login', { replace: true });
+          return;
+        }
         setTimeout(() => navigate('/chat', { replace: true }), 1500);
       }
     } catch {

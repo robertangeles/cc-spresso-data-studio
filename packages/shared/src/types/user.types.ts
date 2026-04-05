@@ -3,6 +3,7 @@ export interface User {
   email: string;
   name: string;
   role: string;
+  subscriptionTier: string;
   isEmailVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -22,6 +23,7 @@ export interface LoginDTO {
 export interface AuthResponse {
   user: Omit<User, 'createdAt' | 'updatedAt'>;
   accessToken: string;
+  pendingPlanId?: string | null;
 }
 
 export interface TokenPayload {
@@ -29,6 +31,7 @@ export interface TokenPayload {
   email: string;
   name: string;
   role: string;
+  subscriptionTier: string;
   isEmailVerified: boolean;
 }
 

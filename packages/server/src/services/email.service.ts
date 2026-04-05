@@ -1,73 +1,68 @@
-import nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
+import { Resend } from 'resend';
 import { logger } from '../config/logger.js';
 import { getSetting } from './admin.service.js';
 import { EmailConfigError } from '../utils/errors.js';
 
-interface SmtpConfig {
-  host: string;
-  port: number;
-  secure: boolean;
-  user: string;
-  pass: string;
+interface EmailConfig {
+  apiKey: string;
   fromAddress: string;
   fromName: string;
 }
 
-let transporter: Transporter | null = null;
-let cachedConfig: SmtpConfig | null = null;
+let cachedConfig: EmailConfig | null = null;
+let cachedClient: Resend | null = null;
 
-async function getEmailConfig(): Promise<SmtpConfig> {
+async function getEmailConfig(): Promise<EmailConfig> {
   if (cachedConfig) return cachedConfig;
 
   const setting = await getSetting('smtp');
   if (!setting) {
     throw new EmailConfigError(
-      'SMTP email service is not configured. Set it up in Settings > Authentication > Email.',
+      'Email service is not configured. Set it up in Settings > Authentication > Email.',
     );
   }
 
-  const parsed = JSON.parse(setting.value) as Partial<SmtpConfig>;
-  if (!parsed.host || !parsed.user || !parsed.pass) {
-    throw new EmailConfigError(
-      'SMTP configuration is incomplete. Check host, username, and password in Settings > Authentication > Email.',
-    );
+  const parsed = JSON.parse(setting.value);
+
+  // Support Resend API config
+  if (parsed.apiKey) {
+    cachedConfig = {
+      apiKey: parsed.apiKey,
+      fromAddress: parsed.fromAddress || 'noreply@spresso.xyz',
+      fromName: parsed.fromName || 'Spresso',
+    };
+    return cachedConfig;
   }
 
-  cachedConfig = {
-    host: parsed.host,
-    port: parsed.port || 465,
-    secure: parsed.secure !== false,
-    user: parsed.user,
-    pass: parsed.pass,
-    fromAddress: parsed.fromAddress || parsed.user,
-    fromName: parsed.fromName || 'Spresso',
-  };
-  return cachedConfig;
+  // Legacy SMTP config — extract what we can
+  if (parsed.pass && parsed.pass.startsWith('re_')) {
+    cachedConfig = {
+      apiKey: parsed.pass,
+      fromAddress: parsed.fromAddress || parsed.user || 'noreply@spresso.xyz',
+      fromName: parsed.fromName || 'Spresso',
+    };
+    return cachedConfig;
+  }
+
+  throw new EmailConfigError(
+    'Email configuration is incomplete. A Resend API key is required in Settings > Authentication > Email.',
+  );
 }
 
-function getTransporter(config: SmtpConfig): Transporter {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: config.host,
-      port: config.port,
-      secure: config.secure,
-      auth: {
-        user: config.user,
-        pass: config.pass,
-      },
-    });
+function getClient(config: EmailConfig): Resend {
+  if (!cachedClient) {
+    cachedClient = new Resend(config.apiKey);
   }
-  return transporter;
+  return cachedClient;
 }
 
 /** Invalidate cached config (call when admin updates settings). */
 export function invalidateEmailConfig(): void {
   cachedConfig = null;
-  transporter = null;
+  cachedClient = null;
 }
 
-/** Send a generic email via SMTP. */
+/** Send an email via Resend API. */
 export async function sendEmail(
   to: string,
   subject: string,
@@ -75,33 +70,33 @@ export async function sendEmail(
   text?: string,
 ): Promise<void> {
   const config = await getEmailConfig();
-  const transport = getTransporter(config);
+  const client = getClient(config);
 
-  try {
-    await transport.sendMail({
-      from: `${config.fromName} <${config.fromAddress}>`,
-      to,
-      subject,
-      html,
-      text: text || subject,
-    });
-  } catch (err) {
-    logger.error({ err, to, subject }, 'Failed to send email via SMTP');
-    throw new Error(`Email send failed: ${(err as Error).message}`);
+  const { error } = await client.emails.send({
+    from: `${config.fromName} <${config.fromAddress}>`,
+    to,
+    subject,
+    html,
+    text: text || subject,
+  });
+
+  if (error) {
+    logger.error({ error, to, subject }, 'Failed to send email via Resend');
+    throw new Error(`Email send failed: ${error.message}`);
   }
 
   logger.info({ to: maskEmail(to), subject }, 'Email sent successfully');
 }
 
-/** Send a test email to verify SMTP configuration. */
+/** Send a test email to verify Resend configuration. */
 export async function sendTestEmail(to: string): Promise<void> {
-  const subject = 'Spresso — SMTP Configuration Test';
-  const text = `Hi there,\n\nThis is a test email from your Spresso instance to confirm SMTP is configured correctly.\n\nSent at: ${new Date().toISOString()}\n\nCheers,\nSpresso Content Studio`;
+  const subject = 'Spresso — Email Configuration Test';
+  const text = `Hi there,\n\nThis is a test email from your Spresso instance to confirm email is configured correctly.\n\nSent at: ${new Date().toISOString()}\n\nCheers,\nSpresso Content Studio`;
   const html = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; max-width:480px; margin:0 auto; padding:32px;">
-  <h2 style="color:#333; margin-bottom:16px;">SMTP Configuration Test</h2>
+  <h2 style="color:#333; margin-bottom:16px;">Email Configuration Test</h2>
   <p style="color:#555; line-height:1.6;">Hi there,</p>
-  <p style="color:#555; line-height:1.6;">This is a test email from your Spresso instance to confirm that SMTP is configured correctly.</p>
+  <p style="color:#555; line-height:1.6;">This is a test email from your Spresso instance to confirm that email is configured correctly.</p>
   <p style="color:#999; font-size:13px; margin-top:24px;">Sent at: ${new Date().toISOString()}</p>
   <p style="color:#555; line-height:1.6;">Cheers,<br/>Spresso Content Studio</p>
 </div>`;
@@ -155,7 +150,7 @@ function buildVerificationEmailHtml(name: string, url: string): string {
               <p style="margin:0 0 24px; font-size:15px; line-height:1.6; color:#999;">
                 Hey ${escapeHtml(name)}, thanks for signing up! Click the button below to verify your email and start creating.
               </p>
-              <a href="${escapeHtml(url)}" style="display:inline-block; padding:12px 28px; background:linear-gradient(135deg,#ffd60a,#e6a800); color:#0a0a0a; font-size:14px; font-weight:600; text-decoration:none; border-radius:8px;">
+              <a href="${escapeHtml(url)}" style="display:inline-block; padding:14px 32px; background-color:#ffd60a; background:linear-gradient(135deg,#ffd60a,#e6a800); color:#0a0a0a; font-size:15px; font-weight:700; text-decoration:none; border-radius:8px; text-align:center; min-width:200px;">
                 Verify my email
               </a>
               <p style="margin:24px 0 0; font-size:13px; line-height:1.5; color:#666;">

@@ -85,3 +85,22 @@ export class SessionQuotaExceededError extends AppError {
     this.name = 'SessionQuotaExceededError';
   }
 }
+
+export class InsufficientCreditsError extends AppError {
+  constructor(
+    public required: number,
+    public available: number,
+    public actionType: string,
+    message = 'Insufficient credits for this action.',
+  ) {
+    super(402, message);
+    this.name = 'InsufficientCreditsError';
+  }
+}
+
+export class StripeConfigError extends AppError {
+  constructor(message = 'Stripe is not configured. Go to Settings > Integrations > Stripe.') {
+    super(503, message);
+    this.name = 'StripeConfigError';
+  }
+}

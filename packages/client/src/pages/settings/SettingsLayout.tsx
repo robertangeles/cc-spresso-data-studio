@@ -2,6 +2,10 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 const settingsNav = [
   {
+    category: 'Account',
+    items: [{ to: '/settings/billing', label: 'Billing & Credits' }],
+  },
+  {
     category: 'Integrations',
     items: [
       { to: '/settings/integrations/database', label: 'Database' },
@@ -18,6 +22,7 @@ const settingsNav = [
       { to: '/settings/admin/site', label: 'Site Settings' },
       { to: '/settings/admin/usage', label: 'Usage & Costs' },
       { to: '/settings/admin/system-prompts', label: 'System Prompts' },
+      { to: '/settings/admin/email-templates', label: 'Email Templates' },
     ],
   },
 ];

@@ -7,7 +7,7 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/
 import { ConflictError, UnauthorizedError, ValidationError } from '../utils/errors.js';
 import { isDisposableEmail } from '../utils/disposable-emails.js';
 
-export async function createUser(email: string, password: string, name: string) {
+export async function createUser(email: string, password: string, name: string, planId?: string) {
   // Block disposable email domains
   if (isDisposableEmail(email)) {
     throw new ValidationError({
@@ -39,12 +39,14 @@ export async function createUser(email: string, password: string, name: string) 
       role: 'Subscriber',
       roleId: defaultRole?.id ?? null,
       isEmailVerified: false,
+      pendingPlanId: planId || null,
     })
     .returning({
       id: schema.users.id,
       email: schema.users.email,
       name: schema.users.name,
       role: schema.users.role,
+      subscriptionTier: schema.users.subscriptionTier,
       isEmailVerified: schema.users.isEmailVerified,
     });
 
@@ -53,6 +55,7 @@ export async function createUser(email: string, password: string, name: string) 
     email: user.email,
     name: user.name,
     role: user.role,
+    subscriptionTier: user.subscriptionTier ?? 'free',
     isEmailVerified: user.isEmailVerified,
   });
 
@@ -125,6 +128,7 @@ export async function findOrCreateGoogleUser(profile: {
     email: user.email,
     name: user.name,
     role: user.role,
+    subscriptionTier: user.subscriptionTier ?? 'free',
     isEmailVerified: user.isEmailVerified,
   });
 
@@ -134,6 +138,7 @@ export async function findOrCreateGoogleUser(profile: {
       email: user.email,
       name: user.name,
       role: user.role as User['role'],
+      subscriptionTier: user.subscriptionTier,
       isEmailVerified: user.isEmailVerified,
     },
     ...tokens,
@@ -167,6 +172,7 @@ export async function verifyCredentials(email: string, password: string) {
     email: user.email,
     name: user.name,
     role: user.role,
+    subscriptionTier: user.subscriptionTier ?? 'free',
     isEmailVerified: user.isEmailVerified,
   });
 
@@ -176,6 +182,7 @@ export async function verifyCredentials(email: string, password: string) {
       email: user.email,
       name: user.name,
       role: user.role as User['role'],
+      subscriptionTier: user.subscriptionTier,
       isEmailVerified: user.isEmailVerified,
     },
     ...tokens,
@@ -224,10 +231,10 @@ export async function refreshTokens(refreshToken: string) {
     .set({ revokedAt: new Date() })
     .where(eq(schema.refreshTokens.id, storedToken.id));
 
-  // Fetch current user state (isEmailVerified may have changed since JWT was issued)
+  // Fetch current user state (may have changed since JWT was issued)
   const user = await db.query.users.findFirst({
     where: eq(schema.users.id, payload.userId),
-    columns: { isEmailVerified: true, role: true },
+    columns: { isEmailVerified: true, role: true, subscriptionTier: true },
   });
 
   // Issue new tokens with fresh state
@@ -236,6 +243,7 @@ export async function refreshTokens(refreshToken: string) {
     email: payload.email,
     name: payload.name,
     role: user?.role ?? payload.role,
+    subscriptionTier: user?.subscriptionTier ?? 'free',
     isEmailVerified: user?.isEmailVerified ?? false,
   });
 }

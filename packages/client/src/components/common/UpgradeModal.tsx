@@ -50,9 +50,7 @@ export function UpgradeModal() {
           </div>
 
           {/* Title */}
-          <h2 className="text-xl font-bold text-text-primary mb-2">
-            You&apos;ve used all your free sessions
-          </h2>
+          <h2 className="text-xl font-bold text-text-primary mb-2">Credits needed</h2>
 
           {/* Message */}
           <p className="text-sm text-text-secondary mb-6 leading-relaxed">{message}</p>
@@ -60,9 +58,9 @@ export function UpgradeModal() {
           {/* Benefits */}
           <div className="mb-6 space-y-2.5 text-left">
             {[
-              'Unlimited AI-powered content generation',
-              'All platform adaptations included',
-              'Priority model access',
+              'More AI credits for content generation',
+              'Premium models (Claude Opus, GPT-5.4)',
+              'Priority support & advanced analytics',
             ].map((benefit) => (
               <div
                 key={benefit}
@@ -77,11 +75,11 @@ export function UpgradeModal() {
           {/* Actions */}
           <div className="flex flex-col gap-2.5">
             <a
-              href="/settings/admin/roles"
+              href="/pricing"
               onClick={handleClose}
               className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-600 px-5 py-3 text-sm font-semibold text-text-inverse hover:shadow-glow-accent transition-all duration-200 ease-spring hover:-translate-y-0.5"
             >
-              Upgrade to Paid
+              View Plans & Upgrade
               <ArrowRight className="h-4 w-4" />
             </a>
             <button

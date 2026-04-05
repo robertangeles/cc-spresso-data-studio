@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, setAccessToken } from '../lib/api';
 
 export function VerifyTokenPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'success' | 'redirecting' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
@@ -18,8 +18,36 @@ export function VerifyTokenPage() {
 
     const verify = async () => {
       try {
-        await api.get(`/auth/verify-email?token=${encodeURIComponent(token)}`);
+        const { data } = await api.get(`/auth/verify-email?token=${encodeURIComponent(token)}`);
+
+        // Auto-login if tokens returned
+        if (data.data?.accessToken) {
+          setAccessToken(data.data.accessToken);
+        }
+
+        // Check for pending plan → redirect to Stripe Checkout
+        const pendingPlanId = data.data?.pendingPlanId;
+        if (pendingPlanId && data.data?.accessToken) {
+          setStatus('redirecting');
+          try {
+            const { data: checkoutData } = await api.post('/billing/checkout', {
+              planId: pendingPlanId,
+            });
+            if (checkoutData.success && checkoutData.data?.url) {
+              window.location.href = checkoutData.data.url;
+              return;
+            }
+          } catch {
+            // Checkout failed — proceed to app
+          }
+        }
+
         setStatus('success');
+
+        // Redirect to app after brief celebration
+        if (data.data?.accessToken) {
+          setTimeout(() => navigate('/chat', { replace: true }), 1500);
+        }
       } catch (err: unknown) {
         setStatus('error');
         const axiosErr = err as { response?: { data?: { error?: string } } };
@@ -46,6 +74,16 @@ export function VerifyTokenPage() {
             </div>
           )}
 
+          {status === 'redirecting' && (
+            <div className="animate-slide-up">
+              <Loader2 className="h-12 w-12 text-accent animate-spin mx-auto mb-4" />
+              <h1 className="font-heading text-xl font-semibold text-text-primary">
+                Setting up your subscription...
+              </h1>
+              <p className="text-text-tertiary text-sm mt-2">Redirecting to checkout...</p>
+            </div>
+          )}
+
           {status === 'success' && (
             <div className="animate-slide-up">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-status-success/10 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
@@ -54,15 +92,7 @@ export function VerifyTokenPage() {
               <h1 className="font-heading text-xl font-semibold text-text-primary mb-2">
                 Email verified!
               </h1>
-              <p className="text-text-tertiary text-sm mb-4">
-                Your account is ready. You can now sign in.
-              </p>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface-0 hover:bg-accent-hover transition-colors"
-              >
-                Sign in
-              </Link>
+              <p className="text-text-tertiary text-sm mb-4">Taking you to your dashboard...</p>
             </div>
           )}
 

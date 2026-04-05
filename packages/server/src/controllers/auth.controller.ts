@@ -4,6 +4,8 @@ import * as authService from '../services/auth.service.js';
 import * as turnstileService from '../services/turnstile.service.js';
 import * as verificationService from '../services/verification.service.js';
 import { getSetting } from '../services/admin.service.js';
+import { eq } from 'drizzle-orm';
+import { db, schema } from '../db/index.js';
 
 export async function register(
   req: Request,
@@ -11,12 +13,12 @@ export async function register(
   next: NextFunction,
 ) {
   try {
-    const { email, password, name, turnstileToken } = req.body;
+    const { email, password, name, turnstileToken, planId } = req.body;
 
     // Verify Turnstile CAPTCHA (gracefully degrades if not configured)
     await turnstileService.verify(turnstileToken, req.ip);
 
-    const result = await authService.createUser(email, password, name);
+    const result = await authService.createUser(email, password, name, planId);
 
     // Send verification email (non-blocking — failure doesn't block registration)
     await verificationService.generateAndSend(result.user.id, email, name);
@@ -44,6 +46,12 @@ export async function login(
     const { email, password } = req.body;
     const result = await authService.verifyCredentials(email, password);
 
+    // Check if user has a pending plan from signup flow
+    const userRecord = await db.query.users.findFirst({
+      where: eq(schema.users.id, result.user.id),
+      columns: { pendingPlanId: true },
+    });
+
     setRefreshCookie(res, result.refreshToken);
 
     res.json({
@@ -51,6 +59,7 @@ export async function login(
       data: {
         user: result.user,
         accessToken: result.accessToken,
+        pendingPlanId: userRecord?.pendingPlanId || null,
       },
     });
   } catch (err) {
@@ -211,9 +220,44 @@ export async function verifyEmail(req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    await verificationService.verifyToken(token);
+    const userId = await verificationService.verifyToken(token);
 
-    res.json({ success: true, data: null, message: 'Email verified successfully' });
+    // Auto-login: generate tokens so the verify tab can proceed to checkout
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.id, userId),
+    });
+
+    if (!user) {
+      res.json({ success: true, data: null, message: 'Email verified successfully' });
+      return;
+    }
+
+    const tokens = await authService.generateTokens({
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      subscriptionTier: user.subscriptionTier,
+      isEmailVerified: true,
+    });
+
+    setRefreshCookie(res, tokens.refreshToken);
+
+    res.json({
+      success: true,
+      data: {
+        accessToken: tokens.accessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          isEmailVerified: true,
+        },
+        pendingPlanId: user.pendingPlanId || null,
+      },
+      message: 'Email verified successfully',
+    });
   } catch (err) {
     next(err);
   }
@@ -235,7 +279,13 @@ export async function verificationStatus(req: Request, res: Response, next: Next
     const userId = (req as Request & { user: { userId: string } }).user.userId;
     const status = await verificationService.getStatus(userId);
 
-    res.json({ success: true, data: status });
+    // Include pendingPlanId so the frontend can redirect to checkout after verification
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.id, userId),
+      columns: { pendingPlanId: true },
+    });
+
+    res.json({ success: true, data: { ...status, pendingPlanId: user?.pendingPlanId || null } });
   } catch (err) {
     next(err);
   }

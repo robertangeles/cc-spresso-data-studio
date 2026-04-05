@@ -15,6 +15,7 @@ export const registerSchema = z.object({
     .regex(/[0-9]/, 'Password must contain at least one number'),
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
   turnstileToken: z.string().optional(),
+  planId: z.string().uuid().optional(),
 });
 
 export const createFlowSchema = z.object({

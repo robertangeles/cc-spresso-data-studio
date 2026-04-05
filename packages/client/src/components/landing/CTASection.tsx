@@ -48,7 +48,7 @@ export function CTASection({ onGetStarted }: CTASectionProps) {
             <style>{`@keyframes spin { to { rotate: 360deg; } }`}</style>
 
             <div className="relative rounded-2xl bg-surface-2/90 backdrop-blur-glass p-6 border border-border-subtle">
-              <AuthForm mode="login" />
+              <AuthForm mode="register" />
             </div>
           </div>
 

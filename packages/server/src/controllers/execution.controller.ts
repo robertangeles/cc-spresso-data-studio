@@ -68,6 +68,7 @@ export async function createExecutionToken(
       email: req.user.email,
       name: req.user.name,
       role: req.user.role,
+      subscriptionTier: req.user.subscriptionTier ?? 'free',
       isEmailVerified: true,
     };
     const token = signAccessToken(tokenPayload) + '.' + crypto.randomUUID().slice(0, 8);

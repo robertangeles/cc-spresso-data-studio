@@ -480,14 +480,11 @@ export async function getSmtpConfig(
       return;
     }
     const config = JSON.parse(setting.value);
+    const apiKey = config.apiKey || '';
     res.json({
       success: true,
       data: {
-        host: config.host ?? '',
-        port: config.port ?? 465,
-        secure: config.secure !== false,
-        user: config.user ?? '',
-        maskedPass: config.pass ? `****${config.pass.slice(-4)}` : '',
+        maskedApiKey: apiKey ? `${apiKey.slice(0, 5)}****${apiKey.slice(-4)}` : '',
         fromAddress: config.fromAddress ?? '',
         fromName: config.fromName ?? '',
       },
@@ -504,15 +501,11 @@ export async function updateSmtpConfig(
 ) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
-    const { host, port, secure, user, pass, fromAddress, fromName } = req.body;
+    const { apiKey, fromAddress, fromName } = req.body;
 
     const existing = await adminService.getSetting('smtp');
     let existingConfig = {
-      host: '',
-      port: 465,
-      secure: true,
-      user: '',
-      pass: '',
+      apiKey: '',
       fromAddress: '',
       fromName: 'Spresso',
     };
@@ -521,12 +514,8 @@ export async function updateSmtpConfig(
     }
 
     const config = {
-      host: host ?? existingConfig.host,
-      port: port ?? existingConfig.port,
-      secure: secure ?? existingConfig.secure,
-      user: user ?? existingConfig.user,
-      pass: pass || existingConfig.pass,
-      fromAddress: fromAddress ?? (existingConfig.fromAddress || user) ?? existingConfig.user,
+      apiKey: apiKey || existingConfig.apiKey,
+      fromAddress: fromAddress ?? existingConfig.fromAddress,
       fromName: fromName ?? existingConfig.fromName,
     };
 
@@ -536,7 +525,7 @@ export async function updateSmtpConfig(
     const { invalidateEmailConfig } = await import('../services/email.service.js');
     invalidateEmailConfig();
 
-    res.json({ success: true, data: null, message: 'SMTP config saved' });
+    res.json({ success: true, data: null, message: 'Email config saved' });
   } catch (err) {
     next(err);
   }

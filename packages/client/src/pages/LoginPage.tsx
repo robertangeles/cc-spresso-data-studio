@@ -4,6 +4,7 @@ import { HeroSection } from '../components/landing/HeroSection';
 import { ProductShowcase } from '../components/landing/ProductShowcase';
 import { PlatformParade } from '../components/landing/PlatformParade';
 import { AICopilotShowcase } from '../components/landing/AICopilotShowcase';
+import { PricingSection } from '../components/landing/PricingSection';
 import { CTASection } from '../components/landing/CTASection';
 import { AuthSlideOver } from '../components/landing/AuthSlideOver';
 import { SpressoLogo } from '../components/landing/SpressoLogo';
@@ -11,8 +12,10 @@ import { SpressoLogo } from '../components/landing/SpressoLogo';
 export function LoginPage() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
+  const [selectedPlanId, setSelectedPlanId] = useState<string | undefined>();
 
-  const openAuth = (mode: 'login' | 'register') => {
+  const openAuth = (mode: 'login' | 'register', planId?: string) => {
+    if (planId) setSelectedPlanId(planId);
     setAuthMode(mode);
     setAuthOpen(true);
   };
@@ -27,6 +30,7 @@ export function LoginPage() {
       <ProductShowcase />
       <PlatformParade />
       <AICopilotShowcase />
+      <PricingSection onGetStarted={(planId) => openAuth('register', planId)} />
       <CTASection onGetStarted={() => openAuth('register')} />
 
       {/* Footer */}
@@ -45,7 +49,12 @@ export function LoginPage() {
       </footer>
 
       {/* Auth slide-over */}
-      <AuthSlideOver isOpen={authOpen} onClose={() => setAuthOpen(false)} initialMode={authMode} />
+      <AuthSlideOver
+        isOpen={authOpen}
+        onClose={() => setAuthOpen(false)}
+        initialMode={authMode}
+        planId={selectedPlanId}
+      />
     </div>
   );
 }

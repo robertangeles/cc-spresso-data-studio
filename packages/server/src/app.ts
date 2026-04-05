@@ -29,6 +29,9 @@ app.use(
 
 // Parsing
 app.use(cookieParser());
+// Stripe webhooks require the raw body for signature verification.
+// This must be registered BEFORE express.json() to preserve the raw buffer.
+app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 

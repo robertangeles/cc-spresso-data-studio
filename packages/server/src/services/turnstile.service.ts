@@ -31,7 +31,7 @@ export async function verify(token: string, ip?: string): Promise<void> {
   }
 
   if (!token) {
-    throw new CaptchaError('CAPTCHA token is required. Please complete the CAPTCHA challenge.');
+    throw new CaptchaError('Please wait for the security check to finish, then try again.');
   }
 
   try {

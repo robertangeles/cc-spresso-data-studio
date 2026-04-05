@@ -10,13 +10,14 @@ interface AuthContextType {
   sessionStatus: SessionStatus | null;
   refreshSessionStatus: () => Promise<void>;
   refreshVerificationStatus: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<string | null>;
   loginWithGoogle: (code: string) => Promise<void>;
   register: (
     email: string,
     password: string,
     name: string,
     turnstileToken?: string,
+    planId?: string,
   ) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -50,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: payload.email,
           name: payload.name,
           role: payload.role,
+          subscriptionTier: payload.subscriptionTier ?? 'free',
           isEmailVerified: payload.isEmailVerified ?? true,
         });
       } catch {
@@ -82,10 +84,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string): Promise<string | null> => {
     const { data } = await api.post('/auth/login', { email, password });
     setAccessToken(data.data.accessToken);
     setUser(data.data.user);
+    return data.data.pendingPlanId || null;
   }, []);
 
   const loginWithGoogle = useCallback(async (code: string) => {
@@ -95,8 +98,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const register = useCallback(
-    async (email: string, password: string, name: string, turnstileToken?: string) => {
-      const { data } = await api.post('/auth/register', { email, password, name, turnstileToken });
+    async (
+      email: string,
+      password: string,
+      name: string,
+      turnstileToken?: string,
+      planId?: string,
+    ) => {
+      const { data } = await api.post('/auth/register', {
+        email,
+        password,
+        name,
+        turnstileToken,
+        planId,
+      });
       setAccessToken(data.data.accessToken);
       setUser(data.data.user);
     },

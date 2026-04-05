@@ -8,6 +8,9 @@ import { providerRegistry } from './services/ai/provider.registry.js';
 import { seedChannels, seedRemixStylePrompts } from './services/content.service.js';
 import { seedDefaultPrompts } from './services/system-prompt.service.js';
 import { startSchedulerCron } from './services/scheduler.cron.js';
+import { seedDefaultPlans } from './services/subscription.service.js';
+import { seedDefaultCreditCosts } from './services/credit.service.js';
+import { seedDefaultTemplates } from './services/emailTemplate.service.js';
 
 async function start() {
   await verifyConnection();
@@ -18,6 +21,9 @@ async function start() {
   await seedDefaultPrompts();
   await seedRemixStylePrompts();
   await providerRegistry.loadFromDatabase();
+  await seedDefaultPlans();
+  await seedDefaultCreditCosts();
+  await seedDefaultTemplates();
 
   startSchedulerCron();
 

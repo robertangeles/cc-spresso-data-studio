@@ -25,6 +25,8 @@ import { linkedinOAuthRoutes } from './oauth/linkedin.routes.js';
 import { pinterestOAuthRoutes } from './oauth/pinterest.routes.js';
 import { twitterOAuthRoutes } from './oauth/twitter.routes.js';
 import { uploadRoutes } from './upload.routes.js';
+import { billingRoutes } from './billing.routes.js';
+import { emailTemplateRoutes } from './emailTemplate.routes.js';
 
 const router = Router();
 
@@ -60,6 +62,8 @@ router.use('/oauth/linkedin', linkedinOAuthRoutes);
 router.use('/oauth/pinterest', pinterestOAuthRoutes);
 router.use('/oauth/twitter', twitterOAuthRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/billing', billingRoutes);
+router.use('/admin/email-templates', emailTemplateRoutes);
 
 // Connected-platforms lookup (used by Content Builder for status dots + hint banner)
 router.get('/oauth/connected', authenticate, async (req, res, next) => {
@@ -84,7 +88,7 @@ router.get('/oauth/accounts', authenticate, async (req, res, next) => {
     }
     const accounts = await oauthService.getConnectedAccountsList(req.user.userId);
     // Strip sensitive token fields before sending to client
-    const sanitized = accounts.map(({ accessToken, refreshToken, ...rest }) => rest);
+    const sanitized = accounts.map(({ accessToken: _at, refreshToken: _rt, ...rest }) => rest);
     res.json({ success: true, data: sanitized });
   } catch (err) {
     next(err);

@@ -9,6 +9,7 @@ import {
   jsonb,
   integer,
   real,
+  numeric,
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
@@ -37,6 +38,9 @@ export const users = pgTable(
     isEmailVerified: boolean('is_email_verified').notNull().default(false),
     freeSessionsLimit: integer('free_sessions_limit').notNull().default(10),
     freeSessionsUsed: integer('free_sessions_used').notNull().default(0),
+    stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
+    subscriptionTier: varchar('subscription_tier', { length: 30 }).notNull().default('free'),
+    pendingPlanId: uuid('pending_plan_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -847,3 +851,144 @@ export const factUsage = pgTable(
     uniqueIndex('idx_fact_usage_grain').on(t.userId, t.modelId, t.flowId, t.usageDate, t.source),
   ],
 );
+
+// ============================================================
+// SUBSCRIPTION PLANS (tier definitions)
+// Normal form: 2NF (features JSONB is display-only list — acceptable)
+// OLTP table
+// ============================================================
+
+export const subscriptionPlans = pgTable('subscription_plans', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 50 }).notNull().unique(),
+  displayName: varchar('display_name', { length: 100 }).notNull(),
+  priceCents: integer('price_cents').notNull().default(0),
+  currency: varchar('currency', { length: 3 }).notNull().default('usd'),
+  creditsPerMonth: integer('credits_per_month').notNull(),
+  stripePriceId: varchar('stripe_price_id', { length: 255 }),
+  features: jsonb('features').notNull().default('[]'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ============================================================
+// SUBSCRIPTIONS (user subscription state)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    planId: uuid('plan_id')
+      .notNull()
+      .references(() => subscriptionPlans.id),
+    stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
+    stripeSubscriptionId: varchar('stripe_subscription_id', { length: 255 }).unique(),
+    status: varchar('status', { length: 30 }).notNull().default('active'),
+    creditsRemaining: integer('credits_remaining').notNull().default(0),
+    creditsAllocated: integer('credits_allocated').notNull().default(0),
+    currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
+    currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    canceledAt: timestamp('canceled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: lookup subscription by Stripe customer
+    index('idx_subscriptions_stripe_customer_id').on(t.stripeCustomerId),
+    // Index: lookup by plan for analytics
+    index('idx_subscriptions_plan_id').on(t.planId),
+  ],
+);
+
+// ============================================================
+// CREDIT TRANSACTIONS (audit log of every credit change)
+// Normal form: 2NF (metadata JSONB is audit — acceptable per CLAUDE.md)
+// OLTP table
+// ============================================================
+
+export const creditTransactions = pgTable(
+  'credit_transactions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    subscriptionId: uuid('subscription_id').references(() => subscriptions.id, {
+      onDelete: 'set null',
+    }),
+    amount: integer('amount').notNull(),
+    balanceAfter: integer('balance_after').notNull(),
+    actionType: varchar('action_type', { length: 30 }).notNull(),
+    description: varchar('description', { length: 255 }).notNull(),
+    metadata: jsonb('metadata').notNull().default('{}'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: usage dashboard queries (user + date descending)
+    index('idx_credit_transactions_user_id').on(t.userId),
+    // Index: lookup transactions by subscription
+    index('idx_credit_transactions_subscription_id').on(t.subscriptionId),
+  ],
+);
+
+// ============================================================
+// CREDIT COSTS (admin-configurable credit pricing per action type)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const creditCosts = pgTable('credit_costs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  actionType: varchar('action_type', { length: 50 }).notNull().unique(),
+  displayName: varchar('display_name', { length: 100 }).notNull(),
+  baseCost: integer('base_cost').notNull().default(1),
+  premiumMultiplier: numeric('premium_multiplier', { precision: 4, scale: 2 })
+    .notNull()
+    .default('1.00'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ============================================================
+// EMAIL TEMPLATES (admin-editable email templates)
+// Normal form: 2NF (variables JSONB is a display-only list — acceptable)
+// OLTP table
+// ============================================================
+
+export const emailTemplates = pgTable('email_templates', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  eventType: varchar('event_type', { length: 50 }).notNull().unique(),
+  subject: varchar('subject', { length: 255 }).notNull(),
+  bodyHtml: text('body_html').notNull(),
+  bodyText: text('body_text').notNull(),
+  variables: jsonb('variables').notNull().default('[]'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ============================================================
+// WEBHOOK EVENTS (Stripe webhook idempotency tracking)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const webhookEvents = pgTable('webhook_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  stripeEventId: varchar('stripe_event_id', { length: 255 }).notNull().unique(),
+  eventType: varchar('event_type', { length: 100 }).notNull(),
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

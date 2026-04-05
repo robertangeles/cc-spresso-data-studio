@@ -7,9 +7,15 @@ interface AuthSlideOverProps {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: 'login' | 'register';
+  planId?: string;
 }
 
-export function AuthSlideOver({ isOpen, onClose, initialMode = 'login' }: AuthSlideOverProps) {
+export function AuthSlideOver({
+  isOpen,
+  onClose,
+  initialMode = 'login',
+  planId,
+}: AuthSlideOverProps) {
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [isClosing, setIsClosing] = useState(false);
 
@@ -99,7 +105,7 @@ export function AuthSlideOver({ isOpen, onClose, initialMode = 'login' }: AuthSl
                   : "Create your account — it's free during beta"}
               </p>
             </div>
-            <AuthForm mode={mode} onSuccess={handleClose} compact />
+            <AuthForm mode={mode} onSuccess={handleClose} compact planId={planId} />
           </div>
 
           {/* Footer */}

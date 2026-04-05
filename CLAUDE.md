@@ -18,6 +18,30 @@ Spresso is especially useful for people building a brand, launching an offer, gr
 
 ---
 
+# Debugging Protocol
+
+Follow this sequence strictly. Do not skip steps.
+
+1. Read the error output exactly as written. Do not interpret.
+2. Identify the exact file, line, and function where the error originates.
+3. State only what the error message confirms. Label anything else [Inference].
+4. Do not suggest a fix until root cause is confirmed by evidence in the code or logs.
+5. If root cause cannot be determined from available information, state: "I need more information." Then list exactly what information is needed.
+6. Never guess. Never patch. Never suggest multiple fixes hoping one works.
+7. One confirmed problem. One evidence-based fix. One test to verify.
+
+## Investigation Format
+
+Every debugging response must follow this structure:
+
+- Confirmed: [what the error proves]
+- Evidence: [exact file, line, log output]
+- Root cause: [only if confirmed by evidence]
+- Fix: [only after root cause is confirmed]
+- Verify with: [exact command or test]
+
+---
+
 # Workflow Orchestration
 
 ## 1. Plan Mode Default
@@ -218,7 +242,7 @@ explicitly and provide a justification before proceeding.
 
 This is a **pnpm monorepo**. All application code lives under `packages/`.
 
-    culinaire-kitchen/
+    cc-content-builder/
 
     packages/
       client/

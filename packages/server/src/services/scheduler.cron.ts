@@ -1,4 +1,3 @@
-import cron from 'node-cron';
 import { processDuePosts } from './scheduler.service.js';
 import { refreshExpiringTokens } from './oauth/oauth.service.js';
 import { cleanupExpiredTokens, cleanupUnverifiedAccounts } from './verification.service.js';
@@ -6,7 +5,7 @@ import { logger } from '../config/logger.js';
 
 export function startSchedulerCron() {
   // Process due posts every minute
-  cron.schedule('* * * * *', async () => {
+  setInterval(async () => {
     try {
       const count = await processDuePosts();
       if (count > 0) {
@@ -15,11 +14,11 @@ export function startSchedulerCron() {
     } catch (err) {
       logger.error({ err }, 'Scheduler cron error');
     }
-  });
+  }, 60_000);
   logger.info('Scheduler cron started (every minute)');
 
   // Refresh OAuth tokens expiring within 7 days — daily at 3am
-  cron.schedule('0 3 * * *', async () => {
+  scheduleDaily(3, async () => {
     try {
       const result = await refreshExpiringTokens();
       if (result.refreshed > 0 || result.failed > 0) {
@@ -32,7 +31,7 @@ export function startSchedulerCron() {
   logger.info('Token refresh cron started (daily at 3am)');
 
   // Cleanup expired verification tokens + unverified accounts — daily at 4am
-  cron.schedule('0 4 * * *', async () => {
+  scheduleDaily(4, async () => {
     try {
       const tokensDeleted = await cleanupExpiredTokens();
       const accountsDeleted = await cleanupUnverifiedAccounts();
@@ -44,4 +43,20 @@ export function startSchedulerCron() {
     }
   });
   logger.info('Verification cleanup cron started (daily at 4am)');
+}
+
+/**
+ * Schedule a callback to run daily at a given hour (local time).
+ * Checks every 60s if the current hour matches and hasn't run today.
+ */
+function scheduleDaily(hour: number, fn: () => Promise<void>) {
+  let lastRunDate = '';
+  setInterval(() => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    if (now.getHours() === hour && lastRunDate !== today) {
+      lastRunDate = today;
+      fn();
+    }
+  }, 60_000);
 }

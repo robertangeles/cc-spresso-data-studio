@@ -12,9 +12,10 @@ interface AuthFormProps {
   mode?: 'login' | 'register';
   onSuccess?: () => void;
   compact?: boolean;
+  planId?: string;
 }
 
-export function AuthForm({ mode = 'login', onSuccess, compact = false }: AuthFormProps) {
+export function AuthForm({ mode = 'login', onSuccess, compact = false, planId }: AuthFormProps) {
   const { login, register } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -50,11 +51,23 @@ export function AuthForm({ mode = 'login', onSuccess, compact = false }: AuthFor
 
     try {
       if (mode === 'register') {
-        await register(email, password, name, turnstileToken || undefined);
+        console.log('[AuthForm] Registering with planId:', planId);
+        await register(email, password, name, turnstileToken || undefined, planId);
         onSuccess?.();
         navigate('/verify-email');
       } else {
-        await login(email, password);
+        const pendingPlan = await login(email, password);
+        if (pendingPlan) {
+          try {
+            const { data } = await api.post('/billing/checkout', { planId: pendingPlan });
+            if (data.success && data.data?.url) {
+              window.location.href = data.data.url;
+              return;
+            }
+          } catch {
+            // Checkout failed — proceed normally
+          }
+        }
         onSuccess?.();
         navigate('/chat');
       }

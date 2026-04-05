@@ -29,58 +29,70 @@ import { ChatPage } from './pages/ChatPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { VerifyTokenPage } from './pages/VerifyTokenPage';
 import { UpgradeModal } from './components/common/UpgradeModal';
+import { PricingPage } from './pages/PricingPage';
+import { BillingPage } from './pages/settings/BillingPage';
+import { EmailTemplatePage } from './pages/settings/EmailTemplatePage';
+import { SubscriptionProvider } from './context/SubscriptionContext';
 // ContentCalendarPage removed — calendar is now inline in Content Builder
 
 export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <ToastProvider>
-          <UpgradeModal />
-          <Routes>
-            {/* Public routes — landing page at root */}
-            <Route path="/" element={<LoginPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
-            <Route path="/verify-email" element={<VerifyEmailPage />} />
-            <Route path="/verify/:token" element={<VerifyTokenPage />} />
+        <SubscriptionProvider>
+          <ToastProvider>
+            <UpgradeModal />
+            <Routes>
+              {/* Public routes — landing page at root */}
+              <Route path="/" element={<LoginPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
+              <Route path="/verify/:token" element={<VerifyTokenPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
 
-            {/* Protected routes */}
-            <Route element={<ProtectedRoute />}>
-              <Route element={<AppLayout />}>
-                <Route path="/chat" element={<ChatPage />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/flows" element={<DashboardPage />} />
-                <Route path="/flows/:id" element={<FlowBuilderPage />} />
-                <Route path="/skills" element={<SkillsCatalogPage />} />
-                <Route path="/skills/create" element={<SkillCreatorPage />} />
-                <Route path="/skills/:id/edit" element={<SkillCreatorPage />} />
-                <Route path="/content" element={<ContentBuilderPage />} />
-                <Route path="/content/library" element={<ContentLibraryPage />} />
-                <Route path="/content/calendar" element={<Navigate to="/content" replace />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route element={<AdminRoute />}>
-                  <Route path="/settings" element={<SettingsLayout />}>
-                    <Route index element={<Navigate to="integrations/database" replace />} />
-                    <Route path="integrations/database" element={<DatabaseSettingsPage />} />
-                    <Route path="integrations/ai-models" element={<LLMSettingsPage />} />
-                    <Route path="integrations/media" element={<MediaSettingsPage />} />
-                    <Route path="integrations/social-media" element={<SocialMediaSettingsPage />} />
-                    <Route path="integrations/auth" element={<AuthSettingsPage />} />
-                    <Route path="admin/roles" element={<RoleManagementPage />} />
-                    <Route path="admin/site" element={<SiteSettingsPage />} />
-                    <Route path="admin/usage" element={<UsageDashboardPage />} />
-                    <Route path="admin/system-prompts" element={<SystemPromptsPage />} />
+              {/* Protected routes */}
+              <Route element={<ProtectedRoute />}>
+                <Route element={<AppLayout />}>
+                  <Route path="/chat" element={<ChatPage />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/flows" element={<DashboardPage />} />
+                  <Route path="/flows/:id" element={<FlowBuilderPage />} />
+                  <Route path="/skills" element={<SkillsCatalogPage />} />
+                  <Route path="/skills/create" element={<SkillCreatorPage />} />
+                  <Route path="/skills/:id/edit" element={<SkillCreatorPage />} />
+                  <Route path="/content" element={<ContentBuilderPage />} />
+                  <Route path="/content/library" element={<ContentLibraryPage />} />
+                  <Route path="/content/calendar" element={<Navigate to="/content" replace />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route element={<AdminRoute />}>
+                    <Route path="/settings" element={<SettingsLayout />}>
+                      <Route index element={<Navigate to="billing" replace />} />
+                      <Route path="billing" element={<BillingPage />} />
+                      <Route path="integrations/database" element={<DatabaseSettingsPage />} />
+                      <Route path="integrations/ai-models" element={<LLMSettingsPage />} />
+                      <Route path="integrations/media" element={<MediaSettingsPage />} />
+                      <Route
+                        path="integrations/social-media"
+                        element={<SocialMediaSettingsPage />}
+                      />
+                      <Route path="integrations/auth" element={<AuthSettingsPage />} />
+                      <Route path="admin/roles" element={<RoleManagementPage />} />
+                      <Route path="admin/site" element={<SiteSettingsPage />} />
+                      <Route path="admin/usage" element={<UsageDashboardPage />} />
+                      <Route path="admin/system-prompts" element={<SystemPromptsPage />} />
+                      <Route path="admin/email-templates" element={<EmailTemplatePage />} />
+                    </Route>
                   </Route>
                 </Route>
               </Route>
-            </Route>
 
-            {/* Redirects */}
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </ToastProvider>
+              {/* Redirects */}
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </ToastProvider>
+        </SubscriptionProvider>
       </AuthProvider>
     </BrowserRouter>
   );
