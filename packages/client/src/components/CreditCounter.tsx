@@ -11,7 +11,19 @@ export function CreditCounter() {
   const { subscription, isLoading } = useSubscription();
   const navigate = useNavigate();
 
-  if (isLoading || !subscription) return null;
+  if (isLoading) {
+    return (
+      <div className="mt-1.5 w-full animate-pulse">
+        <div className="flex items-center justify-between mb-1">
+          <div className="h-2.5 w-14 rounded bg-white/5" />
+          <div className="h-2.5 w-16 rounded bg-white/5" />
+        </div>
+        <div className="h-1 w-full rounded-full bg-white/5" />
+      </div>
+    );
+  }
+
+  if (!subscription) return null;
 
   const { creditsRemaining, creditsAllocated } = subscription;
   const pct = creditsAllocated > 0 ? creditsRemaining / creditsAllocated : 0;

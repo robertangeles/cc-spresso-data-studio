@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import type { ApiResponse } from '@cc/shared';
 import { UnauthorizedError, ValidationError } from '../utils/errors.js';
 import * as subscriptionService from '../services/subscription.service.js';
-import * as creditService from '../services/credit.service.js';
+import * as creditService from '../services/credit.service.js'; // used by adjustCredits, listCreditCosts, updateCreditCost, listPlans
 import * as stripeService from '../services/stripe.service.js';
 import * as adminService from '../services/admin.service.js';
 import { logger } from '../config/logger.js';
@@ -61,7 +61,6 @@ export async function getSubscription(
     if (!req.user) throw new UnauthorizedError('Authentication required');
 
     const { subscription, plan } = await subscriptionService.getSubscription(req.user.userId);
-    const balance = await creditService.getBalance(req.user.userId);
 
     res.json({
       success: true,
@@ -87,7 +86,6 @@ export async function getSubscription(
               features: plan.features,
             }
           : null,
-        balance,
       },
     });
   } catch (err) {
