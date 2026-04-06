@@ -26,13 +26,11 @@ export async function createScheduled(
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { contentItemId, channelId, scheduledAt, socialAccountId } = req.body;
     if (!socialAccountId) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          data: null,
-          error: 'socialAccountId is required — select an account for the platform',
-        } as any);
+      res.status(400).json({
+        success: false,
+        data: null,
+        error: 'socialAccountId is required — select an account for the platform',
+      });
       return;
     }
     const post = await schedulerService.schedulePost({

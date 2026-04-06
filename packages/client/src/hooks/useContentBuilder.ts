@@ -80,6 +80,8 @@ export function useContentBuilder() {
     state.selectedAccounts,
     state.activeTab,
     state.activePromptId,
+    state.activePromptName,
+    state.activePromptBody,
     state.commandHistory,
   ]);
 

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import jwt from 'jsonwebtoken';
 
+type TestJson = Record<string, unknown>;
+
 const BASE_URL = process.env.TEST_API_URL || 'http://localhost:3003';
 const JWT_SECRET =
   process.env.JWT_SECRET || 'UTA1D5iyPtizM5ppTNrm1LZJLcVrKlKSTjiYlLaoyZrhGm/hha31+Vkl4NlCr8h3';
@@ -33,7 +35,7 @@ afterAll(async () => {
 describe('GET /api/skills/community', () => {
   it('returns public skills without auth', async () => {
     const res = await fetch(`${BASE_URL}/api/skills/community`);
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.success).toBe(true);
@@ -44,7 +46,7 @@ describe('GET /api/skills/community', () => {
 
   it('filters by category', async () => {
     const res = await fetch(`${BASE_URL}/api/skills/community?category=repurpose`);
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     for (const skill of data.data.skills) {
@@ -54,7 +56,7 @@ describe('GET /api/skills/community', () => {
 
   it('supports sort=popular', async () => {
     const res = await fetch(`${BASE_URL}/api/skills/community?sort=popular`);
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.success).toBe(true);
@@ -62,7 +64,7 @@ describe('GET /api/skills/community', () => {
 
   it('supports sort=newest', async () => {
     const res = await fetch(`${BASE_URL}/api/skills/community?sort=newest`);
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.success).toBe(true);
@@ -90,12 +92,12 @@ describe('GET /api/skills/community', () => {
         },
       }),
     });
-    const created: any = await createRes.json();
+    const created = (await createRes.json()) as TestJson;
     if (created.data?.id) createdSkillIds.push(created.data.id);
 
     // Check community listing
     const communityRes = await fetch(`${BASE_URL}/api/skills/community`);
-    const communityData: any = await communityRes.json();
+    const communityData = (await communityRes.json()) as TestJson;
     const found = communityData.data.skills.find((s: { id: string }) => s.id === created.data?.id);
     expect(found).toBeUndefined();
   });
@@ -104,7 +106,7 @@ describe('GET /api/skills/community', () => {
 describe('GET /api/skills/community/trending', () => {
   it('returns trending skills array', async () => {
     const res = await fetch(`${BASE_URL}/api/skills/community/trending`);
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.success).toBe(true);
@@ -115,7 +117,7 @@ describe('GET /api/skills/community/trending', () => {
 describe('GET /api/skills/community/creator/:userId', () => {
   it('returns skills by a specific creator', async () => {
     const res = await fetch(`${BASE_URL}/api/skills/community/creator/${ROB_USER_ID}`);
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.data.skills).toBeDefined();
@@ -137,7 +139,7 @@ describe('GET /api/skills/mine', () => {
     const res = await fetch(`${BASE_URL}/api/skills/mine`, {
       headers: authHeader(ROB_USER_ID),
     });
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.success).toBe(true);
@@ -148,7 +150,7 @@ describe('GET /api/skills/mine', () => {
     const res = await fetch(`${BASE_URL}/api/skills/mine?category=generate`, {
       headers: authHeader(ROB_USER_ID),
     });
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     for (const skill of data.data) {
@@ -164,7 +166,7 @@ describe('GET /api/skills/mine', () => {
 describe('GET /api/skills/:idOrSlug', () => {
   it('returns skill by slug', async () => {
     const res = await fetch(`${BASE_URL}/api/skills/repurpose-blog-to-tweets`);
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.data.slug).toBe('repurpose-blog-to-tweets');
@@ -205,7 +207,7 @@ describe('Skill CRUD', () => {
         },
       }),
     });
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(201);
     expect(data.success).toBe(true);
@@ -269,7 +271,7 @@ describe('Skill CRUD', () => {
       headers: { ...authHeader(ROB_USER_ID), 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Updated CRUD Skill', description: 'Updated description' }),
     });
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.data.name).toBe('Updated CRUD Skill');
@@ -320,7 +322,7 @@ describe('PATCH /api/skills/:id/visibility', () => {
         },
       }),
     });
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
     skillId = data.data.id;
     createdSkillIds.push(skillId);
   });
@@ -331,7 +333,7 @@ describe('PATCH /api/skills/:id/visibility', () => {
       headers: { ...authHeader(ROB_USER_ID), 'Content-Type': 'application/json' },
       body: JSON.stringify({ visibility: 'public' }),
     });
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.data.visibility).toBe('public');
@@ -343,7 +345,7 @@ describe('PATCH /api/skills/:id/visibility', () => {
       headers: { ...authHeader(ROB_USER_ID), 'Content-Type': 'application/json' },
       body: JSON.stringify({ visibility: 'unlisted' }),
     });
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.data.visibility).toBe('unlisted');
@@ -355,7 +357,7 @@ describe('PATCH /api/skills/:id/visibility', () => {
       headers: { ...authHeader(ROB_USER_ID), 'Content-Type': 'application/json' },
       body: JSON.stringify({ visibility: 'private' }),
     });
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.data.visibility).toBe('private');
@@ -392,7 +394,7 @@ describe('POST /api/skills/:id/favorite', () => {
   beforeAll(async () => {
     // Get a public skill to favorite
     const res = await fetch(`${BASE_URL}/api/skills/community`);
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
     publicSkillId = data.data.skills[0]?.id;
   });
 
@@ -401,7 +403,7 @@ describe('POST /api/skills/:id/favorite', () => {
       method: 'POST',
       headers: authHeader(ROB_USER_ID),
     });
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.data.favorited).toBe(true);
@@ -412,7 +414,7 @@ describe('POST /api/skills/:id/favorite', () => {
       method: 'POST',
       headers: authHeader(ROB_USER_ID),
     });
-    const data: any = await res.json();
+    const data = (await res.json()) as TestJson;
 
     expect(res.status).toBe(200);
     expect(data.data.favorited).toBe(false);
@@ -437,7 +439,7 @@ describe('POST /api/skills/:id/fork', () => {
     const mineRes = await fetch(`${BASE_URL}/api/skills/mine`, {
       headers: authHeader(ROB_USER_ID),
     });
-    const mineData: any = await mineRes.json();
+    const mineData = (await mineRes.json()) as TestJson;
     const ownSkillId = mineData.data[0]?.id;
 
     if (ownSkillId) {
@@ -453,7 +455,7 @@ describe('POST /api/skills/:id/fork', () => {
 
   it('rejects without auth', async () => {
     const communityRes = await fetch(`${BASE_URL}/api/skills/community`);
-    const communityData: any = await communityRes.json();
+    const communityData = (await communityRes.json()) as TestJson;
     const skillId = communityData.data.skills[0]?.id;
 
     const res = await fetch(`${BASE_URL}/api/skills/${skillId}/fork`, {

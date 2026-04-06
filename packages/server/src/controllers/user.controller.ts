@@ -78,9 +78,7 @@ export async function deleteUser(
 
     // Prevent self-deletion
     if (req.params.id === req.user.userId) {
-      res
-        .status(400)
-        .json({ success: false, data: null, error: 'Cannot delete your own account' } as any);
+      res.status(400).json({ success: false, data: null, error: 'Cannot delete your own account' });
       return;
     }
 
@@ -100,9 +98,7 @@ export async function setUserRoles(
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { roleIds } = req.body;
     if (!Array.isArray(roleIds)) {
-      res
-        .status(400)
-        .json({ success: false, data: null, error: 'roleIds must be an array' } as any);
+      res.status(400).json({ success: false, data: null, error: 'roleIds must be an array' });
       return;
     }
     const roles = await userService.setUserRoles(req.params.id, roleIds);

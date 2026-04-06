@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { AuthForm } from './AuthForm';
 import { SpressoLogo } from './SpressoLogo';
@@ -23,6 +23,14 @@ export function AuthSlideOver({
     setMode(initialMode);
   }, [initialMode]);
 
+  const handleClose = useCallback(() => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsClosing(false);
+      onClose();
+    }, 200);
+  }, [onClose]);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -36,15 +44,7 @@ export function AuthSlideOver({
       document.removeEventListener('keydown', handleEsc);
       document.body.style.overflow = '';
     };
-  }, [isOpen]);
-
-  const handleClose = () => {
-    setIsClosing(true);
-    setTimeout(() => {
-      setIsClosing(false);
-      onClose();
-    }, 200);
-  };
+  }, [isOpen, handleClose]);
 
   if (!isOpen && !isClosing) return null;
 

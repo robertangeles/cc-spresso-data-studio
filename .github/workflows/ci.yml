@@ -41,7 +41,7 @@ jobs:
       # Lint after build: @typescript-eslint needs @cc/shared declarations
       # which are generated during the build step above.
       - name: Lint
-        run: pnpm lint
+        run: pnpm lint -- --max-warnings 0
 
       - name: Unit tests
         run: pnpm test

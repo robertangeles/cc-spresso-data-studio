@@ -12,7 +12,7 @@ export async function uploadImage(
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     if (!req.file) {
-      res.status(400).json({ success: false, data: { url: '' }, error: 'No file uploaded' } as any);
+      res.status(400).json({ success: false, data: { url: '' }, error: 'No file uploaded' });
       return;
     }
 

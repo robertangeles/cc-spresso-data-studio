@@ -8,5 +8,6 @@
     "baseUrl": "."
   },
   "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.integration.test.ts"],
   "references": [{ "path": "../shared" }]
 }

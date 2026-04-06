@@ -985,11 +985,19 @@ function SocialAccountsTab() {
         .then(({ data }) => {
           const pages = data.data?.pages ?? [];
           setPagePicker(
-            pages.map((p: any) => ({
-              ...p,
-              selected: true,
-              connectInstagram: !!p.instagramAccountId,
-            })),
+            pages.map(
+              (p: {
+                pageId: string;
+                pageName: string;
+                pageAccessToken: string;
+                instagramAccountId?: string;
+                instagramUsername?: string;
+              }) => ({
+                ...p,
+                selected: true,
+                connectInstagram: !!p.instagramAccountId,
+              }),
+            ),
           );
         })
         .catch(() => {
