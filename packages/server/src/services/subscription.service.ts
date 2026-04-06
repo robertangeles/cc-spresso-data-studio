@@ -892,7 +892,7 @@ export async function seedDefaultPlans(): Promise<void> {
 
   if (existing) {
     // Sync prices on existing plans
-    const priceMap: Record<string, number> = { pro: 2900, ultra: 9900 };
+    const priceMap: Record<string, number> = { creator: 2900, business: 9900 };
     for (const [name, cents] of Object.entries(priceMap)) {
       await db
         .update(schema.subscriptionPlans)
@@ -918,8 +918,8 @@ export async function seedDefaultPlans(): Promise<void> {
       ],
     },
     {
-      name: 'pro',
-      displayName: 'Pro',
+      name: 'creator',
+      displayName: 'Creator',
       priceCents: 2900,
       creditsPerMonth: 8000,
       sortOrder: 1,
@@ -932,14 +932,14 @@ export async function seedDefaultPlans(): Promise<void> {
       ],
     },
     {
-      name: 'ultra',
-      displayName: 'Ultra',
+      name: 'business',
+      displayName: 'Business',
       priceCents: 9900,
       creditsPerMonth: 20000,
       sortOrder: 2,
       features: [
         '20,000 AI credits/month',
-        'Everything in Pro, plus:',
+        'Everything in Creator, plus:',
         'Unlimited premium models',
         'Priority support',
         'Custom workflows',

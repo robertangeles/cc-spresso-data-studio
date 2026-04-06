@@ -12,22 +12,39 @@ interface Plan {
   features: string[];
 }
 
-const tierConfig: Record<string, { icon: React.ReactNode; accent: string; featured: boolean }> = {
+const tierConfig: Record<
+  string,
+  { icon: React.ReactNode; accent: string; featured: boolean; purpose: string; cta: string }
+> = {
   free: {
     icon: <Zap className="h-5 w-5 text-text-secondary" />,
     accent: 'text-text-secondary',
     featured: false,
+    purpose: 'Try the workflow',
+    cta: 'Try it free',
   },
-  pro: {
+  creator: {
     icon: <Sparkles className="h-5 w-5 text-accent" />,
     accent: 'text-accent',
     featured: true,
+    purpose: 'For regular creators',
+    cta: 'Start Creator',
   },
-  ultra: {
+  business: {
     icon: <Zap className="h-5 w-5 text-amber-400" />,
     accent: 'text-amber-400',
     featured: false,
+    purpose: 'For content-driven businesses',
+    cta: 'Start Business',
   },
+};
+
+const defaultConfig = {
+  icon: <Zap className="h-5 w-5 text-text-secondary" />,
+  accent: 'text-text-secondary',
+  featured: false,
+  purpose: '',
+  cta: 'Get Started',
 };
 
 interface PricingSectionProps {
@@ -45,7 +62,6 @@ export function PricingSection({ onGetStarted }: PricingSectionProps) {
       try {
         const { data } = await axios.get('/api/billing/plans');
         if (!cancelled && data.success) {
-          console.log('[PricingSection] Plans loaded:', data.data.plans.length);
           setPlans(data.data.plans);
         }
       } catch (err) {
@@ -76,11 +92,10 @@ export function PricingSection({ onGetStarted }: PricingSectionProps) {
             <Sparkles className="h-6 w-6 text-accent" />
           </div>
           <h2 className="text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
-            Simple, transparent pricing
+            Pricing that grows with your workflow
           </h2>
           <p className="mt-4 text-lg text-text-secondary max-w-2xl mx-auto">
-            Start free. Upgrade when you need more power. Every plan includes full access to the
-            content engine.
+            Start free and upgrade when Spresso becomes part of how you create content.
           </p>
         </div>
 
@@ -106,7 +121,7 @@ export function PricingSection({ onGetStarted }: PricingSectionProps) {
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {plans.map((plan, index) => {
-              const config = tierConfig[plan.name] || tierConfig.free;
+              const config = tierConfig[plan.name] || defaultConfig;
               const price = plan.priceCents / 100;
 
               return (
@@ -117,7 +132,7 @@ export function PricingSection({ onGetStarted }: PricingSectionProps) {
                   }`}
                   style={{ transitionDelay: `${index * 100}ms` }}
                 >
-                  {/* Featured glow border for Pro */}
+                  {/* Featured glow border for Creator */}
                   {config.featured && (
                     <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-b from-accent/30 via-amber-600/20 to-accent/10 blur-[1px]" />
                   )}
@@ -129,13 +144,6 @@ export function PricingSection({ onGetStarted }: PricingSectionProps) {
                         : 'bg-surface-2/50 border-white/5 hover:shadow-dark-lg'
                     }`}
                   >
-                    {/* Popular badge for Pro */}
-                    {config.featured && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-accent to-amber-600 px-3 py-0.5 text-xs font-semibold text-surface-0">
-                        Most Popular
-                      </div>
-                    )}
-
                     {/* Tier header */}
                     <div className="flex items-center gap-2 mb-2">
                       {config.icon}
@@ -152,13 +160,11 @@ export function PricingSection({ onGetStarted }: PricingSectionProps) {
                       {price > 0 && <span className="text-text-tertiary text-sm">/mo</span>}
                     </div>
 
-                    {/* Credits */}
-                    <p className="text-sm text-text-secondary mb-6">
-                      {plan.creditsPerMonth.toLocaleString()} credits/month
-                    </p>
+                    {/* Plan purpose — primary differentiator */}
+                    <p className="text-sm font-medium text-text-secondary mb-6">{config.purpose}</p>
 
                     {/* Features */}
-                    <ul className="space-y-3 mb-8">
+                    <ul className="space-y-3 mb-4">
                       {plan.features.map((feature) => (
                         <li key={feature} className="flex items-start gap-2.5">
                           <Check
@@ -169,18 +175,23 @@ export function PricingSection({ onGetStarted }: PricingSectionProps) {
                       ))}
                     </ul>
 
+                    {/* Credits — de-emphasized */}
+                    <p className="text-xs text-text-tertiary mb-6">
+                      {plan.creditsPerMonth.toLocaleString()} credits/month
+                    </p>
+
                     {/* CTA */}
                     <button
                       onClick={() => onGetStarted(plan.name === 'free' ? undefined : plan.id)}
                       className={`w-full rounded-xl py-2.5 px-4 text-sm font-semibold transition-all duration-200 ${
                         config.featured
                           ? 'bg-gradient-to-r from-accent to-amber-600 text-surface-0 hover:shadow-[0_0_20px_rgba(255,214,10,0.25)] hover:scale-[1.02] active:scale-[0.98]'
-                          : plan.name === 'ultra'
+                          : plan.name === 'business'
                             ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-surface-0 hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] hover:scale-[1.02] active:scale-[0.98]'
                             : 'bg-surface-3/80 text-text-primary hover:bg-surface-3 border border-white/5 hover:border-white/10'
                       }`}
                     >
-                      {plan.name === 'free' ? 'Start Free' : 'Get Started'}
+                      {config.cta}
                     </button>
                   </div>
                 </div>

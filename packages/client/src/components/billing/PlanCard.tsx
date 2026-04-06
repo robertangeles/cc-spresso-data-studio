@@ -23,13 +23,13 @@ interface PlanCardProps {
 
 const TIER_CONFIG: Record<string, { accent: string; checkColor: string; featured: boolean }> = {
   free: { accent: 'text-text-secondary', checkColor: 'text-emerald-400', featured: false },
-  pro: { accent: 'text-accent', checkColor: 'text-accent', featured: true },
-  ultra: { accent: 'text-amber-400', checkColor: 'text-amber-400', featured: false },
+  creator: { accent: 'text-accent', checkColor: 'text-accent', featured: true },
+  business: { accent: 'text-amber-400', checkColor: 'text-amber-400', featured: false },
 };
 
 function TierIcon({ tier }: { tier: string }) {
-  if (tier === 'pro') return <Sparkles className="h-5 w-5 text-accent" />;
-  if (tier === 'ultra') return <Zap className="h-5 w-5 text-amber-400" />;
+  if (tier === 'creator') return <Sparkles className="h-5 w-5 text-accent" />;
+  if (tier === 'business') return <Zap className="h-5 w-5 text-amber-400" />;
   return <Zap className="h-5 w-5 text-text-secondary" />;
 }
 
@@ -125,7 +125,7 @@ export function PlanCard({
                 ? 'bg-surface-3/50 text-text-tertiary cursor-not-allowed'
                 : config.featured
                   ? 'bg-gradient-to-r from-accent to-amber-600 text-surface-0 hover:shadow-[0_0_20px_rgba(255,214,10,0.25)] hover:scale-[1.02] active:scale-[0.98]'
-                  : plan.name === 'ultra'
+                  : plan.name === 'business'
                     ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-surface-0 hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] hover:scale-[1.02] active:scale-[0.98]'
                     : 'bg-surface-3/80 text-text-primary hover:bg-surface-3 border border-white/5 hover:border-white/10'
             }`}

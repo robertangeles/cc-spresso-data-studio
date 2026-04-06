@@ -9,7 +9,7 @@ interface Plan {
   price: number;
   credits: number;
   features: string[];
-  tier: 'free' | 'pro' | 'ultra';
+  tier: 'free' | 'creator' | 'business';
 }
 
 interface CreditCost {
@@ -80,12 +80,12 @@ export function PricingPage() {
       accent: 'text-text-secondary',
       featured: false,
     },
-    pro: {
+    creator: {
       icon: <Sparkles className="h-5 w-5 text-accent" />,
       accent: 'text-accent',
       featured: true,
     },
-    ultra: {
+    business: {
       icon: <Zap className="h-5 w-5 text-amber-400" />,
       accent: 'text-amber-400',
       featured: false,
@@ -212,7 +212,7 @@ export function PricingPage() {
                           ? 'bg-surface-3/50 text-text-tertiary cursor-not-allowed'
                           : config.featured
                             ? 'bg-gradient-to-r from-accent to-amber-600 text-surface-0 hover:shadow-[0_0_20px_rgba(255,214,10,0.25)] hover:scale-[1.02] active:scale-[0.98]'
-                            : plan.tier === 'ultra'
+                            : plan.tier === 'business'
                               ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-surface-0 hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] hover:scale-[1.02] active:scale-[0.98]'
                               : 'bg-surface-3/80 text-text-primary hover:bg-surface-3 border border-white/5 hover:border-white/10'
                       }`}
@@ -298,7 +298,7 @@ export function PricingPage() {
                       <th
                         key={plan.id}
                         className={`px-6 py-4 text-center text-xs font-semibold uppercase tracking-wider ${
-                          plan.tier === 'pro' ? 'text-accent' : 'text-text-tertiary'
+                          plan.tier === 'creator' ? 'text-accent' : 'text-text-tertiary'
                         }`}
                       >
                         {plan.name}

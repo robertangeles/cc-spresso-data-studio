@@ -53,7 +53,7 @@ export function VerifyEmailPage() {
           navigate('/login', { replace: true });
           return;
         }
-        setTimeout(() => navigate('/chat', { replace: true }), 1500);
+        setTimeout(() => navigate('/content', { replace: true }), 1500);
       }
     } catch {
       // Non-blocking — keep polling
@@ -63,7 +63,7 @@ export function VerifyEmailPage() {
   useEffect(() => {
     // If already verified, redirect immediately
     if (user?.isEmailVerified) {
-      navigate('/chat', { replace: true });
+      navigate('/content', { replace: true });
       return;
     }
 
