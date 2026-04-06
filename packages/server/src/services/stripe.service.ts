@@ -11,7 +11,7 @@ interface StripeKeySet {
   secretKey: string;
   publishableKey: string;
   webhookSecret: string;
-  prices: Record<string, string>; // plan name → Stripe Price ID (e.g. { pro: 'price_...', ultra: 'price_...' })
+  prices: Record<string, string>; // plan name → Stripe Price ID (e.g. { creator: 'price_...', business: 'price_...' })
 }
 
 export type StripeMode = 'test' | 'live';
