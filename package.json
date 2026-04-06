@@ -7,7 +7,7 @@
     "predev": "npx kill-port 3003 5173 5174 || exit 0",
     "dev": "pnpm -r --parallel dev",
     "build": "rm -f packages/shared/tsconfig.tsbuildinfo && pnpm -C packages/shared build && pnpm -C packages/server build && pnpm -C packages/client build",
-    "lint": "eslint packages/*/src --ext .ts,.tsx",
+    "lint": "eslint packages/*/src --ext .ts,.tsx --max-warnings 0",
     "lint:fix": "eslint packages/*/src --ext .ts,.tsx --fix",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,css}\"",
     "test": "pnpm -r test",
