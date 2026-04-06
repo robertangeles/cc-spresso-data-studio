@@ -35,6 +35,7 @@ describe('createSkillSchema', () => {
   });
 
   it('rejects missing slug', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { slug: _slug, ...noSlug } = validData;
     const result = createSkillSchema.safeParse(noSlug);
     expect(result.success).toBe(false);
@@ -76,6 +77,7 @@ describe('createSkillSchema', () => {
   });
 
   it('rejects missing config', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { config: _config, ...noConfig } = validData;
     const result = createSkillSchema.safeParse(noConfig);
     expect(result.success).toBe(false);

@@ -1,5 +1,6 @@
 module.exports = {
   root: true,
+  ignorePatterns: ['*.d.ts'],
   env: {
     node: true,
     es2022: true,
