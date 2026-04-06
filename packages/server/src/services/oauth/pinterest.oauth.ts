@@ -3,6 +3,20 @@ import { db, schema } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
 
+interface PinterestTokenResponse {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  error?: string;
+  message?: string;
+}
+
+interface PinterestUserResponse {
+  id?: string;
+  username?: string;
+  business_name?: string;
+}
+
 export class PinterestOAuthProvider implements OAuthProvider {
   platform = 'pinterest';
 
@@ -45,7 +59,7 @@ export class PinterestOAuthProvider implements OAuthProvider {
         redirect_uri: redirectUri,
       }),
     });
-    const tokenData = (await tokenRes.json()) as any;
+    const tokenData = (await tokenRes.json()) as PinterestTokenResponse;
 
     if (tokenData.error || !tokenData.access_token) {
       logger.error({ error: tokenData }, 'Pinterest code exchange failed');
@@ -78,7 +92,7 @@ export class PinterestOAuthProvider implements OAuthProvider {
         refresh_token: currentToken,
       }),
     });
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as PinterestTokenResponse;
 
     if (data.error || !data.access_token) {
       logger.error({ error: data }, 'Pinterest token refresh failed');
@@ -96,7 +110,7 @@ export class PinterestOAuthProvider implements OAuthProvider {
     const res = await fetch('https://api.pinterest.com/v5/user_account', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as PinterestUserResponse;
 
     return {
       accountId: data.id ?? data.username ?? '',

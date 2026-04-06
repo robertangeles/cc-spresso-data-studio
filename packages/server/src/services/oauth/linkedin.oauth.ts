@@ -3,6 +3,35 @@ import { db, schema } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
 
+interface LinkedInTokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  error?: string;
+  error_description?: string;
+}
+
+interface LinkedInOrgAclElement {
+  'organization~'?: {
+    id?: number | string;
+    localizedName?: string;
+  };
+}
+
+interface LinkedInOrgAclsResponse {
+  elements?: LinkedInOrgAclElement[];
+  error?: string;
+}
+
+interface LinkedInUserInfoResponse {
+  sub: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+  error?: string;
+  error_description?: string;
+}
+
 export class LinkedInOAuthProvider implements OAuthProvider {
   platform = 'linkedin';
 
@@ -55,7 +84,7 @@ export class LinkedInOAuthProvider implements OAuthProvider {
         redirect_uri: redirectUri,
       }),
     });
-    const tokenData = (await tokenRes.json()) as any;
+    const tokenData = (await tokenRes.json()) as LinkedInTokenResponse;
 
     if (tokenData.error) {
       logger.error({ error: tokenData.error }, 'LinkedIn org code exchange failed');
@@ -89,13 +118,13 @@ export class LinkedInOAuthProvider implements OAuthProvider {
         },
       },
     );
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as LinkedInOrgAclsResponse;
 
     if (!data.elements || data.elements.length === 0) {
       return [];
     }
 
-    return data.elements.map((el: any) => ({
+    return data.elements.map((el: LinkedInOrgAclElement) => ({
       orgId: String(el['organization~']?.id ?? ''),
       orgName: el['organization~']?.localizedName ?? 'Unknown Organization',
     }));
@@ -124,7 +153,7 @@ export class LinkedInOAuthProvider implements OAuthProvider {
         redirect_uri: redirectUri,
       }),
     });
-    const tokenData = (await tokenRes.json()) as any;
+    const tokenData = (await tokenRes.json()) as LinkedInTokenResponse;
 
     if (tokenData.error) {
       logger.error({ error: tokenData.error }, 'LinkedIn code exchange failed');
@@ -161,7 +190,7 @@ export class LinkedInOAuthProvider implements OAuthProvider {
         client_secret: clientSecret,
       }),
     });
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as LinkedInTokenResponse;
 
     if (data.error) {
       logger.error({ error: data.error }, 'LinkedIn token refresh failed');
@@ -179,7 +208,7 @@ export class LinkedInOAuthProvider implements OAuthProvider {
     const res = await fetch('https://api.linkedin.com/v2/userinfo', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as LinkedInUserInfoResponse;
 
     if (data.error) {
       throw new Error(data.error_description || 'Failed to get LinkedIn profile');

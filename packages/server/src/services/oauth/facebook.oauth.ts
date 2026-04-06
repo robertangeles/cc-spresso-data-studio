@@ -3,6 +3,29 @@ import { db, schema } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
 
+interface FacebookTokenResponse {
+  access_token: string;
+  expires_in?: number;
+  error?: { message: string; type?: string; code?: number };
+}
+
+interface FacebookPage {
+  id: string;
+  name: string;
+  access_token: string;
+  instagram_business_account?: { id: string; username: string };
+}
+
+interface FacebookPagesResponse {
+  data?: FacebookPage[];
+  error?: { message: string };
+}
+
+interface FacebookAccountResponse {
+  id: string;
+  name: string;
+}
+
 export class FacebookOAuthProvider implements OAuthProvider {
   platform = 'facebook';
 
@@ -36,7 +59,7 @@ export class FacebookOAuthProvider implements OAuthProvider {
     // Exchange code for short-lived token
     const tokenUrl = `https://graph.facebook.com/v22.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`;
     const tokenRes = await fetch(tokenUrl);
-    const tokenData = (await tokenRes.json()) as any;
+    const tokenData = (await tokenRes.json()) as FacebookTokenResponse;
 
     if (tokenData.error) {
       logger.error({ error: tokenData.error }, 'Facebook code exchange failed');
@@ -46,7 +69,7 @@ export class FacebookOAuthProvider implements OAuthProvider {
     // Exchange for long-lived user token (60 days)
     const longLivedUrl = `https://graph.facebook.com/v22.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${tokenData.access_token}`;
     const longLivedRes = await fetch(longLivedUrl);
-    const longLivedData = (await longLivedRes.json()) as any;
+    const longLivedData = (await longLivedRes.json()) as FacebookTokenResponse;
 
     if (longLivedData.error) {
       logger.error({ error: longLivedData.error }, 'Facebook long-lived token exchange failed');
@@ -76,13 +99,13 @@ export class FacebookOAuthProvider implements OAuthProvider {
     const pagesRes = await fetch(
       `https://graph.facebook.com/v22.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username}&access_token=${userAccessToken}`,
     );
-    const pagesData = (await pagesRes.json()) as any;
+    const pagesData = (await pagesRes.json()) as FacebookPagesResponse;
 
     if (!pagesData.data || pagesData.data.length === 0) {
       return [];
     }
 
-    return pagesData.data.map((page: any) => ({
+    return pagesData.data.map((page: FacebookPage) => ({
       pageId: page.id,
       pageName: page.name,
       pageAccessToken: page.access_token,
@@ -97,7 +120,7 @@ export class FacebookOAuthProvider implements OAuthProvider {
     const { appId, appSecret } = await this.getCredentials();
     const refreshUrl = `https://graph.facebook.com/v22.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${currentToken}`;
     const res = await fetch(refreshUrl);
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as FacebookTokenResponse;
 
     if (data.error) {
       logger.error({ error: data.error }, 'Facebook token refresh failed');
@@ -114,7 +137,7 @@ export class FacebookOAuthProvider implements OAuthProvider {
     const res = await fetch(
       `https://graph.facebook.com/v22.0/me?fields=id,name&access_token=${accessToken}`,
     );
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as FacebookAccountResponse;
     return { accountId: data.id, accountName: data.name };
   }
 

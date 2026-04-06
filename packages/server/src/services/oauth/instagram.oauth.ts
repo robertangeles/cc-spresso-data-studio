@@ -3,6 +3,23 @@ import { db, schema } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
 
+interface MetaTokenResponse {
+  access_token: string;
+  expires_in?: number;
+  error?: { message: string };
+}
+
+interface MetaPagesResponse {
+  data?: Array<{ id: string; name: string }>;
+}
+
+interface MetaInstagramAccountResponse {
+  instagram_business_account?: {
+    id: string;
+    username?: string;
+  };
+}
+
 export class InstagramOAuthProvider implements OAuthProvider {
   platform = 'instagram';
 
@@ -37,7 +54,7 @@ export class InstagramOAuthProvider implements OAuthProvider {
     // Exchange code for short-lived token
     const tokenUrl = `https://graph.facebook.com/v22.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`;
     const tokenRes = await fetch(tokenUrl);
-    const tokenData = (await tokenRes.json()) as any;
+    const tokenData = (await tokenRes.json()) as MetaTokenResponse;
 
     if (tokenData.error) {
       logger.error({ error: tokenData.error }, 'Instagram code exchange failed');
@@ -47,7 +64,7 @@ export class InstagramOAuthProvider implements OAuthProvider {
     // Exchange for long-lived token (60 days)
     const longLivedUrl = `https://graph.facebook.com/v22.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${tokenData.access_token}`;
     const longLivedRes = await fetch(longLivedUrl);
-    const longLivedData = (await longLivedRes.json()) as any;
+    const longLivedData = (await longLivedRes.json()) as MetaTokenResponse;
 
     if (longLivedData.error) {
       logger.error({ error: longLivedData.error }, 'Instagram long-lived token exchange failed');
@@ -71,7 +88,7 @@ export class InstagramOAuthProvider implements OAuthProvider {
   async refreshToken(currentToken: string): Promise<OAuthTokens> {
     const refreshUrl = `https://graph.facebook.com/v22.0/oauth/access_token?grant_type=ig_refresh_token&access_token=${currentToken}`;
     const res = await fetch(refreshUrl);
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as MetaTokenResponse;
 
     if (data.error) {
       logger.error({ error: data.error }, 'Instagram token refresh failed');
@@ -89,7 +106,7 @@ export class InstagramOAuthProvider implements OAuthProvider {
     const pagesRes = await fetch(
       `https://graph.facebook.com/v22.0/me/accounts?access_token=${accessToken}`,
     );
-    const pagesData = (await pagesRes.json()) as any;
+    const pagesData = (await pagesRes.json()) as MetaPagesResponse;
 
     if (!pagesData.data || pagesData.data.length === 0) {
       throw new Error(
@@ -102,7 +119,7 @@ export class InstagramOAuthProvider implements OAuthProvider {
     const igRes = await fetch(
       `https://graph.facebook.com/v22.0/${page.id}?fields=instagram_business_account{id,username}&access_token=${accessToken}`,
     );
-    const igData = (await igRes.json()) as any;
+    const igData = (await igRes.json()) as MetaInstagramAccountResponse;
 
     if (!igData.instagram_business_account) {
       throw new Error(

@@ -1,5 +1,11 @@
 import { logger } from '../../config/logger.js';
 
+interface PinterestPinResponse {
+  id?: string;
+  code?: number;
+  message?: string;
+}
+
 interface PublishResult {
   success: boolean;
   pinId?: string;
@@ -51,7 +57,7 @@ export async function publishToPinterest(params: {
       body: JSON.stringify(pinBody),
     });
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as PinterestPinResponse;
 
     if (!res.ok || data.code) {
       logger.error({ error: data }, 'Pinterest pin creation failed');

@@ -3,6 +3,19 @@ import { db, schema } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
 
+interface ThreadsTokenResponse {
+  access_token: string;
+  expires_in?: number;
+  error?: string;
+  error_message?: string;
+}
+
+interface ThreadsUserResponse {
+  id: string;
+  username: string;
+  error?: { message: string };
+}
+
 export class ThreadsOAuthProvider implements OAuthProvider {
   platform = 'threads';
 
@@ -62,7 +75,7 @@ export class ThreadsOAuthProvider implements OAuthProvider {
         code,
       }),
     });
-    const tokenData = (await tokenRes.json()) as any;
+    const tokenData = (await tokenRes.json()) as ThreadsTokenResponse;
 
     if (tokenData.error) {
       logger.error({ error: tokenData.error }, 'Threads code exchange failed');
@@ -73,7 +86,7 @@ export class ThreadsOAuthProvider implements OAuthProvider {
     const longLivedRes = await fetch(
       `https://graph.threads.net/access_token?grant_type=th_exchange_token&client_secret=${appSecret}&access_token=${tokenData.access_token}`,
     );
-    const longLivedData = (await longLivedRes.json()) as any;
+    const longLivedData = (await longLivedRes.json()) as ThreadsTokenResponse;
 
     if (longLivedData.error) {
       logger.error({ error: longLivedData.error }, 'Threads long-lived token exchange failed');
@@ -98,7 +111,7 @@ export class ThreadsOAuthProvider implements OAuthProvider {
   async refreshToken(currentToken: string): Promise<OAuthTokens> {
     const refreshUrl = `https://graph.threads.net/refresh_access_token?grant_type=th_refresh_token&access_token=${currentToken}`;
     const res = await fetch(refreshUrl);
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as ThreadsTokenResponse;
 
     if (data.error) {
       logger.error({ error: data.error }, 'Threads token refresh failed');
@@ -115,7 +128,7 @@ export class ThreadsOAuthProvider implements OAuthProvider {
     const res = await fetch(
       `https://graph.threads.net/v1.0/me?fields=id,username&access_token=${accessToken}`,
     );
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as ThreadsUserResponse;
 
     if (data.error) {
       throw new Error(data.error.message || 'Failed to get Threads profile');

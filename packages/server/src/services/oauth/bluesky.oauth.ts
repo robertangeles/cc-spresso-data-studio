@@ -1,6 +1,15 @@
 import type { OAuthProvider, OAuthTokens } from './oauth.interface.js';
 import { logger } from '../../config/logger.js';
 
+interface BlueskySessionResponse {
+  accessJwt: string;
+  refreshJwt: string;
+  did: string;
+  handle: string;
+  error?: string;
+  message?: string;
+}
+
 const BLUESKY_API = 'https://bsky.social/xrpc';
 
 export class BlueskyOAuthProvider implements OAuthProvider {
@@ -27,7 +36,7 @@ export class BlueskyOAuthProvider implements OAuthProvider {
       body: JSON.stringify({ identifier: handle, password: appPassword }),
     });
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as BlueskySessionResponse;
 
     if (!res.ok || data.error) {
       const message = data.message || data.error || 'Failed to authenticate with Bluesky';
@@ -52,7 +61,7 @@ export class BlueskyOAuthProvider implements OAuthProvider {
       headers: { Authorization: `Bearer ${currentRefreshToken}` },
     });
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as BlueskySessionResponse;
 
     if (!res.ok || data.error) {
       logger.error({ error: data.error }, 'Bluesky token refresh failed');
@@ -75,7 +84,7 @@ export class BlueskyOAuthProvider implements OAuthProvider {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as BlueskySessionResponse;
 
     if (!res.ok || data.error) {
       logger.error({ error: data.error }, 'Bluesky getProfile failed');

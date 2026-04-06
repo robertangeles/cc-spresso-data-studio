@@ -1,5 +1,18 @@
 import { logger } from '../../config/logger.js';
 
+interface TwitterMediaUploadResponse {
+  data?: { id?: string; media_key?: string };
+  media_id_string?: string;
+  id?: string;
+}
+
+interface TwitterTweetResponse {
+  data?: { id?: string };
+  detail?: string;
+  title?: string;
+  errors?: { message?: string }[];
+}
+
 interface PublishResult {
   success: boolean;
   postId?: string;
@@ -75,7 +88,7 @@ async function uploadMedia(accessToken: string, imageUrl: string): Promise<strin
       body: form,
     });
 
-    const uploadData = (await uploadRes.json()) as any;
+    const uploadData = (await uploadRes.json()) as TwitterMediaUploadResponse;
 
     if (!uploadRes.ok) {
       logger.error({ status: uploadRes.status, data: uploadData }, 'Twitter media upload failed');
@@ -131,7 +144,7 @@ export async function publishToTwitter(params: {
     }
 
     // Build tweet payload
-    const tweetPayload: Record<string, any> = { text };
+    const tweetPayload: Record<string, unknown> = { text };
 
     // Upload image if provided
     if (imageUrl) {
@@ -153,7 +166,7 @@ export async function publishToTwitter(params: {
       body: JSON.stringify(tweetPayload),
     });
 
-    const tweetData = (await tweetRes.json()) as any;
+    const tweetData = (await tweetRes.json()) as TwitterTweetResponse;
 
     if (!tweetRes.ok) {
       // Check for auth errors (token may be expired)

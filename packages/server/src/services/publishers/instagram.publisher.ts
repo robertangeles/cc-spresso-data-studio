@@ -1,5 +1,19 @@
 import { logger } from '../../config/logger.js';
 
+interface InstagramContainerResponse {
+  id: string;
+  error?: { message?: string };
+}
+
+interface InstagramStatusResponse {
+  status_code?: string;
+}
+
+interface InstagramPublishResponse {
+  id?: string;
+  error?: { message?: string };
+}
+
 interface PublishResult {
   success: boolean;
   postId?: string;
@@ -36,7 +50,7 @@ export async function publishToInstagram(params: {
       method: 'POST',
       body: containerParams,
     });
-    const containerData = (await containerRes.json()) as any;
+    const containerData = (await containerRes.json()) as InstagramContainerResponse;
 
     if (containerData.error) {
       logger.error({ error: containerData.error }, 'Instagram container creation failed');
@@ -57,7 +71,7 @@ export async function publishToInstagram(params: {
       const statusRes = await fetch(
         `https://graph.facebook.com/v22.0/${containerId}?fields=status_code&access_token=${accessToken}`,
       );
-      const statusData = (await statusRes.json()) as any;
+      const statusData = (await statusRes.json()) as InstagramStatusResponse;
 
       if (statusData.status_code === 'FINISHED') {
         ready = true;
@@ -79,7 +93,7 @@ export async function publishToInstagram(params: {
         access_token: accessToken,
       }),
     });
-    const publishData = (await publishRes.json()) as any;
+    const publishData = (await publishRes.json()) as InstagramPublishResponse;
 
     if (publishData.error) {
       logger.error({ error: publishData.error }, 'Instagram publish failed');

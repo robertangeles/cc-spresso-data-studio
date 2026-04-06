@@ -3,6 +3,15 @@ import { logger } from '../../config/logger.js';
 const LINKEDIN_API = 'https://api.linkedin.com/rest';
 const LINKEDIN_VERSION = '202602';
 
+interface LinkedInImageInitResponse {
+  value?: { uploadUrl?: string; image?: string };
+}
+
+interface LinkedInPostErrorResponse {
+  message?: string;
+  error?: string;
+}
+
 interface PublishResult {
   success: boolean;
   postId?: string;
@@ -33,7 +42,7 @@ async function uploadImage(
         },
       }),
     });
-    const initData = (await initRes.json()) as any;
+    const initData = (await initRes.json()) as LinkedInImageInitResponse;
 
     if (!initData.value?.uploadUrl || !initData.value?.image) {
       logger.warn({ initData }, 'LinkedIn image upload init failed');
@@ -131,7 +140,7 @@ export async function publishToLinkedIn(params: {
       return { success: true, postId };
     }
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as LinkedInPostErrorResponse;
     logger.error({ error: data }, 'LinkedIn post failed');
     return { success: false, error: data.message || data.error || 'Failed to post to LinkedIn' };
   } catch (err) {

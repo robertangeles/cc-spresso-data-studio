@@ -4,6 +4,23 @@ import { logger } from '../../config/logger.js';
 const BLUESKY_API = 'https://bsky.social/xrpc';
 const BLUESKY_BLOB_MAX = 976_000; // ~950KB safe limit under Bluesky's 1MB cap
 
+interface BlueskyUploadBlobResponse {
+  blob: unknown;
+  error?: string;
+}
+
+interface BlueskyRefreshResponse {
+  accessJwt: string;
+  refreshJwt: string;
+  error?: string;
+}
+
+interface BlueskyCreateRecordResponse {
+  uri: string;
+  error?: string;
+  message?: string;
+}
+
 interface PublishResult {
   success: boolean;
   postUri?: string;
@@ -76,7 +93,7 @@ async function uploadImageBlob(
       body: buffer,
     });
 
-    const uploadData = (await uploadRes.json()) as any;
+    const uploadData = (await uploadRes.json()) as BlueskyUploadBlobResponse;
 
     if (!uploadRes.ok || !uploadData.blob) {
       logger.warn({ error: uploadData.error }, 'Bluesky image upload failed');
@@ -153,7 +170,7 @@ export async function publishToBluesky(params: {
         headers: { Authorization: `Bearer ${refreshToken}` },
       });
 
-      const refreshData = (await refreshRes.json()) as any;
+      const refreshData = (await refreshRes.json()) as BlueskyRefreshResponse;
 
       if (!refreshRes.ok || refreshData.error) {
         logger.error({ error: refreshData.error }, 'Bluesky token refresh failed during publish');
@@ -167,7 +184,7 @@ export async function publishToBluesky(params: {
       const newRefreshToken = refreshData.refreshJwt;
       res = await createPost(accessToken);
 
-      const data = (await res.json()) as any;
+      const data = (await res.json()) as BlueskyCreateRecordResponse;
 
       if (!res.ok || data.error) {
         logger.error({ error: data.error }, 'Bluesky createRecord failed after token refresh');
@@ -182,7 +199,7 @@ export async function publishToBluesky(params: {
       };
     }
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as BlueskyCreateRecordResponse;
 
     if (!res.ok || data.error) {
       logger.error({ error: data.error }, 'Bluesky createRecord failed');

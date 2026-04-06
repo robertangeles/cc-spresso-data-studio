@@ -4,6 +4,23 @@ import { db, schema } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
 
+interface TwitterTokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  error?: string;
+  error_description?: string;
+}
+
+interface TwitterUserResponse {
+  data: {
+    id: string;
+    username: string;
+  };
+  errors?: Array<{ message: string }>;
+  detail?: string;
+}
+
 export class TwitterOAuthProvider implements OAuthProvider {
   platform = 'twitter';
 
@@ -88,7 +105,7 @@ export class TwitterOAuthProvider implements OAuthProvider {
       }),
     });
 
-    const tokenData = (await tokenRes.json()) as any;
+    const tokenData = (await tokenRes.json()) as TwitterTokenResponse;
 
     if (!tokenRes.ok || tokenData.error) {
       logger.error(
@@ -130,7 +147,7 @@ export class TwitterOAuthProvider implements OAuthProvider {
       }),
     });
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as TwitterTokenResponse;
 
     if (!res.ok || data.error) {
       logger.error({ error: data.error, status: res.status }, 'Twitter token refresh failed');
@@ -149,7 +166,7 @@ export class TwitterOAuthProvider implements OAuthProvider {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as TwitterUserResponse;
 
     if (!res.ok || data.errors) {
       const errMsg = data.errors?.[0]?.message || data.detail || 'Failed to get Twitter profile';

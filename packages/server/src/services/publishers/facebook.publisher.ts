@@ -1,5 +1,10 @@
 import { logger } from '../../config/logger.js';
 
+interface FacebookApiResponse {
+  id: string;
+  error?: { message?: string };
+}
+
 interface PublishResult {
   success: boolean;
   postId?: string;
@@ -35,7 +40,7 @@ export async function publishToFacebook(params: {
         body: formBody.toString(),
       });
 
-      const data = (await res.json()) as any;
+      const data = (await res.json()) as FacebookApiResponse;
       if (data.error) {
         logger.error({ error: data.error }, 'Facebook photo post failed');
         return { success: false, error: data.error.message || 'Failed to post photo to Facebook' };
@@ -52,7 +57,7 @@ export async function publishToFacebook(params: {
         }),
       });
 
-      const data = (await res.json()) as any;
+      const data = (await res.json()) as FacebookApiResponse;
       if (data.error) {
         logger.error({ error: data.error }, 'Facebook text post failed');
         return { success: false, error: data.error.message || 'Failed to post to Facebook' };

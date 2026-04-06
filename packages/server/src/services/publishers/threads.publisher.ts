@@ -1,5 +1,10 @@
 import { logger } from '../../config/logger.js';
 
+interface ThreadsApiResponse {
+  id?: string;
+  error?: { message?: string };
+}
+
 interface PublishResult {
   success: boolean;
   postId?: string;
@@ -34,7 +39,7 @@ export async function publishToThreads(params: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(containerBody),
     });
-    const containerData = (await containerRes.json()) as any;
+    const containerData = (await containerRes.json()) as ThreadsApiResponse;
 
     if (containerData.error) {
       logger.error({ error: containerData.error }, 'Threads container creation failed');
@@ -61,7 +66,7 @@ export async function publishToThreads(params: {
         }),
       },
     );
-    const publishData = (await publishRes.json()) as any;
+    const publishData = (await publishRes.json()) as ThreadsApiResponse;
 
     if (publishData.error) {
       logger.error({ error: publishData.error }, 'Threads publish failed');

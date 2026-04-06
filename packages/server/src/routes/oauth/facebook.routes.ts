@@ -85,7 +85,11 @@ router.get(
         pendingUserTokens.delete(req.user.userId);
         res
           .status(400)
-          .json({ success: false, error: 'No pending Facebook auth. Please reconnect.' } as any);
+          .json({
+            success: false,
+            data: null,
+            error: 'No pending Facebook auth. Please reconnect.',
+          });
         return;
       }
 
@@ -112,7 +116,7 @@ router.post(
         pendingUserTokens.delete(req.user.userId);
         res
           .status(400)
-          .json({ success: false, error: 'Session expired. Please reconnect.' } as any);
+          .json({ success: false, data: null, error: 'Session expired. Please reconnect.' });
         return;
       }
 
@@ -128,7 +132,7 @@ router.post(
       };
 
       if (!selectedPages || selectedPages.length === 0) {
-        res.status(400).json({ success: false, error: 'No pages selected' } as any);
+        res.status(400).json({ success: false, data: null, error: 'No pages selected' });
         return;
       }
 
