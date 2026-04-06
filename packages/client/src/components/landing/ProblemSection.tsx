@@ -34,7 +34,7 @@ export function ProblemSection() {
             You have one idea. Then you rewrite it for LinkedIn. Rework it again for Facebook.
             Shorten it for X. Adjust it again for Bluesky. Spresso is built to reduce that
             repetitive work and help you move from one idea to multiple platform-ready posts from
-            one workflow.
+            one workflow — and we&apos;re continuously integrating more platforms.
           </p>
         </div>
 
