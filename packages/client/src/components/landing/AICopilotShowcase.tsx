@@ -27,20 +27,20 @@ const CHAT_MESSAGES = [
 
 const FEATURES = [
   {
-    title: 'Adapts tone per platform',
-    desc: 'Professional for LinkedIn, punchy for Twitter, visual for Instagram',
+    title: 'Adapt one idea for multiple channels',
+    desc: 'Each platform gets content shaped for its audience and format',
   },
   {
-    title: 'Suggests hooks & CTAs',
-    desc: 'Opening lines that stop the scroll, closings that drive action',
+    title: 'Guided workflow, not prompt chaos',
+    desc: 'Tell it what you want in plain language — no prompt crafting required',
   },
   {
-    title: 'Refines on feedback',
-    desc: 'Iterate through conversation — no prompt engineering needed',
+    title: 'Reduce repetitive rewriting',
+    desc: 'Stop manually reworking the same idea for every platform',
   },
   {
-    title: 'Learns your voice',
-    desc: 'Gets better the more you use it, matching your unique style',
+    title: 'Start simple, customize later',
+    desc: 'Get results immediately, fine-tune your process as you grow',
   },
 ];
 
@@ -187,8 +187,8 @@ export function AICopilotShowcase() {
             </h2>
 
             <p className="mt-4 text-text-secondary text-lg font-heading leading-relaxed">
-              Have a conversation with AI that understands the nuances of each platform. No prompt
-              engineering — just tell it what you want.
+              Have a conversation with AI that understands the nuances of each platform. Just tell
+              it what you want — Spresso handles the adaptation.
             </p>
 
             {/* Feature bullets */}

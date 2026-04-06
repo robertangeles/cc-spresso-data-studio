@@ -69,7 +69,7 @@ export function AuthForm({ mode = 'login', onSuccess, compact = false, planId }:
           }
         }
         onSuccess?.();
-        navigate('/chat');
+        navigate('/content');
       }
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'response' in err) {

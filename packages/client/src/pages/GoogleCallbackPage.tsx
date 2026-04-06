@@ -27,7 +27,7 @@ export function GoogleCallbackPage() {
     }
 
     loginWithGoogle(code)
-      .then(() => navigate('/chat'))
+      .then(() => navigate('/content'))
       .catch((err) => {
         const msg =
           (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??

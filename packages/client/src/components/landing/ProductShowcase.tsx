@@ -1,17 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Pencil, Zap, Send, Check } from 'lucide-react';
+import { Lightbulb, MousePointerClick, Zap, PenLine, Check, Send } from 'lucide-react';
 import { useScrollReveal } from './useScrollReveal';
 
 const TYPED_TEXT = '5 productivity tips that changed how I work remotely';
 
 const PLATFORM_CARDS = [
-  {
-    name: 'Twitter',
-    color: '#1DA1F2',
-    emoji: '𝕏',
-    text: '5 remote work tips that actually changed my daily routine (thread) 🧵',
-    meta: '187/280',
-  },
   {
     name: 'LinkedIn',
     color: '#0A66C2',
@@ -20,39 +13,33 @@ const PLATFORM_CARDS = [
     meta: '312/3000',
   },
   {
-    name: 'Instagram',
-    color: '#E4405F',
-    emoji: '📸',
-    text: "Remote work isn't just about where you sit ✨\n\nHere are 5 things I changed that made ALL the difference 👇",
-    meta: '142/2200',
+    name: 'X',
+    color: '#1DA1F2',
+    emoji: '𝕏',
+    text: '5 remote work tips that actually changed my daily routine (thread) 🧵',
+    meta: '187/280',
   },
   {
-    name: 'TikTok',
-    color: '#00F2EA',
-    emoji: '🎵',
-    text: 'Hook: Stop doing these 5 things when working from home... #remotework #productivity',
-    meta: '88/150',
+    name: 'Facebook',
+    color: '#1877F2',
+    emoji: 'f',
+    text: "Remote work isn't just about where you sit. Here are 5 things I changed that made ALL the difference 👇",
+    meta: '142/63206',
   },
   {
-    name: 'Blog',
-    color: '#10B981',
-    emoji: '📝',
-    text: 'The remote revolution promised freedom but delivered distraction for many. After three years of trial and error...',
-    meta: '~800 words',
-  },
-  {
-    name: 'Email',
-    color: '#8B5CF6',
-    emoji: '✉️',
-    text: 'Subject: 5 remote work tips I wish I knew 3 years ago\nPreview: These small changes had the biggest impact...',
-    meta: 'Newsletter',
+    name: 'Bluesky',
+    color: '#0085FF',
+    emoji: '🦋',
+    text: 'Remote work changed everything for me. Here are 5 things I do differently now ↓',
+    meta: '198/300',
   },
 ];
 
 const STEPS = [
-  { icon: Pencil, label: 'Write', color: 'text-blue-400' },
-  { icon: Zap, label: 'Adapt', color: 'text-accent' },
-  { icon: Send, label: 'Publish', color: 'text-emerald-400' },
+  { icon: Lightbulb, label: 'Start with one idea', color: 'text-blue-400' },
+  { icon: MousePointerClick, label: 'Choose channels', color: 'text-violet-400' },
+  { icon: Zap, label: 'Get adapted outputs', color: 'text-accent' },
+  { icon: PenLine, label: 'Refine & publish', color: 'text-emerald-400' },
 ];
 
 export function ProductShowcase() {
@@ -69,7 +56,7 @@ export function ProductShowcase() {
     if (!isVisible || hasStarted.current) return;
     hasStarted.current = true;
 
-    // Step 1: Write — start typing
+    // Step 1: Start with one idea — start typing
     const t1 = setTimeout(() => setActiveStep(0), 300);
 
     // Type out text character by character
@@ -80,24 +67,29 @@ export function ProductShowcase() {
       if (charIndex >= TYPED_TEXT.length) {
         clearInterval(typeInterval);
 
-        // Step 2: Adapt — show platform cards
+        // Step 2: Choose channels
         setTimeout(() => {
           setActiveStep(1);
-          setTimeout(() => setShowCards(true), 400);
 
-          // Step 3: Publish
+          // Step 3: Get adapted outputs — show platform cards
           setTimeout(() => {
-            setShowPublishBtn(true);
+            setActiveStep(2);
+            setTimeout(() => setShowCards(true), 400);
+
+            // Step 4: Refine & publish
             setTimeout(() => {
-              setActiveStep(2);
-              // Stagger check marks
-              PLATFORM_CARDS.forEach((_, i) => {
-                setTimeout(() => {
-                  setPublishedCards((prev) => new Set([...prev, i]));
-                }, i * 150);
-              });
-            }, 800);
-          }, 2500);
+              setShowPublishBtn(true);
+              setTimeout(() => {
+                setActiveStep(3);
+                // Stagger check marks
+                PLATFORM_CARDS.forEach((_, i) => {
+                  setTimeout(() => {
+                    setPublishedCards((prev) => new Set([...prev, i]));
+                  }, i * 150);
+                });
+              }, 800);
+            }, 2500);
+          }, 600);
         }, 600);
       }
     }, 35);
@@ -109,7 +101,7 @@ export function ProductShowcase() {
   }, [isVisible]);
 
   return (
-    <section ref={ref} className="relative py-32 overflow-hidden">
+    <section id="how-it-works" ref={ref} className="relative py-32 overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,214,10,0.03)_0%,transparent_70%)]" />
 
@@ -117,14 +109,15 @@ export function ProductShowcase() {
         {/* Section header */}
         <div className={`text-center mb-16 scroll-reveal ${isVisible ? 'visible' : ''}`}>
           <h2 className="font-display text-4xl md:text-5xl tracking-tight text-text-primary">
-            See it in action
+            One idea in. <span className="text-gradient-amber">Multiple outputs out.</span>
           </h2>
           <p className="mt-4 text-lg text-text-secondary font-heading max-w-2xl mx-auto">
-            Write once. Watch it transform into platform-perfect content — then publish everywhere.
+            Spresso guides the repurposing process so you can spend less time rewriting and more
+            time moving content forward.
           </p>
         </div>
 
-        {/* Step indicators */}
+        {/* Step indicators — 4 steps */}
         <div
           className={`flex items-center justify-center gap-0 mb-14 scroll-reveal ${isVisible ? 'visible' : ''}`}
           style={{ transitionDelay: '200ms' }}
@@ -132,7 +125,7 @@ export function ProductShowcase() {
           {STEPS.map((step, i) => (
             <div key={step.label} className="flex items-center">
               <div
-                className={`flex items-center gap-2.5 px-5 py-2.5 rounded-full border transition-all duration-500 ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-500 ${
                   activeStep >= i
                     ? 'border-accent/30 bg-accent-dim/30 shadow-glow'
                     : 'border-border-subtle bg-surface-2/50'
@@ -144,7 +137,7 @@ export function ProductShowcase() {
                   }`}
                 />
                 <span
-                  className={`text-sm font-medium transition-colors duration-500 ${
+                  className={`text-xs font-medium transition-colors duration-500 hidden sm:inline ${
                     activeStep >= i ? 'text-text-primary' : 'text-text-tertiary'
                   }`}
                 >
@@ -152,7 +145,7 @@ export function ProductShowcase() {
                 </span>
               </div>
               {i < STEPS.length - 1 && (
-                <div className="w-12 h-px mx-1 relative overflow-hidden">
+                <div className="w-8 h-px mx-1 relative overflow-hidden">
                   <div className="absolute inset-0 bg-border-subtle" />
                   <div
                     className="absolute inset-y-0 left-0 bg-gradient-to-r from-accent to-amber-500 transition-all duration-700"
@@ -171,7 +164,7 @@ export function ProductShowcase() {
         >
           <div
             className={`editor-surface rounded-2xl p-6 transition-all duration-700 ${
-              activeStep >= 1 ? 'shadow-[0_0_60px_-12px_rgba(255,214,10,0.15)]' : ''
+              activeStep >= 2 ? 'shadow-[0_0_60px_-12px_rgba(255,214,10,0.15)]' : ''
             }`}
           >
             {/* Editor chrome */}
@@ -201,15 +194,15 @@ export function ProductShowcase() {
             </div>
 
             {/* Shimmer overlay during adapt */}
-            {activeStep === 1 && !showCards && (
+            {activeStep === 2 && !showCards && (
               <div className="absolute inset-0 rounded-2xl animate-shimmer pointer-events-none" />
             )}
           </div>
         </div>
 
-        {/* Platform cards grid */}
+        {/* Platform cards grid — 4 platforms only */}
         <div
-          className={`mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto transition-all duration-700 ${
+          className={`mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto transition-all duration-700 ${
             showCards ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'
           }`}
         >
@@ -271,12 +264,12 @@ export function ProductShowcase() {
         >
           <div
             className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-500 ${
-              activeStep >= 2
+              activeStep >= 3
                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                 : 'bg-gradient-to-r from-accent to-amber-500 text-text-inverse hover:shadow-glow-strong'
             }`}
           >
-            {activeStep >= 2 ? (
+            {activeStep >= 3 ? (
               <>
                 <Check className="h-4 w-4" />
                 Published to {PLATFORM_CARDS.length} platforms

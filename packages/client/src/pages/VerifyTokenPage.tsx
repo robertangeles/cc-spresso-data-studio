@@ -46,7 +46,7 @@ export function VerifyTokenPage() {
 
         // Redirect to app after brief celebration
         if (data.data?.accessToken) {
-          setTimeout(() => navigate('/chat', { replace: true }), 1500);
+          setTimeout(() => navigate('/content', { replace: true }), 1500);
         }
       } catch (err: unknown) {
         setStatus('error');

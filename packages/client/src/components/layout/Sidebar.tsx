@@ -322,7 +322,8 @@ export function Sidebar() {
                     className="flex items-center gap-1.5 group/upgrade"
                   >
                     <span className="text-[10px] font-semibold text-accent">
-                      {plan?.displayName ?? (user.subscriptionTier === 'ultra' ? 'Ultra' : 'Pro')}
+                      {plan?.displayName ??
+                        (user.subscriptionTier === 'business' ? 'Business' : 'Creator')}
                     </span>
                     <span className="text-[10px] font-medium text-accent/60 group-hover/upgrade:text-accent transition-colors">
                       Upgrade →
@@ -331,7 +332,7 @@ export function Sidebar() {
                 ) : pendingDowngrade ? (
                   <div className="flex flex-col">
                     <span className="text-[10px] font-semibold text-accent">
-                      {plan?.displayName ?? 'Ultra'}
+                      {plan?.displayName ?? 'Business'}
                     </span>
                     <span className="text-[9px] text-amber-400/80">
                       → {pendingDowngrade.planName} on{' '}
@@ -348,7 +349,7 @@ export function Sidebar() {
                     className="flex items-center gap-1.5 group/upgrade"
                   >
                     <span className="text-[10px] font-semibold text-accent">
-                      {plan?.displayName ?? 'Ultra'}
+                      {plan?.displayName ?? 'Business'}
                     </span>
                     <span className="text-[10px] font-medium text-text-tertiary group-hover/upgrade:text-accent transition-colors">
                       Downgrade →
@@ -356,7 +357,7 @@ export function Sidebar() {
                   </button>
                 ) : (
                   <p className="text-[10px] font-semibold text-accent">
-                    {plan?.displayName ?? 'Ultra'}
+                    {plan?.displayName ?? 'Business'}
                   </p>
                 )
               ) : (
