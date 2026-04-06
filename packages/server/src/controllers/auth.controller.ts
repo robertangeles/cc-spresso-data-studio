@@ -3,6 +3,7 @@ import type { ApiResponse, AuthResponse } from '@cc/shared';
 import * as authService from '../services/auth.service.js';
 import * as turnstileService from '../services/turnstile.service.js';
 import * as verificationService from '../services/verification.service.js';
+import { seedDefaultSkillsForUser } from '../services/skills/seed-user-defaults.js';
 import { getSetting } from '../services/admin.service.js';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
@@ -22,6 +23,11 @@ export async function register(
 
     // Send verification email (non-blocking — failure doesn't block registration)
     await verificationService.generateAndSend(result.user.id, email, name);
+
+    // Seed default Anthropic skills (fire-and-forget — failure doesn't block registration)
+    seedDefaultSkillsForUser(result.user.id).catch((err) =>
+      console.error('Failed to seed default skills for user', result.user.id, err),
+    );
 
     setRefreshCookie(res, result.refreshToken);
 
@@ -197,6 +203,13 @@ export async function googleCallback(req: Request, res: Response, next: NextFunc
       email: profile.email,
       name: profile.name,
     });
+
+    // Seed default skills for new Google OAuth users (fire-and-forget)
+    if (result.isNewUser) {
+      seedDefaultSkillsForUser(result.user.id).catch((err) =>
+        console.error('Failed to seed default skills for Google user', result.user.id, err),
+      );
+    }
 
     setRefreshCookie(res, result.refreshToken);
 

@@ -1,8 +1,16 @@
-export type SkillCategory = 'repurpose' | 'generate' | 'research' | 'transform' | 'extract' | 'plan';
+export type SkillCategory =
+  | 'repurpose'
+  | 'generate'
+  | 'research'
+  | 'transform'
+  | 'extract'
+  | 'plan';
 
 export type SkillSource = 'builtin' | 'user';
 
 export type SkillCapability = 'research' | 'image_gen' | 'image_proc' | 'documents';
+
+export type SkillVisibility = 'private' | 'unlisted' | 'public';
 
 export interface SkillInput {
   id: string;
@@ -47,7 +55,15 @@ export interface Skill {
   icon?: string;
   tags: string[];
   config: SkillConfig;
-  isPublished: boolean;
+  visibility: SkillVisibility;
+  showPrompts: boolean;
+  forkedFromId: string | null;
+  usageCount: number;
+  favoriteCount: number;
+  forkCount: number;
+  creatorDisplayName: string | null;
+  creatorAvatarUrl: string | null;
+  isFavorited?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,6 +85,7 @@ export interface UpdateSkillDTO {
   icon?: string;
   tags?: string[];
   config?: SkillConfig;
-  isPublished?: boolean;
+  visibility?: SkillVisibility;
+  showPrompts?: boolean;
   changelog?: string;
 }

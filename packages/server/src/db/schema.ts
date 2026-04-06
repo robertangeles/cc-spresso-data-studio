@@ -202,7 +202,7 @@ export const skills = pgTable(
   'skills',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    slug: varchar('slug', { length: 100 }).notNull().unique(),
+    slug: varchar('slug', { length: 100 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description').notNull(),
     category: varchar('category', { length: 50 }).notNull(),
@@ -213,7 +213,7 @@ export const skills = pgTable(
     tags: jsonb('tags').notNull().default('[]'),
     // DEPRECATED: config JSONB — kept during migration
     config: jsonb('config').notNull(),
-    // NEW: scalar fields extracted from config
+    // Scalar fields extracted from config
     promptTemplate: text('prompt_template'),
     systemPrompt: text('system_prompt'),
     capabilities: jsonb('capabilities').default('[]'),
@@ -221,11 +221,55 @@ export const skills = pgTable(
     defaultModel: varchar('default_model', { length: 100 }),
     temperature: real('temperature'),
     maxTokens: integer('max_tokens'),
-    isPublished: boolean('is_published').notNull().default(false),
+    // Marketplace: visibility replaces isPublished
+    visibility: varchar('visibility', { length: 20 }).notNull().default('private'),
+    showPrompts: boolean('show_prompts').notNull().default(false),
+    forkedFromId: uuid('forked_from_id'),
+    usageCount: integer('usage_count').notNull().default(0),
+    favoriteCount: integer('favorite_count').notNull().default(0),
+    forkCount: integer('fork_count').notNull().default(0),
+    creatorDisplayName: varchar('creator_display_name', { length: 255 }),
+    creatorAvatarUrl: varchar('creator_avatar_url', { length: 500 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('idx_skills_user_id').on(t.userId)],
+  (t) => [
+    // Index: lookup skills by owner
+    index('idx_skills_user_id').on(t.userId),
+    // Index: community listing — only public skills
+    index('idx_skills_visibility').on(t.visibility),
+    // Index: trending sort by usage
+    index('idx_skills_usage_count').on(t.usageCount),
+    // Index: fork lineage
+    index('idx_skills_forked_from').on(t.forkedFromId),
+    // Unique: slug scoped to user (namespace isolation)
+    uniqueIndex('idx_skills_user_slug').on(t.userId, t.slug),
+  ],
+);
+
+// ============================================================
+// SKILL FAVORITES (junction: users bookmarking community skills)
+// Normal form: 2NF
+// ============================================================
+
+export const skillFavorites = pgTable(
+  'skill_favorites',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    skillId: uuid('skill_id')
+      .notNull()
+      .references(() => skills.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one favorite per user per skill
+    uniqueIndex('idx_skill_favorites_user_skill').on(t.userId, t.skillId),
+    // Index: count favorites for a skill
+    index('idx_skill_favorites_skill_id').on(t.skillId),
+  ],
 );
 
 // ============================================================

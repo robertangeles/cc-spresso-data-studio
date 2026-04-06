@@ -93,8 +93,13 @@ export const updateSkillSchema = z.object({
   icon: z.string().max(50).optional(),
   tags: z.array(z.string().max(50)).max(10).optional(),
   config: createSkillSchema.shape.config.optional(),
-  isPublished: z.boolean().optional(),
+  visibility: z.enum(['private', 'unlisted', 'public']).optional(),
+  showPrompts: z.boolean().optional(),
   changelog: z.string().max(500).optional(),
+});
+
+export const updateVisibilitySchema = z.object({
+  visibility: z.enum(['private', 'unlisted', 'public']),
 });
 
 export const executeFlowSchema = z.object({
@@ -108,6 +113,7 @@ export type UpdateFlowInput = z.infer<typeof updateFlowSchema>;
 export type ExecuteQueryInput = z.infer<typeof executeQuerySchema>;
 export type CreateSkillInput = z.infer<typeof createSkillSchema>;
 export type UpdateSkillInput = z.infer<typeof updateSkillSchema>;
+export type UpdateVisibilityInput = z.infer<typeof updateVisibilitySchema>;
 export type ExecuteFlowInput = z.infer<typeof executeFlowSchema>;
 
 // --- Role validation ---

@@ -37,7 +37,7 @@ export async function seedBuiltinSkills(): Promise<void> {
           icon: skill.icon,
           tags: skill.tags,
           config: skill.config,
-          isPublished: true,
+          visibility: 'public',
         })
         .returning({ id: schema.skills.id });
 

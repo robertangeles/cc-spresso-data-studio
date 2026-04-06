@@ -93,6 +93,8 @@ export async function findOrCreateGoogleUser(profile: {
     }
   }
 
+  let isNewUser = false;
+
   if (!user) {
     // New user via Google — no password needed, email already verified by Google
     const defaultRole = await db.query.roles.findFirst({
@@ -110,6 +112,7 @@ export async function findOrCreateGoogleUser(profile: {
         isEmailVerified: true,
       })
       .returning();
+    isNewUser = true;
   } else if (!user.isEmailVerified) {
     // Existing user linking Google — mark as verified (Google confirmed their email)
     [user] = await db
@@ -141,6 +144,7 @@ export async function findOrCreateGoogleUser(profile: {
       subscriptionTier: user.subscriptionTier,
       isEmailVerified: user.isEmailVerified,
     },
+    isNewUser,
     ...tokens,
   };
 }
