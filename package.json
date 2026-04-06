@@ -4,7 +4,7 @@
   "private": true,
   "description": "World-class content builder with multi-model AI support",
   "scripts": {
-    "predev": "npx kill-port 3003 5173 5174 || exit 0",
+    "predev": "npx kill-port 3006 5176 5177 || exit 0",
     "dev": "pnpm -r --parallel dev",
     "build": "rm -f packages/shared/tsconfig.tsbuildinfo && pnpm -C packages/shared build && pnpm -C packages/server build && pnpm -C packages/client build",
     "lint": "eslint packages/*/src --ext .ts,.tsx --max-warnings 0",

@@ -1,3 +1,4 @@
+import { createServer } from 'http';
 import { app } from './app.js';
 import { config } from './config/index.js';
 import { logger } from './config/logger.js';
@@ -11,6 +12,8 @@ import { startSchedulerCron } from './services/scheduler.cron.js';
 import { seedDefaultPlans } from './services/subscription.service.js';
 import { seedDefaultCreditCosts } from './services/credit.service.js';
 import { seedDefaultTemplates } from './services/emailTemplate.service.js';
+import { initSocketIO } from './socket/index.js';
+import { seedCommunityDefaults } from './seeds/community.seed.js';
 
 async function start() {
   await verifyConnection();
@@ -24,10 +27,14 @@ async function start() {
   await seedDefaultPlans();
   await seedDefaultCreditCosts();
   await seedDefaultTemplates();
+  await seedCommunityDefaults();
 
   startSchedulerCron();
 
-  app.listen(config.port, () => {
+  const httpServer = createServer(app);
+  initSocketIO(httpServer);
+
+  httpServer.listen(config.port, () => {
     logger.info(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
   });
 }

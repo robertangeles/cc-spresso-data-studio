@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 
 type TestJson = Record<string, unknown>;
 
-const BASE_URL = process.env.TEST_API_URL || 'http://localhost:3003';
+const BASE_URL = process.env.TEST_API_URL || 'http://localhost:3006';
 const JWT_SECRET =
   process.env.JWT_SECRET || 'UTA1D5iyPtizM5ppTNrm1LZJLcVrKlKSTjiYlLaoyZrhGm/hha31+Vkl4NlCr8h3';
 

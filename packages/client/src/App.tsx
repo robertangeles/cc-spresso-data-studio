@@ -34,6 +34,8 @@ import { UpgradeCelebration } from './components/billing/UpgradeCelebration';
 import { PricingPage } from './pages/PricingPage';
 import { BillingPage } from './pages/settings/BillingPage';
 import { EmailTemplatePage } from './pages/settings/EmailTemplatePage';
+import { CommunityPage } from './pages/CommunityPage';
+import { CommunitySettingsPage } from './pages/settings/CommunitySettingsPage';
 import { SubscriptionProvider } from './context/SubscriptionContext';
 // ContentCalendarPage removed — calendar is now inline in Content Builder
 
@@ -76,6 +78,8 @@ export function App() {
                   <Route path="/skills/:id/edit" element={<SkillCreatorPage />} />
                   <Route path="/content" element={<ContentBuilderPage />} />
                   <Route path="/content/library" element={<ContentLibraryPage />} />
+                  <Route path="/community" element={<CommunityPage />} />
+                  <Route path="/community/*" element={<CommunityPage />} />
                   <Route path="/content/calendar" element={<Navigate to="/content" replace />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route element={<AdminRoute />}>
@@ -95,6 +99,7 @@ export function App() {
                       <Route path="admin/usage" element={<UsageDashboardPage />} />
                       <Route path="admin/system-prompts" element={<SystemPromptsPage />} />
                       <Route path="admin/email-templates" element={<EmailTemplatePage />} />
+                      <Route path="admin/community" element={<CommunitySettingsPage />} />
                     </Route>
                   </Route>
                 </Route>

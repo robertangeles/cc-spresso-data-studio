@@ -1039,3 +1039,325 @@ export const webhookEvents = pgTable('webhook_events', {
   errorMessage: text('error_message'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ============================================================
+// COMMUNITY CHANNELS
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const communityChannels = pgTable(
+  'community_channels',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: varchar('name', { length: 100 }).notNull(),
+    slug: varchar('slug', { length: 100 }).notNull().unique(),
+    description: text('description'),
+    type: varchar('type', { length: 20 }).notNull().default('text'),
+    isDefault: boolean('is_default').notNull().default(false),
+    isArchived: boolean('is_archived').notNull().default(false),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: list channels sorted
+    index('idx_community_channels_sort_order').on(t.sortOrder),
+  ],
+);
+
+// ============================================================
+// COMMUNITY MESSAGES
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const communityMessages = pgTable(
+  'community_messages',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => communityChannels.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    content: text('content').notNull(),
+    type: varchar('type', { length: 20 }).notNull().default('text'),
+    parentId: uuid('parent_id'),
+    isEdited: boolean('is_edited').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: list messages by channel
+    index('idx_community_messages_channel_id').on(t.channelId),
+    // Index: list messages by user
+    index('idx_community_messages_user_id').on(t.userId),
+    // Index: paginated message history by channel + time
+    index('idx_community_messages_channel_created').on(t.channelId, t.createdAt),
+  ],
+);
+
+// ============================================================
+// COMMUNITY MESSAGE ATTACHMENTS (images, link previews)
+// Normal form: 2NF (metadata JSONB is OG data — acceptable per CLAUDE.md)
+// OLTP table
+// ============================================================
+
+export const communityMessageAttachments = pgTable(
+  'community_message_attachments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => communityMessages.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 20 }).notNull(),
+    url: text('url').notNull(),
+    fileName: varchar('file_name', { length: 255 }),
+    fileSize: integer('file_size'),
+    mimeType: varchar('mime_type', { length: 100 }),
+    metadata: jsonb('metadata').default('{}'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: fetch attachments for a message
+    index('idx_community_msg_attachments_message_id').on(t.messageId),
+  ],
+);
+
+// ============================================================
+// COMMUNITY REACTIONS
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const communityReactions = pgTable(
+  'community_reactions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => communityMessages.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    emoji: varchar('emoji', { length: 32 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one reaction per user per emoji per message
+    uniqueIndex('idx_community_reactions_unique').on(t.messageId, t.userId, t.emoji),
+    // Index: fetch reactions for a message
+    index('idx_community_reactions_message_id').on(t.messageId),
+  ],
+);
+
+// ============================================================
+// CHANNEL MEMBERS (membership + unread tracking)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const channelMembers = pgTable(
+  'channel_members',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => communityChannels.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lastReadMessageId: uuid('last_read_message_id'),
+    isMuted: boolean('is_muted').notNull().default(false),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one membership per user per channel
+    uniqueIndex('idx_channel_members_unique').on(t.channelId, t.userId),
+    // Index: list channels for a user
+    index('idx_channel_members_user_id').on(t.userId),
+  ],
+);
+
+// ============================================================
+// DIRECT CONVERSATIONS
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const directConversations = pgTable('direct_conversations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ============================================================
+// DIRECT CONVERSATION MEMBERS
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const directConversationMembers = pgTable(
+  'direct_conversation_members',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => directConversations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lastReadMessageId: uuid('last_read_message_id'),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one membership per user per conversation
+    uniqueIndex('idx_direct_conv_members_unique').on(t.conversationId, t.userId),
+    // Index: list conversations for a user
+    index('idx_direct_conv_members_user_id').on(t.userId),
+  ],
+);
+
+// ============================================================
+// DIRECT MESSAGES
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const directMessages = pgTable(
+  'direct_messages',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => directConversations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    content: text('content').notNull(),
+    isEdited: boolean('is_edited').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: list messages in a conversation
+    index('idx_direct_messages_conversation_id').on(t.conversationId),
+    // Index: paginated history by conversation + time
+    index('idx_direct_messages_conv_created').on(t.conversationId, t.createdAt),
+  ],
+);
+
+// ============================================================
+// DIRECT MESSAGE ATTACHMENTS
+// Normal form: 2NF (metadata JSONB is OG data — acceptable per CLAUDE.md)
+// OLTP table
+// ============================================================
+
+export const directMessageAttachments = pgTable(
+  'direct_message_attachments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => directMessages.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 20 }).notNull(),
+    url: text('url').notNull(),
+    fileName: varchar('file_name', { length: 255 }),
+    fileSize: integer('file_size'),
+    mimeType: varchar('mime_type', { length: 100 }),
+    metadata: jsonb('metadata').default('{}'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: fetch attachments for a message
+    index('idx_direct_msg_attachments_message_id').on(t.messageId),
+  ],
+);
+
+// ============================================================
+// BACKLOG ITEMS (community feature roadmap)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const backlogItems = pgTable(
+  'backlog_items',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description'),
+    status: varchar('status', { length: 20 }).notNull().default('planned'),
+    category: varchar('category', { length: 100 }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    isArchived: boolean('is_archived').notNull().default(false),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: filter by status
+    index('idx_backlog_items_status').on(t.status),
+    // Index: sort order
+    index('idx_backlog_items_sort_order').on(t.sortOrder),
+  ],
+);
+
+// ============================================================
+// BACKLOG VOTES
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const backlogVotes = pgTable(
+  'backlog_votes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    itemId: uuid('item_id')
+      .notNull()
+      .references(() => backlogItems.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    voteType: varchar('vote_type', { length: 10 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one vote per user per item
+    uniqueIndex('idx_backlog_votes_unique').on(t.itemId, t.userId),
+    // Index: count votes per item
+    index('idx_backlog_votes_item_id').on(t.itemId),
+  ],
+);
+
+// ============================================================
+// USER BLOCKS (directional blocking for DMs)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const userBlocks = pgTable(
+  'user_blocks',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    blockerId: uuid('blocker_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    blockedId: uuid('blocked_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one block per pair
+    uniqueIndex('idx_user_blocks_unique').on(t.blockerId, t.blockedId),
+    // Index: list blocks by blocker
+    index('idx_user_blocks_blocker_id').on(t.blockerId),
+    // Index: check if blocked
+    index('idx_user_blocks_blocked_id').on(t.blockedId),
+  ],
+);

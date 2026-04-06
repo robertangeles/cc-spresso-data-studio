@@ -27,6 +27,9 @@ import { twitterOAuthRoutes } from './oauth/twitter.routes.js';
 import { uploadRoutes } from './upload.routes.js';
 import { billingRoutes } from './billing.routes.js';
 import { emailTemplateRoutes } from './emailTemplate.routes.js';
+import { communityRoutes } from './community.routes.js';
+import { dmRoutes } from './dm.routes.js';
+import { backlogRoutes } from './backlog.routes.js';
 
 const router = Router();
 
@@ -64,6 +67,9 @@ router.use('/oauth/twitter', twitterOAuthRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/billing', billingRoutes);
 router.use('/admin/email-templates', emailTemplateRoutes);
+router.use('/community', communityRoutes);
+router.use('/dm', dmRoutes);
+router.use('/backlog', backlogRoutes);
 
 // Connected-platforms lookup (used by Content Builder for status dots + hint banner)
 router.get('/oauth/connected', authenticate, async (req, res, next) => {

@@ -23,6 +23,7 @@ const settingsNav = [
       { to: '/settings/admin/usage', label: 'Usage & Costs' },
       { to: '/settings/admin/system-prompts', label: 'System Prompts' },
       { to: '/settings/admin/email-templates', label: 'Email Templates' },
+      { to: '/settings/admin/community', label: 'The Brew' },
     ],
   },
 ];

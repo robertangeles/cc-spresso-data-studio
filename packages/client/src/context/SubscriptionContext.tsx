@@ -136,7 +136,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshSubscription();
-  }, [refreshSubscription]);
+    // Retry after 3s in case auth token wasn't ready on first attempt
+    const retryTimer = setTimeout(() => {
+      if (!state.subscription) {
+        refreshSubscription();
+      }
+    }, 3000);
+    return () => clearTimeout(retryTimer);
+  }, [refreshSubscription, state.subscription]);
 
   // Refresh on window focus (debounced — max once every 5s)
   const lastRefreshRef = useRef(0);

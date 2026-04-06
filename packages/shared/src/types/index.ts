@@ -8,3 +8,4 @@ export * from './execution.types.js';
 export * from './role.types.js';
 export * from './rules.types.js';
 export * from './content.types.js';
+export * from './community.types.js';

@@ -624,3 +624,12 @@ All steps must pass. No exceptions.
 - Commit `.env` files or secrets
 - Skip pre-commit hooks (--no-verify)
 - Let a feature branch live longer than 2 days
+
+# Local Development Ports
+
+This project runs on non-default ports to avoid conflicts with other local projects.
+
+- Frontend (Vite): 5176
+- Backend (Express): 3006
+
+Never change these ports without explicit confirmation. Do not default to 3000, 5173

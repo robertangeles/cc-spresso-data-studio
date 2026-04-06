@@ -9,6 +9,7 @@ import {
   Zap,
   PenTool,
   Library,
+  Users,
   Settings,
   User,
   LogOut,
@@ -36,6 +37,7 @@ const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/skills', label: 'Skills', icon: Zap },
   { to: '/content', label: 'Content Studio', icon: PenTool },
   { to: '/content/library', label: 'Content Library', icon: Library },
+  { to: '/community', label: 'The Brew', icon: Users },
 ];
 
 export function Sidebar() {
