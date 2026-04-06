@@ -112,7 +112,7 @@ export function Sidebar() {
   const isOnChat = location.pathname.startsWith('/chat');
 
   return (
-    <aside className="flex w-56 flex-col border-r border-border-subtle bg-surface-1">
+    <aside className="flex w-64 flex-col border-r border-border-subtle bg-surface-1">
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-4 py-4 border-b border-border-subtle">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-dim">
@@ -330,15 +330,13 @@ export function Sidebar() {
                     </span>
                   </button>
                 ) : pendingDowngrade ? (
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-semibold text-accent">
-                      {plan?.displayName ?? 'Business'}
-                    </span>
-                    <span className="text-[9px] text-amber-400/80">
-                      → {pendingDowngrade.planName} on{' '}
+                  <p className="text-[10px] font-semibold text-accent truncate">
+                    {plan?.displayName ?? 'Business'}{' '}
+                    <span className="font-normal text-amber-400/80">
+                      → {pendingDowngrade.planName}{' '}
                       {new Date(pendingDowngrade.effectiveDate).toLocaleDateString()}
                     </span>
-                  </div>
+                  </p>
                 ) : canDowngrade ? (
                   <button
                     type="button"

@@ -20,8 +20,11 @@ router.post('/webhook', billingController.handleWebhook);
 
 router.use(authenticate);
 
-// Current subscription + balance
+// Current subscription + balance (DB only — fast)
 router.get('/subscription', billingController.getSubscription);
+
+// Pending schedule/downgrade (Stripe API — lazy-loaded separately)
+router.get('/pending-schedule', billingController.getPendingSchedule);
 
 // Usage breakdown + transaction history
 router.get('/usage', billingController.getUsage);

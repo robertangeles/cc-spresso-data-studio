@@ -62,23 +62,7 @@ export async function getSubscription(
 
     const { subscription, plan } = await subscriptionService.getSubscription(req.user.userId);
 
-    // Check for pending downgrade schedule (non-blocking)
-    let pendingDowngrade: { planName: string; effectiveDate: string } | null = null;
-    if (subscription?.stripeSubscriptionId) {
-      const schedule = await stripeService.getPendingSchedule(subscription.stripeSubscriptionId);
-      if (schedule) {
-        const scheduledPlan = await subscriptionService.getPlanByStripePriceId(
-          schedule.scheduledPriceId,
-        );
-        if (scheduledPlan && plan && scheduledPlan.sortOrder < plan.sortOrder) {
-          pendingDowngrade = {
-            planName: scheduledPlan.displayName,
-            effectiveDate: new Date(schedule.scheduledDate * 1000).toISOString(),
-          };
-        }
-      }
-    }
-
+    // Return immediately — no Stripe API calls here
     res.json({
       success: true,
       data: {
@@ -104,9 +88,48 @@ export async function getSubscription(
               sortOrder: plan.sortOrder,
             }
           : null,
-        pendingDowngrade,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pending schedule (lazy-loaded, non-blocking Stripe call)
+// ---------------------------------------------------------------------------
+
+export async function getPendingSchedule(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+
+    const { subscription, plan } = await subscriptionService.getSubscription(req.user.userId);
+
+    if (!subscription?.stripeSubscriptionId) {
+      res.json({ success: true, data: { pendingDowngrade: null } });
+      return;
+    }
+
+    const schedule = await stripeService.getPendingSchedule(subscription.stripeSubscriptionId);
+    let pendingDowngrade: { planName: string; effectiveDate: string } | null = null;
+
+    if (schedule) {
+      const scheduledPlan = await subscriptionService.getPlanByStripePriceId(
+        schedule.scheduledPriceId,
+      );
+      if (scheduledPlan && plan && scheduledPlan.sortOrder < plan.sortOrder) {
+        pendingDowngrade = {
+          planName: scheduledPlan.displayName,
+          effectiveDate: new Date(schedule.scheduledDate * 1000).toISOString(),
+        };
+      }
+    }
+
+    res.json({ success: true, data: { pendingDowngrade } });
   } catch (err) {
     next(err);
   }

@@ -135,7 +135,7 @@ export async function getStripe(): Promise<Stripe> {
   if (cachedStripe) return cachedStripe;
 
   const config = await getStripeConfig();
-  cachedStripe = new Stripe(config.secretKey);
+  cachedStripe = new Stripe(config.secretKey, { timeout: 5000 });
   return cachedStripe;
 }
 
@@ -492,8 +492,11 @@ export async function getPendingSchedule(
       scheduledPriceId: priceId as string,
       scheduledDate: futurePhase.start_date,
     };
-  } catch {
-    // Schedule check is non-critical — fail silently
+  } catch (err) {
+    logger.warn(
+      { error: err instanceof Error ? err.message : String(err) },
+      'getPendingSchedule failed (non-critical)',
+    );
     return null;
   }
 }

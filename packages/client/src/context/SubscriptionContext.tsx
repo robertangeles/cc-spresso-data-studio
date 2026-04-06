@@ -1,4 +1,12 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from 'react';
 import { api } from '../lib/api';
 
 export interface Plan {
@@ -67,6 +75,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
   const refreshSubscription = useCallback(async () => {
     try {
+      // Fast path: DB-only calls — no Stripe API
       const [subRes, plansRes] = await Promise.all([
         api.get('/billing/subscription').catch(() => null),
         api.get('/billing/plans').catch(() => null),
@@ -87,7 +96,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       );
 
       const maxSortOrder = allPlans.length > 0 ? Math.max(...allPlans.map((p) => p.sortOrder)) : 0;
-      const pendingDowngrade = subRes?.data?.data?.pendingDowngrade ?? null;
 
       setState((prev) => ({
         ...prev,
@@ -97,12 +105,30 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         allPlans,
         canUpgrade: currentPlan ? currentPlan.sortOrder < maxSortOrder : false,
         canDowngrade:
-          currentPlan && !pendingDowngrade
+          currentPlan && !prev.pendingDowngrade
             ? currentPlan.sortOrder > 0 && currentPlan.priceCents > 0
             : false,
-        pendingDowngrade,
         isLoading: false,
       }));
+
+      // Lazy path: pending schedule check (Stripe API — non-blocking)
+      api
+        .get('/billing/pending-schedule')
+        .then((schedRes) => {
+          const pendingDowngrade = schedRes?.data?.data?.pendingDowngrade ?? null;
+          setState((prev) => ({
+            ...prev,
+            pendingDowngrade,
+            canDowngrade: pendingDowngrade
+              ? false
+              : prev.plan
+                ? prev.plan.sortOrder > 0 && prev.plan.priceCents > 0
+                : false,
+          }));
+        })
+        .catch(() => {
+          // Non-critical — leave pendingDowngrade as-is
+        });
     } catch {
       setState((prev) => ({ ...prev, isLoading: false }));
     }
@@ -112,9 +138,16 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     refreshSubscription();
   }, [refreshSubscription]);
 
-  // Refresh on window focus (catch credits used in other tabs)
+  // Refresh on window focus (debounced — max once every 5s)
+  const lastRefreshRef = useRef(0);
   useEffect(() => {
-    const onFocus = () => refreshSubscription();
+    const onFocus = () => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current > 5000) {
+        lastRefreshRef.current = now;
+        refreshSubscription();
+      }
+    };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [refreshSubscription]);
