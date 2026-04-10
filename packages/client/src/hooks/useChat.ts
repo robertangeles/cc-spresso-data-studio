@@ -28,7 +28,7 @@ export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState('anthropic/claude-sonnet-4-6');
 
   // Load conversations list
   const refreshConversations = useCallback(async () => {
@@ -67,82 +67,90 @@ export function useChat() {
   }, []);
 
   // Send a message
-  const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim()) return;
+  const sendMessage = useCallback(
+    async (content: string) => {
+      if (!content.trim()) return;
 
-    let conversationId = activeConversation?.id;
+      let conversationId = activeConversation?.id;
 
-    // Auto-create conversation if none exists
-    if (!conversationId) {
-      try {
-        const { data } = await api.post('/chat/conversations', { model });
-        conversationId = data.data.id;
-        setActiveConversation(data.data);
-      } catch {
-        return;
+      // Auto-create conversation if none exists
+      if (!conversationId) {
+        try {
+          const { data } = await api.post('/chat/conversations', { model });
+          conversationId = data.data.id;
+          setActiveConversation(data.data);
+        } catch {
+          return;
+        }
       }
-    }
 
-    // Optimistically add user message
-    const userMsg: Message = {
-      id: `temp-${Date.now()}`,
-      conversationId: conversationId!,
-      role: 'user',
-      content,
-      contentType: 'text',
-      model: null,
-      tokens: 0,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsSending(true);
-
-    try {
-      const { data } = await api.post(`/chat/conversations/${conversationId}/messages`, {
+      // Optimistically add user message
+      const userMsg: Message = {
+        id: `temp-${Date.now()}`,
+        conversationId: conversationId!,
+        role: 'user',
         content,
-        model,
-      });
+        contentType: 'text',
+        model: null,
+        tokens: 0,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setIsSending(true);
 
-      const assistantMsg = data.data.message as Message;
+      try {
+        const { data } = await api.post(`/chat/conversations/${conversationId}/messages`, {
+          content,
+          model,
+        });
 
-      // Replace temp user msg and add assistant response
-      setMessages((prev) => [
-        ...prev.filter((m) => m.id !== userMsg.id),
-        { ...userMsg, id: `user-${Date.now()}` },
-        assistantMsg,
-      ]);
+        const assistantMsg = data.data.message as Message;
 
-      // Refresh conversations list (title may have been generated)
-      setTimeout(() => refreshConversations(), 2000);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to send message';
-      // Add error as assistant message
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `error-${Date.now()}`,
-          conversationId: conversationId!,
-          role: 'assistant',
-          content: `Error: ${msg}`,
-          contentType: 'text',
-          model: null,
-          tokens: 0,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
-    } finally {
-      setIsSending(false);
-    }
-  }, [activeConversation, model, refreshConversations]);
+        // Replace temp user msg and add assistant response
+        setMessages((prev) => [
+          ...prev.filter((m) => m.id !== userMsg.id),
+          { ...userMsg, id: `user-${Date.now()}` },
+          assistantMsg,
+        ]);
+
+        // Refresh conversations list (title may have been generated)
+        setTimeout(() => refreshConversations(), 2000);
+      } catch (err: unknown) {
+        const msg =
+          (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+          'Failed to send message';
+        // Add error as assistant message
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `error-${Date.now()}`,
+            conversationId: conversationId!,
+            role: 'assistant',
+            content: `Error: ${msg}`,
+            contentType: 'text',
+            model: null,
+            tokens: 0,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [activeConversation, model, refreshConversations],
+  );
 
   // Delete a conversation
-  const deleteConversation = useCallback(async (id: string) => {
-    await api.delete(`/chat/conversations/${id}`);
-    if (activeConversation?.id === id) {
-      newChat();
-    }
-    await refreshConversations();
-  }, [activeConversation, newChat, refreshConversations]);
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      await api.delete(`/chat/conversations/${id}`);
+      if (activeConversation?.id === id) {
+        newChat();
+      }
+      await refreshConversations();
+    },
+    [activeConversation, newChat, refreshConversations],
+  );
 
   return {
     conversations,

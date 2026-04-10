@@ -14,7 +14,6 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.80.0",
     "@cc/shared": "workspace:*",
     "bcrypt": "^5.1.1",
     "cheerio": "^1.2.0",

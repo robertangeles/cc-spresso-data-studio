@@ -1,7 +1,14 @@
 import type { Request, Response, NextFunction } from 'express';
-import type { ApiResponse, DatabaseStatus, TableInfo, QueryResult } from '@cc/shared';
+import type {
+  ApiResponse,
+  DatabaseStatus,
+  TableInfo,
+  QueryResult,
+  OpenRouterCatalogModel,
+} from '@cc/shared';
 import { UnauthorizedError } from '../utils/errors.js';
 import * as adminService from '../services/admin.service.js';
+import * as catalogService from '../services/ai/openrouter-catalog.service.js';
 import { providerRegistry } from '../services/ai/provider.registry.js';
 
 export async function getDatabaseStatus(
@@ -186,6 +193,104 @@ export async function getConfiguredModels(
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const models = await adminService.getConfiguredModels();
     res.json({ success: true, data: models });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Model Catalog ---
+
+export async function syncModelCatalog(
+  req: Request,
+  res: Response<ApiResponse<{ added: number; updated: number }>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const apiKey = await adminService.getOpenRouterApiKey();
+    if (!apiKey) {
+      res
+        .status(400)
+        .json({
+          success: false,
+          data: { added: 0, updated: 0 },
+          message: 'OpenRouter API key not configured',
+        });
+      return;
+    }
+    const result = await catalogService.syncModelCatalog(apiKey);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getModelCatalog(
+  req: Request,
+  res: Response<ApiResponse<OpenRouterCatalogModel[]>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const search = req.query.search as string | undefined;
+    const provider = req.query.provider as string | undefined;
+    const models = await catalogService.getCatalog(search, provider);
+    res.json({ success: true, data: models });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function toggleCatalogModel(
+  req: Request,
+  res: Response<ApiResponse<OpenRouterCatalogModel>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const modelId = decodeURIComponent(req.params.modelId);
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      res
+        .status(400)
+        .json({
+          success: false,
+          data: null as unknown as OpenRouterCatalogModel,
+          message: 'enabled (boolean) is required',
+        });
+      return;
+    }
+    const model = await catalogService.toggleModelEnabled(modelId, enabled);
+    res.json({ success: true, data: model });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function batchToggleCatalogModels(
+  req: Request,
+  res: Response<ApiResponse<null>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const { modelIds, enabled } = req.body;
+    if (!Array.isArray(modelIds) || typeof enabled !== 'boolean') {
+      res
+        .status(400)
+        .json({
+          success: false,
+          data: null,
+          message: 'modelIds (string[]) and enabled (boolean) are required',
+        });
+      return;
+    }
+    await catalogService.batchToggleModels(modelIds, enabled);
+    res.json({
+      success: true,
+      data: null,
+      message: `${modelIds.length} models ${enabled ? 'enabled' : 'disabled'}`,
+    });
   } catch (err) {
     next(err);
   }

@@ -1,117 +1,34 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { DatabaseStatus, TableInfo, QueryResult } from '@cc/shared';
 import { db, pool, schema } from '../db/index.js';
 import { config } from '../config/index.js';
 import { logger } from '../config/logger.js';
 
-// --- AI Provider definitions ---
-
-interface ModelDef {
-  id: string;
-  name: string;
-  description?: string;
-}
-
-interface ProviderDef {
-  name: string;
-  providerType: string;
-  icon: string;
-  models: ModelDef[];
-}
-
-const DEFAULT_PROVIDERS: ProviderDef[] = [
-  {
-    name: 'OpenRouter',
-    providerType: 'openrouter',
-    icon: '🌐',
-    models: [
-      { id: 'openrouter/auto', name: 'Auto (best available)', description: 'OpenRouter picks the best model' },
-      { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', description: 'Via OpenRouter' },
-      { id: 'openai/gpt-5.4', name: 'GPT-5.4', description: 'Latest frontier — 1M context ($2.50/$15)' },
-      { id: 'openai/gpt-5.2', name: 'GPT-5.2', description: 'Strong agentic + long context' },
-      { id: 'openai/gpt-5', name: 'GPT-5', description: 'Flagship GPT-5 ($1.25/$10)' },
-      { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini', description: 'Fast + cheap ($0.25/$2)' },
-      { id: 'openai/gpt-4o', name: 'GPT-4o', description: 'Previous gen flagship' },
-      { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'Via OpenRouter' },
-      { id: 'meta-llama/llama-3.1-405b', name: 'Llama 3.1 405B', description: 'Via OpenRouter' },
-      { id: 'perplexity/sonar-pro', name: 'Perplexity Sonar Pro', description: 'Web search built-in — best for research' },
-      { id: 'perplexity/sonar', name: 'Perplexity Sonar', description: 'Web search built-in — fast research' },
-      { id: 'perplexity/sonar-deep-research', name: 'Perplexity Deep Research', description: 'Web search — thorough multi-step research' },
-      { id: 'qwen/qwen3.5-122b-a10b', name: 'Qwen 3.5 122B', description: 'Large MoE model — strong reasoning and multilingual' },
-      { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', description: 'Fast next-gen Gemini' },
-      { id: 'google/gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite Preview', description: 'Lightweight and fast' },
-      { id: 'google/gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview', description: 'Most capable Gemini — strong reasoning' },
-      { id: 'google/gemini-3.1-flash-image-preview', name: 'Gemini 3.1 Flash Image', description: 'Image generation via Gemini' },
-      { id: 'google/gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image', description: 'High quality image generation' },
-      { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', description: 'Latest DeepSeek — strong reasoning and coding' },
-      { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1', description: 'Reasoning model — deep chain-of-thought' },
-      { id: 'deepseek/deepseek-chat-v3.1', name: 'DeepSeek V3.1', description: 'Fast and capable general model' },
-      { id: 'mistralai/mistral-large-2512', name: 'Mistral Large', description: 'Best Mistral — creative writing + reasoning ($0.50/M)' },
-      { id: 'mistralai/mistral-small-2603', name: 'Mistral Small', description: 'Fast structured output — great for editing ($0.15/M)' },
-      { id: 'mistralai/mistral-medium-3.1', name: 'Mistral Medium 3.1', description: 'Balanced speed and quality ($0.40/M)' },
-    ],
-  },
-  {
-    name: 'Anthropic',
-    providerType: 'anthropic',
-    icon: '🤖',
-    models: [
-      { id: 'claude-sonnet-4-6', name: 'Sonnet 4.6', description: 'Most efficient for everyday tasks' },
-      { id: 'claude-opus-4-6', name: 'Opus 4.6', description: 'Most powerful for complex tasks' },
-      { id: 'claude-haiku-4-5', name: 'Haiku 4.5', description: 'Fastest and most affordable' },
-      { id: 'claude-opus-4-5', name: 'Opus 4.5', description: 'Previous gen powerhouse' },
-      { id: 'claude-sonnet-4-5', name: 'Sonnet 4.5', description: 'Previous gen balanced' },
-    ],
-  },
-  {
-    name: 'OpenAI',
-    providerType: 'openai',
-    icon: '💚',
-    models: [
-      { id: 'gpt-4o', name: 'GPT-4o — Flagship model' },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini — Fast & cheap' },
-      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
-      { id: 'o3-mini', name: 'o3 Mini — Reasoning model' },
-    ],
-  },
-  {
-    name: 'xAI',
-    providerType: 'xai',
-    icon: '✖',
-    models: [
-      { id: 'grok-2', name: 'Grok 2 — Full power' },
-      { id: 'grok-2-mini', name: 'Grok 2 Mini — Lightweight' },
-    ],
-  },
-  {
-    name: 'Google Gemini',
-    providerType: 'gemini',
-    icon: '💎',
-    models: [
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro — Most capable' },
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash — Fast' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-    ],
-  },
-  {
-    name: 'Mistral',
-    providerType: 'mistral',
-    icon: '🌀',
-    models: [
-      { id: 'mistral-large-latest', name: 'Mistral Large — Most capable' },
-      { id: 'mistral-medium-latest', name: 'Mistral Medium' },
-      { id: 'mistral-small-latest', name: 'Mistral Small — Fast & efficient' },
-    ],
-  },
-];
+// --- AI Provider: OpenRouter is the single gateway ---
 
 // --- Role seed ---
 
 const DEFAULT_ROLES = [
-  { name: 'Administrator', description: 'Full system access — manage users, roles, settings, and all content', isSystem: true },
-  { name: 'Subscriber', description: 'Free tier — access to built-in skills and basic flows', isSystem: true },
-  { name: 'Paid Subscriber', description: 'Paid tier — custom skill creation, advanced flows, and priority execution', isSystem: true },
-  { name: 'Founder Member', description: 'Early adopter — full access with lifetime benefits', isSystem: true },
+  {
+    name: 'Administrator',
+    description: 'Full system access — manage users, roles, settings, and all content',
+    isSystem: true,
+  },
+  {
+    name: 'Subscriber',
+    description: 'Free tier — access to built-in skills and basic flows',
+    isSystem: true,
+  },
+  {
+    name: 'Paid Subscriber',
+    description: 'Paid tier — custom skill creation, advanced flows, and priority execution',
+    isSystem: true,
+  },
+  {
+    name: 'Founder Member',
+    description: 'Early adopter — full access with lifetime benefits',
+    isSystem: true,
+  },
 ];
 
 export async function seedRoles(): Promise<void> {
@@ -132,55 +49,124 @@ export async function seedRoles(): Promise<void> {
 }
 
 export async function seedAIProviders(): Promise<void> {
-  for (const prov of DEFAULT_PROVIDERS) {
-    const existing = await db.query.aiProviders.findFirst({
-      where: eq(schema.aiProviders.providerType, prov.providerType),
-    });
+  // Ensure single OpenRouter provider row exists
+  const existing = await db.query.aiProviders.findFirst({
+    where: eq(schema.aiProviders.providerType, 'openrouter'),
+  });
 
-    if (!existing) {
-      await db.insert(schema.aiProviders).values({
-        name: prov.name,
-        providerType: prov.providerType,
-        isEnabled: false,
-        config: { icon: prov.icon, models: prov.models, apiKey: '' },
-      });
-      logger.info({ provider: prov.name }, 'AI provider seeded');
-    } else {
-      // Update models and icon while preserving the user's API key
-      const existingCfg = existing.config as { apiKey?: string };
-      await db
-        .update(schema.aiProviders)
-        .set({
-          name: prov.name,
-          config: { icon: prov.icon, models: prov.models, apiKey: existingCfg.apiKey ?? '' },
-        })
-        .where(eq(schema.aiProviders.id, existing.id));
+  if (!existing) {
+    // Check if there's an old Anthropic provider with an API key we should note
+    await db.insert(schema.aiProviders).values({
+      name: 'OpenRouter',
+      providerType: 'openrouter',
+      isEnabled: false,
+      config: { icon: '🌐', apiKey: '' },
+    });
+    logger.info('OpenRouter AI provider seeded');
+  }
+
+  // Disable any non-OpenRouter providers (legacy cleanup)
+  await db
+    .update(schema.aiProviders)
+    .set({ isEnabled: false })
+    .where(sql`${schema.aiProviders.providerType} != 'openrouter'`);
+
+  // --- Data migration: convert old model IDs to OpenRouter format ---
+  await migrateModelIds();
+}
+
+/** One-time idempotent migration: convert short model IDs to OpenRouter format */
+async function migrateModelIds(): Promise<void> {
+  const aliasMap: Record<string, string> = {
+    // Anthropic direct SDK format → OpenRouter format
+    'claude-sonnet-4-6': 'anthropic/claude-sonnet-4-6',
+    'claude-opus-4-6': 'anthropic/claude-opus-4-6',
+    'claude-haiku-4-5': 'anthropic/claude-haiku-4-5',
+    'claude-opus-4-5': 'anthropic/claude-opus-4-5',
+    'claude-sonnet-4-5': 'anthropic/claude-sonnet-4-5',
+    // OpenAI phantom provider
+    'gpt-4o': 'openai/gpt-4o',
+    'gpt-4o-mini': 'openai/gpt-4o-mini',
+    'gpt-4-turbo': 'openai/gpt-4-turbo',
+    'o3-mini': 'openai/o3-mini',
+    // xAI phantom provider
+    'grok-2': 'xai/grok-2',
+    'grok-2-mini': 'xai/grok-2-mini',
+    // Gemini phantom provider
+    'gemini-2.5-pro': 'google/gemini-2.5-pro',
+    'gemini-2.5-flash': 'google/gemini-2.5-flash',
+    'gemini-2.0-flash': 'google/gemini-2.0-flash',
+    // Mistral phantom provider
+    'mistral-large-latest': 'mistralai/mistral-large-latest',
+    'mistral-medium-latest': 'mistralai/mistral-medium-latest',
+    'mistral-small-latest': 'mistralai/mistral-small-latest',
+  };
+
+  // Tables with a `model` column to migrate
+  const modelColumnTables = ['conversations', 'flow_steps'];
+  // Tables with `default_model` / `default_editor_model` columns
+  const profileColumns = ['default_model', 'default_editor_model'];
+
+  let totalUpdated = 0;
+
+  for (const [oldId, newId] of Object.entries(aliasMap)) {
+    // Conversations and flow_steps
+    for (const table of modelColumnTables) {
+      const result = await db.execute(
+        sql`UPDATE ${sql.identifier(table)} SET model = ${newId} WHERE model = ${oldId}`,
+      );
+      totalUpdated += (result as unknown as { rowCount: number }).rowCount ?? 0;
     }
+
+    // User profiles
+    for (const col of profileColumns) {
+      const result = await db.execute(
+        sql`UPDATE user_profiles SET ${sql.identifier(col)} = ${newId} WHERE ${sql.identifier(col)} = ${oldId}`,
+      );
+      totalUpdated += (result as unknown as { rowCount: number }).rowCount ?? 0;
+    }
+
+    // Skills default_model
+    const skillResult = await db.execute(
+      sql`UPDATE skills SET default_model = ${newId} WHERE default_model = ${oldId}`,
+    );
+    totalUpdated += (skillResult as unknown as { rowCount: number }).rowCount ?? 0;
+
+    // dimModels pricing table
+    const dimResult = await db.execute(
+      sql`UPDATE dim_models SET model_id = ${newId} WHERE model_id = ${oldId}`,
+    );
+    totalUpdated += (dimResult as unknown as { rowCount: number }).rowCount ?? 0;
+  }
+
+  if (totalUpdated > 0) {
+    logger.info({ totalUpdated }, 'Model ID migration completed');
   }
 }
 
 export async function getAIProviders() {
-  const providers = await db.query.aiProviders.findMany({
-    orderBy: schema.aiProviders.name,
+  // Return only the OpenRouter provider
+  const provider = await db.query.aiProviders.findFirst({
+    where: eq(schema.aiProviders.providerType, 'openrouter'),
   });
 
-  return providers.map((p) => {
-    const cfg = p.config as { icon?: string; models?: ModelDef[] | string[]; apiKey?: string };
-    const hasKey = !!cfg.apiKey;
-    const models = (cfg.models ?? []).map((m) =>
-      typeof m === 'string' ? { id: m, name: m } : m,
-    );
-    return {
-      id: p.id,
-      name: p.name,
-      providerType: p.providerType,
-      icon: cfg.icon ?? '',
-      models,
+  if (!provider) return [];
+
+  const cfg = provider.config as { icon?: string; apiKey?: string };
+  const hasKey = !!cfg.apiKey;
+
+  return [
+    {
+      id: provider.id,
+      name: provider.name,
+      providerType: provider.providerType,
+      icon: cfg.icon ?? '🌐',
+      models: [], // Models now come from catalog, not provider config
       isConfigured: hasKey,
       maskedKey: hasKey ? `****${cfg.apiKey!.slice(-4)}` : '',
-      isEnabled: p.isEnabled,
-    };
-  });
+      isEnabled: provider.isEnabled,
+    },
+  ];
 }
 
 export async function getAIProviderRawKey(providerId: string) {
@@ -213,28 +199,38 @@ export async function updateAIProviderKey(providerId: string, apiKey: string) {
 }
 
 export async function getConfiguredModels() {
-  const providers = await db.query.aiProviders.findMany({
-    where: eq(schema.aiProviders.isEnabled, true),
+  // Read from catalog — enabled models only
+  const models = await db.query.openrouterModelCatalog.findMany({
+    where: eq(schema.openrouterModelCatalog.isEnabled, true),
+    orderBy: [
+      schema.openrouterModelCatalog.providerSlug,
+      schema.openrouterModelCatalog.displayName,
+    ],
   });
 
-  return providers.flatMap((p) => {
-    const cfg = p.config as { icon?: string; models?: ModelDef[] | string[]; apiKey?: string };
-    if (!cfg.apiKey) return [];
-    return (cfg.models ?? []).map((m) => {
-      const model = typeof m === 'string' ? { id: m, name: m } : m;
-      return {
-        model: model.id,
-        displayName: model.name,
-        description: (model as ModelDef).description ?? '',
-        provider: p.name,
-        providerType: p.providerType,
-        icon: cfg.icon ?? '',
-      };
-    });
-  });
+  return models.map((m) => ({
+    model: m.modelId,
+    displayName: m.displayName,
+    description: m.description ?? '',
+    provider: m.providerSlug,
+    providerType: 'openrouter',
+    providerSlug: m.providerSlug,
+    icon: '🌐',
+  }));
 }
 
-const DDL_BLOCKLIST = /\b(DROP\s+(DATABASE|TABLE|SCHEMA|INDEX)|ALTER\s+TABLE|TRUNCATE|CREATE\s+(DATABASE|SCHEMA))\b/i;
+/** Get the raw OpenRouter API key for catalog sync */
+export async function getOpenRouterApiKey(): Promise<string | null> {
+  const provider = await db.query.aiProviders.findFirst({
+    where: eq(schema.aiProviders.providerType, 'openrouter'),
+  });
+  if (!provider) return null;
+  const cfg = provider.config as { apiKey?: string };
+  return cfg.apiKey || null;
+}
+
+const DDL_BLOCKLIST =
+  /\b(DROP\s+(DATABASE|TABLE|SCHEMA|INDEX)|ALTER\s+TABLE|TRUNCATE|CREATE\s+(DATABASE|SCHEMA))\b/i;
 const DML_PATTERN = /\b(INSERT|UPDATE|DELETE)\b/i;
 const MAX_ROWS = 500;
 const STATEMENT_TIMEOUT_MS = 10_000;
@@ -272,10 +268,7 @@ export async function updateSetting(key: string, value: string, isSecret = false
     return updated;
   }
 
-  const [created] = await db
-    .insert(schema.settings)
-    .values({ key, value, isSecret })
-    .returning();
+  const [created] = await db.insert(schema.settings).values({ key, value, isSecret }).returning();
   return created;
 }
 
@@ -343,7 +336,9 @@ export async function executeQuery(
 ): Promise<QueryResult> {
   // Block DDL in all modes
   if (DDL_BLOCKLIST.test(sql)) {
-    throw new Error('DDL statements are not allowed (DROP, ALTER TABLE, TRUNCATE, CREATE DATABASE/SCHEMA)');
+    throw new Error(
+      'DDL statements are not allowed (DROP, ALTER TABLE, TRUNCATE, CREATE DATABASE/SCHEMA)',
+    );
   }
 
   // Block DML in read mode

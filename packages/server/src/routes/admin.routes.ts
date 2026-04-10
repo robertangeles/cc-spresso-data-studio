@@ -38,4 +38,10 @@ router.get('/ai-providers/configured', adminController.getConfiguredModels);
 router.get('/ai-providers/:id/key', adminController.getAIProviderKey);
 router.put('/ai-providers/:id/key', adminController.updateAIProviderKey);
 
+// Model catalog management
+router.post('/ai-providers/sync-catalog', adminController.syncModelCatalog);
+router.get('/ai-providers/catalog', adminController.getModelCatalog);
+router.patch('/ai-providers/catalog/batch-toggle', adminController.batchToggleCatalogModels);
+router.patch('/ai-providers/catalog/:modelId/toggle', adminController.toggleCatalogModel);
+
 export { router as adminRoutes };

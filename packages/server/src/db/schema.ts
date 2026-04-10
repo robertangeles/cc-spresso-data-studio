@@ -1361,3 +1361,37 @@ export const userBlocks = pgTable(
     index('idx_user_blocks_blocked_id').on(t.blockedId),
   ],
 );
+
+// ============================================================
+// OLTP: OPENROUTER MODEL CATALOG
+// Normal form: 2NF — every non-key column depends only on PK
+// Synced from OpenRouter /api/v1/models endpoint
+// ============================================================
+
+export const openrouterModelCatalog = pgTable(
+  'openrouter_model_catalog',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    modelId: varchar('model_id', { length: 255 }).notNull().unique(),
+    displayName: varchar('display_name', { length: 255 }).notNull(),
+    description: text('description'),
+    contextLength: integer('context_length').notNull().default(4096),
+    maxOutputTokens: integer('max_output_tokens'),
+    inputCostPerM: real('input_cost_per_m').notNull().default(0),
+    outputCostPerM: real('output_cost_per_m').notNull().default(0),
+    supportsVision: boolean('supports_vision').notNull().default(false),
+    supportsStreaming: boolean('supports_streaming').notNull().default(true),
+    supportsImageGen: boolean('supports_image_gen').notNull().default(false),
+    providerSlug: varchar('provider_slug', { length: 100 }).notNull(),
+    isEnabled: boolean('is_enabled').notNull().default(false),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: fetch only enabled models for model selector dropdown
+    index('idx_catalog_is_enabled').on(t.isEnabled),
+    // Index: filter catalog by provider
+    index('idx_catalog_provider_slug').on(t.providerSlug),
+  ],
+);

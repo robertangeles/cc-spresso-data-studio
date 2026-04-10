@@ -44,3 +44,20 @@ export interface AICompletionResponse {
   };
   finishReason: 'stop' | 'length' | 'error';
 }
+
+export interface OpenRouterCatalogModel {
+  id: string;
+  modelId: string;
+  displayName: string;
+  description: string | null;
+  contextLength: number;
+  maxOutputTokens: number | null;
+  inputCostPerM: number;
+  outputCostPerM: number;
+  supportsVision: boolean;
+  supportsStreaming: boolean;
+  supportsImageGen: boolean;
+  providerSlug: string;
+  isEnabled: boolean;
+  lastSyncedAt: string | null;
+}

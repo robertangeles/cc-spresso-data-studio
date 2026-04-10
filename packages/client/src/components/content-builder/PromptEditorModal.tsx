@@ -56,7 +56,11 @@ const CATEGORIES = [
 ];
 
 // APEX-suitable models: cheap + fast (for prompt generation)
-const APEX_MODEL_IDS = ['claude-haiku-4-5', 'openai/gpt-5-mini', 'mistralai/mistral-small-2603'];
+const APEX_MODEL_IDS = [
+  'anthropic/claude-haiku-4-5',
+  'openai/gpt-5-mini',
+  'mistralai/mistral-small-2603',
+];
 
 const CONSTRAINT_OPTIONS = [
   'Time/Deadline',
@@ -117,7 +121,7 @@ export function PromptEditorModal({ isOpen, onClose, onSave, editPrompt }: Promp
     const filtered = configuredModels.filter((m) => APEX_MODEL_IDS.includes(m.model));
     return filtered.length > 0
       ? filtered.map((m) => ({ value: m.model, label: m.displayName }))
-      : [{ value: 'claude-haiku-4-5', label: 'Haiku 4.5' }]; // fallback
+      : [{ value: 'anthropic/claude-haiku-4-5', label: 'Haiku 4.5' }]; // fallback
   }, [configuredModels]);
 
   /* ---- tabs & apex lifecycle ---- */
@@ -129,7 +133,7 @@ export function PromptEditorModal({ isOpen, onClose, onSave, editPrompt }: Promp
   const [description, setDescription] = useState('');
   const [body, setBody] = useState('');
   const [category, setCategory] = useState('custom');
-  const [defaultModel, setDefaultModel] = useState('claude-sonnet-4-6');
+  const [defaultModel, setDefaultModel] = useState('anthropic/claude-sonnet-4-6');
 
   /* ---- APEX form ---- */
   const [persona, setPersona] = useState('');
@@ -137,7 +141,7 @@ export function PromptEditorModal({ isOpen, onClose, onSave, editPrompt }: Promp
   const [constraints, setConstraints] = useState<string[]>([]);
   const [outputFormat, setOutputFormat] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
-  const [apexModel, setApexModel] = useState('claude-haiku-4-5');
+  const [apexModel, setApexModel] = useState('anthropic/claude-haiku-4-5');
 
   /* ---- APEX result ---- */
   const [apexResult, setApexResult] = useState<ApexResult | null>(null);
@@ -150,7 +154,7 @@ export function PromptEditorModal({ isOpen, onClose, onSave, editPrompt }: Promp
       setDescription(editPrompt.description ?? '');
       setBody(editPrompt.body);
       setCategory(editPrompt.category);
-      setDefaultModel(editPrompt.defaultModel ?? 'claude-sonnet-4-6');
+      setDefaultModel(editPrompt.defaultModel ?? 'anthropic/claude-sonnet-4-6');
       setActiveTab('manual');
     } else {
       resetAll();
@@ -163,13 +167,13 @@ export function PromptEditorModal({ isOpen, onClose, onSave, editPrompt }: Promp
     setDescription('');
     setBody('');
     setCategory('custom');
-    setDefaultModel('claude-sonnet-4-6');
+    setDefaultModel('anthropic/claude-sonnet-4-6');
     setPersona('');
     setUseCase('');
     setConstraints([]);
     setOutputFormat('');
     setTargetAudience('');
-    setApexModel('claude-haiku-4-5');
+    setApexModel('anthropic/claude-haiku-4-5');
     setApexResult(null);
     setApexState('form');
     setError('');
@@ -227,7 +231,7 @@ export function PromptEditorModal({ isOpen, onClose, onSave, editPrompt }: Promp
       description: '',
       body: apexResult.generatedPrompt.trim(),
       category: 'custom',
-      defaultModel: 'claude-sonnet-4-6',
+      defaultModel: 'anthropic/claude-sonnet-4-6',
     });
   };
 

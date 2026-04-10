@@ -19,7 +19,7 @@ export function useContentChat(systemPrompt?: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState('anthropic/claude-sonnet-4-6');
 
   const ensureConversation = useCallback(async (): Promise<string> => {
     if (conversationId) return conversationId;

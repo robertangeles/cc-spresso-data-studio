@@ -4,83 +4,70 @@ import type { IAIProvider } from './provider.interface.js';
 import { AppError } from '../../utils/errors.js';
 import { db, schema } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
-import { AnthropicProvider } from './providers/anthropic.provider.js';
 import { OpenRouterProvider } from './providers/openrouter.provider.js';
 import { logger } from '../../config/logger.js';
+import { getEnabledModels } from './openrouter-catalog.service.js';
 
 export class ProviderRegistry {
-  private providers = new Map<ProviderType, IAIProvider>();
+  private provider: OpenRouterProvider | null = null;
 
-  register(provider: IAIProvider): void {
-    this.providers.set(provider.type, provider);
+  /** Register the OpenRouter provider instance */
+  register(p: IAIProvider): void {
+    if (p.type === ProviderType.OPENROUTER) {
+      this.provider = p as OpenRouterProvider;
+    }
   }
 
   get(type: ProviderType): IAIProvider | undefined {
-    return this.providers.get(type);
+    if (type === ProviderType.OPENROUTER && this.provider) return this.provider;
+    return undefined;
   }
 
   listProviders(): IAIProvider[] {
-    return Array.from(this.providers.values());
+    return this.provider ? [this.provider] : [];
   }
 
-  listAllModels(): Array<AIModelConfig & { provider: ProviderType }> {
-    const models: Array<AIModelConfig & { provider: ProviderType }> = [];
-    for (const provider of this.providers.values()) {
-      for (const model of provider.listModels()) {
-        models.push({ ...model, provider: provider.type });
-      }
-    }
-    return models;
+  async listAllModels(): Promise<Array<AIModelConfig & { provider: ProviderType }>> {
+    const catalogModels = await getEnabledModels();
+    return catalogModels.map((m) => ({
+      modelId: m.modelId,
+      displayName: m.displayName,
+      maxTokens: m.maxOutputTokens ?? 4096,
+      supportsStreaming: m.supportsStreaming,
+      supportsVision: m.supportsVision,
+      provider: ProviderType.OPENROUTER,
+    }));
   }
 
   async complete(request: AICompletionRequest): Promise<AICompletionResponse> {
-    // Find the provider that owns the requested model
-    for (const provider of this.providers.values()) {
-      const models = provider.listModels();
-      if (models.some((m) => m.modelId === request.model)) {
-        return provider.complete(request);
-      }
+    if (!this.provider) {
+      throw new AppError(
+        503,
+        'No AI provider configured. Add an OpenRouter API key in Settings > Integrations.',
+      );
     }
 
-    // Fall back to OpenRouter — it can route any model
-    const openRouter = this.providers.get(ProviderType.OPENROUTER);
-    if (openRouter) {
-      return openRouter.complete(request);
-    }
-
-    throw new AppError(400, `No provider found for model: ${request.model}`);
+    return this.provider.complete(request);
   }
 
   async loadFromDatabase(): Promise<void> {
-    const providers = await db.query.aiProviders.findMany({
-      where: eq(schema.aiProviders.isEnabled, true),
+    const orProvider = await db.query.aiProviders.findFirst({
+      where: eq(schema.aiProviders.providerType, 'openrouter'),
     });
 
-    for (const p of providers) {
-      const cfg = p.config as { apiKey?: string; models?: string[] };
-      if (!cfg.apiKey) continue;
-
-      try {
-        switch (p.providerType) {
-          case 'anthropic': {
-            this.register(new AnthropicProvider(cfg.apiKey));
-            logger.info({ provider: p.name }, 'Registered AI provider');
-            break;
-          }
-          case 'openrouter': {
-            this.register(new OpenRouterProvider(cfg.apiKey, cfg.models ?? []));
-            logger.info({ provider: p.name }, 'Registered AI provider');
-            break;
-          }
-          default:
-            logger.warn({ provider: p.name, type: p.providerType }, 'Unknown provider type, skipping');
-        }
-      } catch (err) {
-        logger.error({ err, provider: p.name }, 'Failed to register AI provider');
+    if (orProvider) {
+      const cfg = orProvider.config as { apiKey?: string };
+      if (cfg.apiKey) {
+        this.provider = new OpenRouterProvider(cfg.apiKey);
+        logger.info('OpenRouter AI provider registered');
+      } else {
+        logger.warn('OpenRouter provider exists but has no API key');
       }
+    } else {
+      logger.warn('No OpenRouter provider found in database');
     }
 
-    logger.info({ count: this.providers.size }, 'AI providers loaded');
+    logger.info({ hasProvider: !!this.provider }, 'AI provider load complete');
   }
 }
 

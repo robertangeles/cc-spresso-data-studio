@@ -387,7 +387,7 @@ export async function reworkStepOutput(
       throw new AppError(400, 'content (string) is required');
     }
 
-    const reworkModel = model || 'claude-sonnet-4-6';
+    const reworkModel = model || 'anthropic/claude-sonnet-4-6';
     const rounds = Math.min(maxRounds || 3, 5);
 
     const result = await contentAuditor.reworkLoop(

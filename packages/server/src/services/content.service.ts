@@ -649,7 +649,7 @@ export async function generateMultiPlatformContent(data: {
   try {
     const response = await withSessionGate(data.userId, data.role ?? 'Subscriber', () =>
       providerRegistry.complete({
-        model: data.model || 'claude-sonnet-4-6',
+        model: data.model || 'anthropic/claude-sonnet-4-6',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -673,7 +673,7 @@ export async function generateMultiPlatformContent(data: {
     }
 
     logger.info(
-      { channelCount: data.channelIds.length, model: data.model || 'claude-sonnet-4-6' },
+      { channelCount: data.channelIds.length, model: data.model || 'anthropic/claude-sonnet-4-6' },
       'Multi-platform content generated via AI',
     );
 
@@ -763,7 +763,7 @@ export async function remixContent(
     `Apply this style transformation while adapting for each target platform's conventions and constraints. ` +
     `Produce content that feels native to the platform, not just reformatted.`;
 
-  const model = config.model || 'claude-sonnet-4-6';
+  const model = config.model || 'anthropic/claude-sonnet-4-6';
   const role = config.role ?? 'Subscriber';
   const primarySourceId = sourceItems[0].id;
   let totalCreated = 0;
@@ -935,7 +935,7 @@ export async function repurposeContent(
     `Extract the core ideas and transform them into content that feels native to each target platform — not just reformatted. ` +
     `Add your own angle, don't just summarize.`;
 
-  const model = config.model || 'claude-sonnet-4-6';
+  const model = config.model || 'anthropic/claude-sonnet-4-6';
   const role = config.role ?? 'Subscriber';
   let totalCreated = 0;
 

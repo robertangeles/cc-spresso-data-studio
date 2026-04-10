@@ -9,36 +9,28 @@ export class OpenRouterProvider implements IAIProvider {
   readonly type = ProviderType.OPENROUTER;
   readonly name = 'OpenRouter';
   private apiKey: string;
-  private models: AIModelConfig[];
 
-  constructor(apiKey: string, models: (string | { id: string; name: string; description?: string })[]) {
+  constructor(apiKey: string) {
     this.apiKey = apiKey;
-    this.models = models.map((m) => {
-      const modelId = typeof m === 'string' ? m : m.id;
-      const displayName = typeof m === 'string' ? m.split('/').pop() ?? m : m.name;
-      return {
-        modelId,
-        displayName,
-        maxTokens: 4096,
-        supportsStreaming: true,
-        supportsVision: false,
-      };
-    });
   }
 
   listModels(): AIModelConfig[] {
-    return this.models;
+    // Models are now managed by the catalog service, not the provider
+    return [];
   }
 
   async complete(request: AICompletionRequest): Promise<AICompletionResponse> {
-    logger.info({ model: request.model, messageCount: request.messages.length }, 'OpenRouter API call');
+    logger.info(
+      { model: request.model, messageCount: request.messages.length },
+      'OpenRouter API call',
+    );
 
     const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
-        'HTTP-Referer': 'https://spresso.app',
+        'HTTP-Referer': 'https://spresso.xyz',
         'X-Title': 'Spresso',
       },
       body: JSON.stringify({
@@ -50,17 +42,93 @@ export class OpenRouterProvider implements IAIProvider {
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      logger.error({ status: response.status, body: errorBody }, 'OpenRouter API error');
-      throw new Error(`OpenRouter API error ${response.status}: ${errorBody}`);
+      const errorBody = await response.text().catch(() => '');
+      logger.error(
+        { status: response.status, body: errorBody, model: request.model },
+        'OpenRouter API error',
+      );
+
+      // Specific, actionable error messages by status code
+      switch (response.status) {
+        case 401:
+          throw new Error(
+            'OpenRouter API key is invalid — check Settings > Integrations > AI Models.',
+          );
+        case 402:
+          throw new Error(
+            'OpenRouter credits exhausted — top up your OpenRouter account at openrouter.ai.',
+          );
+        case 404:
+          throw new Error(
+            `Model "${request.model}" is not available on OpenRouter — it may have been removed.`,
+          );
+        case 429: {
+          // Retry once after a short delay
+          logger.warn({ model: request.model }, 'OpenRouter rate limited, retrying in 2s');
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const retryResponse = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.apiKey}`,
+              'HTTP-Referer': 'https://spresso.xyz',
+              'X-Title': 'Spresso',
+            },
+            body: JSON.stringify({
+              model: request.model,
+              messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
+              max_tokens: request.maxTokens ?? 4096,
+              temperature: request.temperature,
+            }),
+          });
+          if (!retryResponse.ok) {
+            throw new Error('Rate limited by OpenRouter — try again in a moment.');
+          }
+          return this.parseResponse(retryResponse, request.model);
+        }
+        default:
+          throw new Error(`OpenRouter API error ${response.status}: ${errorBody.slice(0, 200)}`);
+      }
     }
 
-    const rawJson = await response.json();
+    return this.parseResponse(response, request.model);
+  }
+
+  async validateConnection(): Promise<boolean> {
+    try {
+      const response = await fetch(`${OPENROUTER_BASE_URL}/auth/key`, {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Response parsing — handles text, images, and multimodal outputs
+  // ------------------------------------------------------------------
+
+  private async parseResponse(
+    response: Response,
+    requestModel: string,
+  ): Promise<AICompletionResponse> {
+    let rawJson: unknown;
+    try {
+      rawJson = await response.json();
+    } catch {
+      throw new Error(
+        'OpenRouter returned malformed JSON — the service may be experiencing issues.',
+      );
+    }
 
     // Log raw response for image models to debug format
-    const isImageModel = request.model.includes('image');
+    const isImageModel = requestModel.includes('image');
     if (isImageModel) {
-      logger.info({ model: request.model, rawResponse: JSON.stringify(rawJson).slice(0, 2000) }, 'Image model raw response');
+      logger.info(
+        { model: requestModel, rawResponse: JSON.stringify(rawJson).slice(0, 2000) },
+        'Image model raw response',
+      );
     }
 
     const data = rawJson as {
@@ -68,12 +136,15 @@ export class OpenRouterProvider implements IAIProvider {
       model: string;
       choices: Array<{
         message: {
-          content: string | null | Array<{
-            type: string;
-            text?: string;
-            image_url?: { url: string };
-            inline_data?: { mime_type: string; data: string };
-          }>;
+          content:
+            | string
+            | null
+            | Array<{
+                type: string;
+                text?: string;
+                image_url?: { url: string };
+                inline_data?: { mime_type: string; data: string };
+              }>;
           images?: Array<{ type: string; image_url?: { url: string } }>;
         };
         finish_reason: string;
@@ -81,9 +152,13 @@ export class OpenRouterProvider implements IAIProvider {
       usage: { prompt_tokens: number; completion_tokens: number };
     };
 
-    const choice = data.choices[0];
-    const rawContent = choice?.message?.content;
-    const rawImages = choice?.message?.images;
+    const choice = data.choices?.[0];
+    if (!choice) {
+      throw new Error('OpenRouter returned an empty response — no choices in the completion.');
+    }
+
+    const rawContent = choice.message?.content;
+    const rawImages = choice.message?.images;
 
     // Handle multimodal responses
     let content = '';
@@ -97,7 +172,10 @@ export class OpenRouterProvider implements IAIProvider {
         imageUrl = img.image_url.url;
         contentType = imageUrl.startsWith('data:') ? 'image_base64' : 'image_url';
         content = imageUrl;
-        logger.info({ model: request.model, imageUrlLength: imageUrl.length }, 'Image extracted from message.images field');
+        logger.info(
+          { model: requestModel, imageUrlLength: imageUrl.length },
+          'Image extracted from message.images field',
+        );
       }
     } else if (Array.isArray(rawContent)) {
       // Multimodal response — extract text and images
@@ -142,18 +220,7 @@ export class OpenRouterProvider implements IAIProvider {
         inputTokens: data.usage?.prompt_tokens ?? 0,
         outputTokens: data.usage?.completion_tokens ?? 0,
       },
-      finishReason: choice?.finish_reason === 'stop' ? 'stop' : 'length',
+      finishReason: choice.finish_reason === 'stop' ? 'stop' : 'length',
     };
-  }
-
-  async validateConnection(): Promise<boolean> {
-    try {
-      const response = await fetch(`${OPENROUTER_BASE_URL}/auth/key`, {
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-      });
-      return response.ok;
-    } catch {
-      return false;
-    }
   }
 }

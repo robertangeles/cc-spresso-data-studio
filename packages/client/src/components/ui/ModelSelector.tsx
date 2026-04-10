@@ -31,9 +31,10 @@ export function ModelSelector({
   const selected = models.find((m) => m.model === value);
   const displayName = selected?.displayName ?? (allowAuto ? 'Auto' : 'Select model');
 
-  // Group by provider
+  // Group by provider slug (from model ID prefix, e.g. "anthropic" from "anthropic/claude-sonnet-4")
   const grouped = models.reduce<Record<string, typeof models>>((acc, m) => {
-    (acc[m.provider] ??= []).push(m);
+    const groupKey = m.providerSlug ?? m.provider;
+    (acc[groupKey] ??= []).push(m);
     return acc;
   }, {});
 

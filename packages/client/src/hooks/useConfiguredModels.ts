@@ -7,6 +7,7 @@ interface ConfiguredModel {
   description: string;
   provider: string;
   providerType: string;
+  providerSlug?: string;
   icon: string;
 }
 

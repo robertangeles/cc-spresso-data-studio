@@ -41,7 +41,7 @@ export async function createConversation(
     const { model, title } = req.body;
     const conversation = await chatService.createConversation(
       req.user.userId,
-      model ?? 'claude-sonnet-4-6',
+      model ?? 'anthropic/claude-sonnet-4-6',
       title,
     );
     res.status(201).json({ success: true, data: conversation });

@@ -270,7 +270,7 @@ export function useContentBuilder() {
         {
           mainBody: current.mainBody,
           channelIds: current.selectedChannels,
-          model: 'claude-sonnet-4-6',
+          model: 'anthropic/claude-sonnet-4-6',
         },
       );
 

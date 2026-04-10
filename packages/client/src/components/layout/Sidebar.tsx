@@ -269,25 +269,6 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Admin: Settings — above user profile */}
-      {user?.role === 'Administrator' && (
-        <div className="mx-3 mb-2">
-          <NavLink
-            to="/settings"
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200 ease-spring ${
-                isActive
-                  ? 'bg-accent-dim text-accent border-l-2 border-accent'
-                  : 'text-text-secondary hover:bg-surface-3 hover:text-text-primary border-l-2 border-transparent'
-              }`
-            }
-          >
-            <Settings className="h-4 w-4" />
-            Settings
-          </NavLink>
-        </div>
-      )}
-
       {/* User profile */}
       {user && (
         <div ref={menuRef} className="relative border-t border-border-subtle p-3">
@@ -394,6 +375,16 @@ export function Sidebar() {
                 <User className="h-3.5 w-3.5" />
                 Profile
               </NavLink>
+              {user.role === 'Administrator' && (
+                <NavLink
+                  to="/settings"
+                  onClick={() => setShowMenu(false)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-3 transition-colors"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                  Admin Settings
+                </NavLink>
+              )}
               <button
                 type="button"
                 onClick={handleLogout}
