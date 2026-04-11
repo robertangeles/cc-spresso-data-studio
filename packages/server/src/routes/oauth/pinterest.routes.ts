@@ -72,7 +72,12 @@ router.get(
       res.json({
         success: true,
         data: account
-          ? { connected: true, accountName: account.accountName, accountId: account.accountId }
+          ? {
+              connected: true,
+              accountName: account.accountName,
+              accountId: account.accountId,
+              metadata: account.metadata,
+            }
           : { connected: false },
       });
     } catch (err) {
@@ -95,6 +100,53 @@ router.post(
         if (account) await oauthService.disconnectAccount(account.id, req.user.userId);
       }
       res.json({ success: true, data: null, message: 'Pinterest disconnected' });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// Fetch user's Pinterest boards for board selection
+router.get(
+  '/boards',
+  authenticate,
+  async (req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) => {
+    try {
+      if (!req.user) throw new UnauthorizedError('Authentication required');
+      const account = await oauthService.getConnectedAccount(req.user.userId, 'pinterest');
+      if (!account?.accessToken) {
+        res
+          .status(400)
+          .json({ success: false, data: [], message: 'No Pinterest account connected' });
+        return;
+      }
+      const { PinterestOAuthProvider } = await import('../../services/oauth/pinterest.oauth.js');
+      const provider = new PinterestOAuthProvider();
+      const boards = await provider.getBoards(account.accessToken);
+      res.json({ success: true, data: boards });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// Set default board for Pinterest publishing
+router.put(
+  '/default-board',
+  authenticate,
+  async (req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) => {
+    try {
+      if (!req.user) throw new UnauthorizedError('Authentication required');
+      const { boardId, boardName } = req.body;
+      if (!boardId) {
+        res.status(400).json({ success: false, data: null, message: 'boardId is required' });
+        return;
+      }
+      await oauthService.updateAccountMetadata(req.user.userId, 'pinterest', {
+        defaultBoardId: boardId,
+        defaultBoardName: boardName ?? '',
+      });
+      res.json({ success: true, data: { boardId, boardName }, message: 'Default board set' });
     } catch (err) {
       next(err);
     }

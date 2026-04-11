@@ -121,4 +121,41 @@ export class PinterestOAuthProvider implements OAuthProvider {
   async revokeAccess(_accessToken: string): Promise<void> {
     logger.info('Pinterest access revoked locally');
   }
+
+  /**
+   * Fetch the user's Pinterest boards for board selection.
+   */
+  async getBoards(accessToken: string): Promise<Array<{ id: string; name: string; url: string }>> {
+    const boards: Array<{ id: string; name: string; url: string }> = [];
+    let bookmark: string | undefined;
+
+    // Pinterest API paginates boards
+    do {
+      const url = bookmark
+        ? `https://api.pinterest.com/v5/boards?page_size=50&bookmark=${bookmark}`
+        : 'https://api.pinterest.com/v5/boards?page_size=50';
+
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!res.ok) {
+        logger.error({ status: res.status }, 'Failed to fetch Pinterest boards');
+        break;
+      }
+
+      const data = (await res.json()) as {
+        items?: Array<{ id: string; name: string; url?: string }>;
+        bookmark?: string;
+      };
+
+      for (const b of data.items ?? []) {
+        boards.push({ id: b.id, name: b.name, url: b.url ?? '' });
+      }
+
+      bookmark = data.bookmark;
+    } while (bookmark);
+
+    return boards;
+  }
 }

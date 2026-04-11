@@ -262,3 +262,24 @@ export async function refreshExpiringTokens() {
   }
   return { refreshed, failed };
 }
+
+/**
+ * Update metadata JSONB on a social account (merge, not replace).
+ * Used to store platform-specific settings like Pinterest default board.
+ */
+export async function updateAccountMetadata(
+  userId: string,
+  platform: string,
+  newMetadata: Record<string, unknown>,
+): Promise<void> {
+  const account = await getConnectedAccount(userId, platform);
+  if (!account) throw new Error(`No ${platform} account connected`);
+
+  const existing = (account.metadata ?? {}) as Record<string, unknown>;
+  const merged = { ...existing, ...newMetadata };
+
+  await db
+    .update(schema.socialAccounts)
+    .set({ metadata: merged, updatedAt: new Date() })
+    .where(eq(schema.socialAccounts.id, account.id));
+}

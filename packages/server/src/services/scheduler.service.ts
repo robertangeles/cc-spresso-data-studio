@@ -13,6 +13,7 @@ import { publishToFacebook } from './publishers/facebook.publisher.js';
 import { publishToThreads } from './publishers/threads.publisher.js';
 import { publishToLinkedIn } from './publishers/linkedin.publisher.js';
 import { publishToTwitter } from './publishers/twitter.publisher.js';
+import { publishToPinterest } from './publishers/pinterest.publisher.js';
 
 /**
  * List all scheduled posts for a user, ordered by scheduledAt asc, pending first.
@@ -329,6 +330,36 @@ export async function processDuePosts(): Promise<number> {
           } else {
             publishError = result.error ?? 'Twitter publish failed';
             logger.warn({ postId: post.id, error: result.error }, 'Twitter auto-publish failed');
+          }
+        }
+        // Attempt auto-publish to Pinterest
+        if (channelSlug === 'pinterest') {
+          const metadata = (account.metadata ?? {}) as { defaultBoardId?: string };
+          if (!contentItem.imageUrl) {
+            publishError = 'Pinterest requires an image — add an image to this content item';
+          } else if (!metadata.defaultBoardId) {
+            publishError =
+              'No default Pinterest board set — go to Profile > Social Accounts > Pinterest and select a board';
+          } else {
+            const result = await publishToPinterest({
+              accessToken: account.accessToken,
+              title: contentItem.title ?? '',
+              description: contentItem.body,
+              imageUrl: contentItem.imageUrl,
+              boardId: metadata.defaultBoardId,
+              link: undefined,
+            });
+
+            if (result.success) {
+              autoPublished = true;
+              logger.info({ postId: post.id, pinId: result.pinId }, 'Auto-published to Pinterest');
+            } else {
+              publishError = result.error ?? 'Pinterest publish failed';
+              logger.warn(
+                { postId: post.id, error: result.error },
+                'Pinterest auto-publish failed',
+              );
+            }
           }
         }
       } else if (channelSlug) {
