@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { Sparkles, Image, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Sparkles, Image, Loader2, AlertTriangle, Link as LinkIcon } from 'lucide-react';
+import { api } from '../../lib/api';
 
 interface PostComposerProps {
   title: string;
@@ -22,6 +23,11 @@ interface PostComposerProps {
   isAdapting: boolean;
   onAdaptAll: () => void;
   flowState?: string;
+  // Pinterest per-post fields
+  pinterestBoardId?: string;
+  onPinterestBoardChange?: (boardId: string, boardName: string) => void;
+  pinterestLink?: string;
+  onPinterestLinkChange?: (link: string) => void;
 }
 
 /** Slugs that typically use a title field */
@@ -151,6 +157,10 @@ export function PostComposer({
   isAdapting,
   onAdaptAll,
   flowState,
+  pinterestBoardId = '',
+  onPinterestBoardChange,
+  pinterestLink = '',
+  onPinterestLinkChange,
 }: PostComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMainTab = activeTab === null;
@@ -256,6 +266,17 @@ export function PostComposer({
         </>
       )}
 
+      {/* Pinterest-specific fields (shown when Pinterest tab is active) */}
+      {activeChannel?.slug === 'pinterest' && (
+        <PinterestFields
+          boardId={pinterestBoardId}
+          onBoardChange={onPinterestBoardChange}
+          link={pinterestLink}
+          onLinkChange={onPinterestLinkChange}
+          hasImage={!!imageUrl}
+        />
+      )}
+
       {/* Body textarea */}
       <div className="relative flex-1 flex flex-col">
         {isAdapting && (
@@ -343,6 +364,87 @@ export function PostComposer({
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Pinterest-specific fields ---
+
+function PinterestFields({
+  boardId,
+  onBoardChange,
+  link,
+  onLinkChange,
+  hasImage,
+}: {
+  boardId: string;
+  onBoardChange?: (boardId: string, boardName: string) => void;
+  link: string;
+  onLinkChange?: (link: string) => void;
+  hasImage: boolean;
+}) {
+  const [boards, setBoards] = useState<Array<{ id: string; name: string }>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setIsLoading(true);
+    api
+      .get('/oauth/pinterest/boards')
+      .then(({ data }) => setBoards(data.data ?? []))
+      .catch(() => setBoards([]))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  return (
+    <div className="mb-3 space-y-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+      {/* Image warning */}
+      {!hasImage && (
+        <div className="flex items-center gap-2 text-xs text-amber-400">
+          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+          <span>Pinterest requires an image. Add one in Media Studio.</span>
+        </div>
+      )}
+
+      {/* Board selector */}
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-text-secondary whitespace-nowrap">
+          Board <span className="text-red-400">*</span>
+        </label>
+        <select
+          value={boardId}
+          onChange={(e) => {
+            const board = boards.find((b) => b.id === e.target.value);
+            onBoardChange?.(e.target.value, board?.name ?? '');
+          }}
+          className="flex-1 rounded-md border border-border-default bg-surface-3 px-2 py-1 text-xs text-text-primary
+                     focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+        >
+          <option value="">
+            {isLoading ? 'Loading...' : boards.length === 0 ? 'No boards found' : 'Select board...'}
+          </option>
+          {boards.map((board) => (
+            <option key={board.id} value={board.id}>
+              {board.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Link field */}
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-text-secondary whitespace-nowrap">
+          <LinkIcon className="h-3 w-3 inline mr-1" />
+          Link
+        </label>
+        <input
+          type="url"
+          value={link}
+          onChange={(e) => onLinkChange?.(e.target.value)}
+          placeholder="https://your-site.com/article"
+          className="flex-1 rounded-md border border-border-default bg-surface-3 px-2 py-1 text-xs text-text-primary
+                     placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+        />
       </div>
     </div>
   );

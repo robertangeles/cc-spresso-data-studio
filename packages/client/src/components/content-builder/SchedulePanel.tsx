@@ -1,7 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Calendar, Clock, Send, Loader2, Link as LinkIcon } from 'lucide-react';
+import { Calendar, Clock, Send, Loader2 } from 'lucide-react';
 import { MiniCalendar } from './MiniCalendar';
-import { api } from '../../lib/api';
 
 interface SchedulePanelProps {
   onSchedule: (date: string) => void;
@@ -13,12 +11,6 @@ interface SchedulePanelProps {
   scheduleDate: string;
   onScheduleDateChange: (date: string) => void;
   refreshKey?: number;
-  // Pinterest-specific
-  showPinterest?: boolean;
-  pinterestBoardId?: string;
-  onPinterestBoardChange?: (boardId: string, boardName: string) => void;
-  pinterestLink?: string;
-  onPinterestLinkChange?: (link: string) => void;
 }
 
 export function SchedulePanel({
@@ -31,11 +23,6 @@ export function SchedulePanel({
   scheduleDate,
   onScheduleDateChange,
   refreshKey = 0,
-  showPinterest = false,
-  pinterestBoardId = '',
-  onPinterestBoardChange,
-  pinterestLink = '',
-  onPinterestLinkChange,
 }: SchedulePanelProps) {
   const handleSchedule = () => {
     if (!scheduleDate || selectedChannelCount === 0 || !allAccountsSelected) return;
@@ -151,16 +138,6 @@ export function SchedulePanel({
           )}
         </div>
 
-        {/* Pinterest-specific fields */}
-        {showPinterest && (
-          <PinterestFields
-            boardId={pinterestBoardId}
-            onBoardChange={onPinterestBoardChange}
-            link={pinterestLink}
-            onLinkChange={onPinterestLinkChange}
-          />
-        )}
-
         {/* Action buttons */}
         <div className="space-y-2">
           {/* Schedule — gradient button */}
@@ -195,85 +172,6 @@ export function SchedulePanel({
 
       {/* Mini Calendar */}
       <MiniCalendar onSelectDate={onScheduleDateChange} refreshKey={refreshKey} />
-    </div>
-  );
-}
-
-// --- Pinterest Board + Link fields ---
-
-function PinterestFields({
-  boardId,
-  onBoardChange,
-  link,
-  onLinkChange,
-}: {
-  boardId: string;
-  onBoardChange?: (boardId: string, boardName: string) => void;
-  link: string;
-  onLinkChange?: (link: string) => void;
-}) {
-  const [boards, setBoards] = useState<Array<{ id: string; name: string }>>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    setIsLoading(true);
-    api
-      .get('/oauth/pinterest/boards')
-      .then(({ data }) => setBoards(data.data ?? []))
-      .catch(() => setBoards([]))
-      .finally(() => setIsLoading(false));
-  }, []);
-
-  return (
-    <div className="space-y-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-red-400">Pinterest</p>
-
-      {/* Board selector */}
-      <div className="space-y-1">
-        <label className="text-xs text-text-secondary">
-          Board <span className="text-red-400">*</span>
-        </label>
-        <select
-          value={boardId}
-          onChange={(e) => {
-            const board = boards.find((b) => b.id === e.target.value);
-            onBoardChange?.(e.target.value, board?.name ?? '');
-          }}
-          className="w-full rounded-md border border-border-default bg-surface-3 px-3 py-1.5 text-sm text-text-primary
-                     focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
-        >
-          <option value="">
-            {isLoading
-              ? 'Loading boards...'
-              : boards.length === 0
-                ? 'No boards found'
-                : 'Select a board...'}
-          </option>
-          {boards.map((board) => (
-            <option key={board.id} value={board.id}>
-              {board.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Link field */}
-      <div className="space-y-1">
-        <label className="flex items-center gap-1 text-xs text-text-secondary">
-          <LinkIcon className="h-3 w-3" />
-          Destination URL
-        </label>
-        <input
-          type="url"
-          value={link}
-          onChange={(e) => onLinkChange?.(e.target.value)}
-          placeholder="https://your-site.com/article"
-          className="w-full rounded-md border border-border-default bg-surface-3 px-3 py-1.5 text-sm text-text-primary
-                     placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
-        />
-      </div>
-
-      {!boardId && <p className="text-[10px] text-amber-400">Select a board to publish this pin</p>}
     </div>
   );
 }

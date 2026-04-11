@@ -472,6 +472,18 @@ export function ContentBuilderPage() {
       toast('Select an account for each platform before scheduling.', 'error');
       return;
     }
+    // Pinterest validation
+    const pinterestCh = channels.find((ch) => ch.slug === 'pinterest');
+    if (pinterestCh && builder.selectedChannels.includes(pinterestCh.id)) {
+      if (!builder.imageUrl) {
+        toast('Pinterest requires an image. Add one in Media Studio.', 'error');
+        return;
+      }
+      if (!pinterestBoardId) {
+        toast('Select a Pinterest board before scheduling.', 'error');
+        return;
+      }
+    }
     const content = builder.activeTab
       ? (builder.platformBodies[builder.activeTab] ?? builder.mainBody)
       : builder.mainBody;
@@ -844,6 +856,13 @@ export function ContentBuilderPage() {
                     isAdapting={builder.isAdapting}
                     onAdaptAll={builder.adaptAll}
                     flowState={builder.flowState}
+                    pinterestBoardId={pinterestBoardId}
+                    onPinterestBoardChange={(id, name) => {
+                      setPinterestBoardId(id);
+                      setPinterestBoardName(name);
+                    }}
+                    pinterestLink={pinterestLink}
+                    onPinterestLinkChange={setPinterestLink}
                   />
                   {builder.activeTab && (
                     <div className="mt-1.5 flex justify-end px-1">
@@ -913,18 +932,6 @@ export function ContentBuilderPage() {
                       (chId) => (builder.selectedAccounts[chId]?.length ?? 0) > 0,
                     )
                   }
-                  showPinterest={
-                    !!channels.find(
-                      (ch) => ch.slug === 'pinterest' && builder.selectedChannels.includes(ch.id),
-                    )
-                  }
-                  pinterestBoardId={pinterestBoardId}
-                  onPinterestBoardChange={(id, name) => {
-                    setPinterestBoardId(id);
-                    setPinterestBoardName(name);
-                  }}
-                  pinterestLink={pinterestLink}
-                  onPinterestLinkChange={setPinterestLink}
                   flowState={builder.flowState}
                   scheduleDate={scheduleDate}
                   onScheduleDateChange={setScheduleDate}
