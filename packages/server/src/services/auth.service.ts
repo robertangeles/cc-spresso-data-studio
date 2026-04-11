@@ -221,7 +221,8 @@ export async function refreshTokens(refreshToken: string) {
     where: eq(schema.refreshTokens.tokenHash, tokenHash),
   });
 
-  if (!storedToken || storedToken.revokedAt) {
+  // Token is invalid if it doesn't exist or was revoked and grace period has passed
+  if (!storedToken || (storedToken.revokedAt && storedToken.revokedAt < new Date())) {
     throw new UnauthorizedError('Invalid refresh token');
   }
 
@@ -229,10 +230,13 @@ export async function refreshTokens(refreshToken: string) {
     throw new UnauthorizedError('Refresh token expired');
   }
 
-  // Revoke old token
+  // Revoke old token with a 30-second grace period.
+  // This prevents race conditions when multiple requests trigger refresh simultaneously
+  // (e.g., page load with several components fetching, or React StrictMode double-fire).
+  const GRACE_PERIOD_MS = 30_000;
   await db
     .update(schema.refreshTokens)
-    .set({ revokedAt: new Date() })
+    .set({ revokedAt: new Date(Date.now() + GRACE_PERIOD_MS) })
     .where(eq(schema.refreshTokens.id, storedToken.id));
 
   // Fetch current user state (may have changed since JWT was issued)

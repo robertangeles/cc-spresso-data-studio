@@ -38,11 +38,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Try to restore session on mount
+  // Try to restore session on mount.
+  // Guard against React StrictMode double-fire which causes two concurrent
+  // refresh calls — the second would fail if token rotation already revoked the old token.
   useEffect(() => {
+    let cancelled = false;
     const restoreSession = async () => {
       try {
         const { data } = await axios.post('/api/auth/refresh', {}, { withCredentials: true });
+        if (cancelled) return;
         setAccessToken(data.data.accessToken);
         // Decode user from token (basic decode, not verification — server verified it)
         const payload = JSON.parse(atob(data.data.accessToken.split('.')[1]));
@@ -55,13 +59,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isEmailVerified: payload.isEmailVerified ?? true,
         });
       } catch {
+        if (cancelled) return;
         // No valid session
         setAccessToken(null);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
     restoreSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Fetch session status when user is set
