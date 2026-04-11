@@ -47,6 +47,9 @@ export function ContentBuilderPage() {
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [pinterestBoardId, setPinterestBoardId] = useState('');
+  const [pinterestBoardName, setPinterestBoardName] = useState('');
+  const [pinterestLink, setPinterestLink] = useState('');
   const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const pendingRelayRef = useRef<OrchestrationRelayPayload | null>(null);
@@ -494,14 +497,24 @@ export function ContentBuilderPage() {
       });
       const items = batchData.data ?? [];
       let totalScheduled = 0;
+      // Resolve Pinterest channel ID for metadata injection
+      const pinterestChannel = channels.find((ch) => ch.slug === 'pinterest');
       for (const item of items) {
         const accountIds = builder.selectedAccounts[item.channelId];
         for (const socialAccountId of accountIds) {
+          // Build per-post metadata for platform-specific fields
+          const postMetadata: Record<string, unknown> = {};
+          if (pinterestChannel && item.channelId === pinterestChannel.id && pinterestBoardId) {
+            postMetadata.boardId = pinterestBoardId;
+            postMetadata.boardName = pinterestBoardName;
+            if (pinterestLink) postMetadata.link = pinterestLink;
+          }
           await api.post('/schedule', {
             contentItemId: item.id,
             channelId: item.channelId,
             socialAccountId,
             scheduledAt: date,
+            metadata: Object.keys(postMetadata).length > 0 ? postMetadata : undefined,
           });
           totalScheduled++;
         }
@@ -524,6 +537,18 @@ export function ContentBuilderPage() {
     if (builder.selectedChannels.length === 0) {
       toast('Select at least one platform first.', 'error');
       return;
+    }
+    // Pinterest validation
+    const pinterestCh = channels.find((ch) => ch.slug === 'pinterest');
+    if (pinterestCh && builder.selectedChannels.includes(pinterestCh.id)) {
+      if (!builder.imageUrl) {
+        toast('Pinterest requires an image. Add one in Media Studio.', 'error');
+        return;
+      }
+      if (!pinterestBoardId) {
+        toast('Select a Pinterest board before publishing.', 'error');
+        return;
+      }
     }
     const content = builder.activeTab
       ? (builder.platformBodies[builder.activeTab] ?? builder.mainBody)
@@ -888,6 +913,18 @@ export function ContentBuilderPage() {
                       (chId) => (builder.selectedAccounts[chId]?.length ?? 0) > 0,
                     )
                   }
+                  showPinterest={
+                    !!channels.find(
+                      (ch) => ch.slug === 'pinterest' && builder.selectedChannels.includes(ch.id),
+                    )
+                  }
+                  pinterestBoardId={pinterestBoardId}
+                  onPinterestBoardChange={(id, name) => {
+                    setPinterestBoardId(id);
+                    setPinterestBoardName(name);
+                  }}
+                  pinterestLink={pinterestLink}
+                  onPinterestLinkChange={setPinterestLink}
                   flowState={builder.flowState}
                   scheduleDate={scheduleDate}
                   onScheduleDateChange={setScheduleDate}

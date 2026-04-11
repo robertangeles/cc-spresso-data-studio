@@ -24,7 +24,7 @@ export async function createScheduled(
 ) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
-    const { contentItemId, channelId, scheduledAt, socialAccountId } = req.body;
+    const { contentItemId, channelId, scheduledAt, socialAccountId, metadata } = req.body;
     if (!socialAccountId) {
       res.status(400).json({
         success: false,
@@ -39,6 +39,7 @@ export async function createScheduled(
       channelId,
       scheduledAt,
       socialAccountId,
+      metadata,
     });
     res.status(201).json({ success: true, data: post });
   } catch (err) {

@@ -34,6 +34,7 @@ export async function schedulePost(data: {
   channelId?: string;
   scheduledAt: string;
   socialAccountId: string;
+  metadata?: Record<string, unknown>;
 }) {
   if (!data.socialAccountId) {
     throw new Error('socialAccountId is required — select an account for the platform');
@@ -53,6 +54,7 @@ export async function schedulePost(data: {
       socialAccountId: data.socialAccountId,
       scheduledAt: scheduledDate,
       status: 'pending',
+      metadata: data.metadata ?? {},
     })
     .returning();
 
@@ -334,20 +336,24 @@ export async function processDuePosts(): Promise<number> {
         }
         // Attempt auto-publish to Pinterest
         if (channelSlug === 'pinterest') {
-          const metadata = (account.metadata ?? {}) as { defaultBoardId?: string };
+          // Per-post metadata (boardId, link) set in Content Studio at schedule time
+          const postMeta = (post.metadata ?? {}) as { boardId?: string; link?: string };
+          // Fall back to account-level default board if not set per-post
+          const acctMeta = (account.metadata ?? {}) as { defaultBoardId?: string };
+          const boardId = postMeta.boardId || acctMeta.defaultBoardId;
+
           if (!contentItem.imageUrl) {
             publishError = 'Pinterest requires an image — add an image to this content item';
-          } else if (!metadata.defaultBoardId) {
-            publishError =
-              'No default Pinterest board set — go to Profile > Social Accounts > Pinterest and select a board';
+          } else if (!boardId) {
+            publishError = 'No Pinterest board selected — select a board when scheduling';
           } else {
             const result = await publishToPinterest({
               accessToken: account.accessToken,
               title: contentItem.title ?? '',
               description: contentItem.body,
               imageUrl: contentItem.imageUrl,
-              boardId: metadata.defaultBoardId,
-              link: undefined,
+              boardId,
+              link: postMeta.link,
             });
 
             if (result.success) {

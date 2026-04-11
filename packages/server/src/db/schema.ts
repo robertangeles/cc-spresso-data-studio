@@ -809,6 +809,7 @@ export const scheduledPosts = pgTable(
     status: varchar('status', { length: 20 }).notNull().default('pending'),
     publishedAt: timestamp('published_at', { withTimezone: true }),
     error: text('error'),
+    metadata: jsonb('metadata').notNull().default('{}'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
