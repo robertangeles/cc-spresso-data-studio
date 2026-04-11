@@ -168,12 +168,14 @@ export function PlatformSelector({
 
   const selectedChannels = channels.filter((ch) => selectedIds.includes(ch.id));
 
-  // Sort channels by preferred order
-  const sortedChannels = [...channels].sort((a, b) => {
-    const ai = PLATFORM_ORDER.indexOf(a.slug);
-    const bi = PLATFORM_ORDER.indexOf(b.slug);
-    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-  });
+  // Sort channels by preferred order, hide platforms not in the list
+  const sortedChannels = [...channels]
+    .filter((ch) => PLATFORM_ORDER.includes(ch.slug))
+    .sort((a, b) => {
+      const ai = PLATFORM_ORDER.indexOf(a.slug);
+      const bi = PLATFORM_ORDER.indexOf(b.slug);
+      return ai - bi;
+    });
 
   // ─── Vertical layout (left panel sidebar) ───
   if (layout === 'vertical') {

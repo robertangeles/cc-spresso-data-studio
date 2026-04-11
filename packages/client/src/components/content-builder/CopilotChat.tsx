@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Send, Loader2, Wand2, PenTool, Check } from 'lucide-react';
 import { useConfiguredModels } from '../../hooks/useConfiguredModels';
 import { useThinkingMessage } from '../../lib/thinking-messages';
+import { getRandomGreeting } from '../../lib/greetings';
+import { useAuth } from '../../context/AuthContext';
 import { PromptBadge } from './PromptBadge';
 import type { Prompt } from '../../hooks/usePrompts';
 import type { ChatMessage } from '../../hooks/useContentChat';
@@ -205,6 +207,9 @@ export function CopilotChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const thinkingMessage = useThinkingMessage(isSending);
+  const { user } = useAuth();
+  const greeting = useMemo(() => getRandomGreeting(), []);
+  const firstName = user?.name?.split(' ')[0] ?? '';
 
   const busy = isSending || isProcessing;
 
@@ -260,7 +265,13 @@ export function CopilotChat({
               <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center mb-3 mx-auto">
                 <Wand2 className="h-5 w-5 text-accent" />
               </div>
-              <p className="text-sm font-medium text-text-secondary mb-1">AI Co-pilot</p>
+              <p className="text-lg font-semibold text-text-primary mb-0.5">
+                {greeting.text}
+                {firstName ? `, ${firstName}` : ''}
+              </p>
+              <p className="text-[10px] text-text-tertiary mb-2">
+                {greeting.language} — {greeting.country}
+              </p>
               <p className="text-xs text-text-tertiary max-w-[200px]">
                 Select a prompt or type below to start creating content.
               </p>

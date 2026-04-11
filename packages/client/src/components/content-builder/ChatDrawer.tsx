@@ -63,9 +63,7 @@ export function ChatDrawer({ isOpen, onClose, ...chatProps }: ChatDrawerProps) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle bg-surface-1/80 backdrop-blur-sm">
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-accent animate-pulse" />
-            <span className="text-sm font-heading font-semibold text-text-primary">
-              AI Co-pilot
-            </span>
+            <span className="text-sm font-heading font-semibold text-text-primary">Spresso</span>
           </div>
           <button
             type="button"

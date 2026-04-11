@@ -1,5 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { Coffee, PenTool, Search, Lightbulb, BarChart } from 'lucide-react';
+import { getRandomGreeting } from '../../lib/greetings';
+import { useAuth } from '../../context/AuthContext';
 
 interface ChatEmptyStateProps {
   onSuggestionClick: (text: string) => void;
@@ -168,6 +170,10 @@ const knightRiderCSS = `
 `;
 
 export function ChatEmptyState({ onSuggestionClick }: ChatEmptyStateProps) {
+  const { user } = useAuth();
+  const greeting = useMemo(() => getRandomGreeting(), []);
+  const firstName = user?.name?.split(' ')[0] ?? '';
+
   return (
     <div className="relative flex flex-col items-center justify-center h-full px-4 overflow-hidden">
       <style>{knightRiderCSS}</style>
@@ -177,8 +183,14 @@ export function ChatEmptyState({ onSuggestionClick }: ChatEmptyStateProps) {
         <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-dim border border-accent/20 shadow-glow-accent animate-float">
           <Coffee className="h-8 w-8 text-accent" />
         </div>
-        <h2 className="text-2xl font-bold tracking-tight text-text-primary mb-1">Drop an idea.</h2>
-        <p className="text-sm text-text-tertiary mb-8">Walk away with content.</p>
+        <h2 className="text-2xl font-bold tracking-tight text-text-primary mb-1">
+          {greeting.text}
+          {firstName ? `, ${firstName}.` : '.'}
+        </h2>
+        <p className="text-xs text-text-tertiary mb-1">
+          {greeting.language} — {greeting.country}
+        </p>
+        <p className="text-sm text-text-tertiary mb-8">Drop an idea. Walk away with content.</p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl w-full">
           {suggestions.map((s, i) => (

@@ -134,10 +134,10 @@ export function AICommandBar({
             <select
               value={model}
               onChange={(e) => onModelChange(e.target.value)}
-              className="text-[10px] text-text-tertiary font-medium px-2 py-1 rounded-lg bg-surface-2 border border-border-subtle hover:border-border-default focus:border-accent/40 focus:outline-none cursor-pointer appearance-none pr-5 transition-colors"
+              className="text-xs text-text-secondary font-medium px-2 py-1 rounded-lg bg-surface-2 border border-border-subtle hover:border-border-default focus:border-accent/40 focus:outline-none cursor-pointer appearance-none pr-6 transition-colors max-w-[200px] truncate"
               style={{
                 backgroundImage:
-                  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
+                  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
                 backgroundRepeat: 'no-repeat',
                 backgroundPosition: 'right 6px center',
               }}
