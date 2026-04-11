@@ -39,7 +39,7 @@ export class PinterestOAuthProvider implements OAuthProvider {
     const { appId } = await this.getCredentials();
     const redirectUri = `${redirectBase}/api/oauth/pinterest/callback`;
     const state = Buffer.from(JSON.stringify({ userId })).toString('base64url');
-    const scopes = 'boards:read,pins:read,pins:write,user_accounts:read';
+    const scopes = 'boards:read,boards:write,pins:read,pins:write,user_accounts:read';
     return `https://www.pinterest.com/oauth/?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scopes}&state=${state}`;
   }
 
