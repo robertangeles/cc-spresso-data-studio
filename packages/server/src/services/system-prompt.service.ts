@@ -170,7 +170,7 @@ CRITICAL RULES:
 - Return the COMPLETE text with fixes applied — not just the changed parts.
 
 FIX INSTRUCTIONS BY VIOLATION TYPE:
-- Banned word: Remove the word or restructure only that clause. Do not rewrite the whole sentence.
+- Banned word: The banned word MUST be eliminated from the output. In most cases, simply delete it (e.g., "the idea that works" → "the idea works"). If deletion breaks grammar, minimally restructure the clause. This is a hard requirement — every banned word listed must be gone.
 - Sentence too long: Split into two shorter sentences (each under 35 words). Keep all information from the original.
 - Triad (3-item list): Cut one item or combine two into one phrase. Maximum two items.
 - Passive voice: Rewrite with the actor as subject. If actor is unknown, describe through physical evidence.
@@ -189,5 +189,19 @@ Return the full revised text. No commentary, no explanation, no word count — j
       category: 'content-ops',
     });
     logger.info('Seeded Content Rework system prompt');
+  } else {
+    // Migrate old banned word instruction if present
+    const oldInstruction = 'Remove the word or restructure only that clause';
+    if (reworkExists.body.includes(oldInstruction)) {
+      const updatedBody = reworkExists.body.replace(
+        /- Banned word:.*?Do not rewrite the whole sentence\./,
+        '- Banned word: The banned word MUST be eliminated from the output. In most cases, simply delete it (e.g., "the idea that works" → "the idea works"). If deletion breaks grammar, minimally restructure the clause. This is a hard requirement — every banned word listed must be gone.',
+      );
+      await db
+        .update(schema.systemPrompts)
+        .set({ body: updatedBody, updatedAt: new Date() })
+        .where(eq(schema.systemPrompts.slug, 'content-rework'));
+      logger.info('Updated content-rework prompt: improved banned word instruction');
+    }
   }
 }

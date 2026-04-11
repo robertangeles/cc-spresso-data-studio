@@ -450,7 +450,7 @@ export async function generateTemplate(data: {
     const startTime = Date.now();
     const completeFn = () =>
       providerRegistry.complete({
-        model: data.model || 'claude-haiku-4-5-20251001',
+        model: data.model || 'anthropic/claude-haiku-4-5',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -473,7 +473,7 @@ export async function generateTemplate(data: {
 
     const latencyMs = Date.now() - startTime;
     logger.info(
-      { category: data.category, model: data.model || 'claude-haiku-4-5-20251001', latencyMs },
+      { category: data.category, model: data.model || 'anthropic/claude-haiku-4-5', latencyMs },
       'Template generated via AI',
     );
 

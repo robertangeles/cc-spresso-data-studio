@@ -384,7 +384,7 @@ export async function aiAudit(
   try {
     const response = await withSessionGate(userId, role, () =>
       providerRegistry.complete({
-        model: 'claude-haiku-4-5',
+        model: 'anthropic/claude-haiku-4-5',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.2,
         maxTokens: 2000,
@@ -448,6 +448,54 @@ export async function fullAudit(
   };
 }
 
+// --- Programmatic Pre-Fix ---
+// Handles trivially removable banned words without an AI call.
+//
+//   violations → programmaticBannedWordFix (delete trivial words)
+//     → re-audit (reduced violations)
+//       → if remaining → AI rework (improved prompt + escalation)
+
+export function programmaticBannedWordFix(content: string, violations: Violation[]): string {
+  const bannedWordViolations = violations.filter((v) => v.rule === 'Banned word');
+  if (bannedWordViolations.length === 0) return content;
+
+  let result = content;
+
+  for (const v of bannedWordViolations) {
+    // Extract the banned word from explanation: 'Contains banned word "that"'
+    const wordMatch = v.explanation?.match(/banned word "([^"]+)"/i);
+    if (!wordMatch) continue;
+    const word = wordMatch[1];
+
+    // Safety: skip if the banned word starts a sentence (needs restructuring, not deletion)
+    // e.g. "That was the problem" — can't just delete "That"
+    const sentenceLower = v.sentence.trim().toLowerCase();
+    if (sentenceLower.startsWith(word.toLowerCase())) continue;
+
+    // Build a regex to delete the banned word (whole word, case-insensitive)
+    // Match the word with optional surrounding whitespace, preserving one space
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const deleteRegex = new RegExp(`\\s+${escaped}\\b`, 'gi');
+
+    // Only apply to the specific sentence from the violation (not the whole content)
+    const originalSentence = v.sentence;
+    const fixedSentence = originalSentence.replace(deleteRegex, '');
+
+    // Safety: don't accept if it created orphaned punctuation or empty content
+    if (fixedSentence.trim().length < 3) continue;
+    if (/\s{2,}/.test(fixedSentence)) {
+      // Clean double spaces and try again
+      const cleaned = fixedSentence.replace(/\s{2,}/g, ' ').trim();
+      if (cleaned.length < 3) continue;
+      result = result.replace(originalSentence, cleaned);
+    } else {
+      result = result.replace(originalSentence, fixedSentence);
+    }
+  }
+
+  return result;
+}
+
 // --- Rework ---
 
 export async function reworkViolations(
@@ -456,15 +504,27 @@ export async function reworkViolations(
   model: string,
   userId?: string,
   role: string = 'Subscriber',
+  round: number = 1,
 ): Promise<string> {
   if (violations.length === 0) return content;
+
+  // Strip SEO metadata before reworking — re-attach after
+  // Matches "## SEO METADATA" or "## SEO META" section at the end of content
+  const seoMarkerRegex = /\n---\s*\n\s*## SEO META(?:DATA)?[\s\S]*$/i;
+  const seoMatch = content.match(seoMarkerRegex);
+  const seoBlock = seoMatch ? seoMatch[0] : '';
+  const contentWithoutSeo = seoBlock ? content.slice(0, content.length - seoBlock.length) : content;
 
   const violationList = violations
     .map((v, i) => `${i + 1}. ${v.rule}: "${v.sentence}" — ${v.explanation ?? v.rule}`)
     .join('\n');
 
-  const wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;
-  const minWords = Math.floor(wordCount * 0.95);
+  const wordCount = contentWithoutSeo.split(/\s+/).filter((w) => w.length > 0).length;
+
+  // Proportional word count guard: account for expected word removal from banned words
+  const expectedWordReduction = violations.filter((v) => v.rule === 'Banned word').length;
+  const adjustedFloor = wordCount - expectedWordReduction - Math.ceil(wordCount * 0.05);
+  const minWords = Math.max(adjustedFloor, Math.floor(wordCount * 0.8)); // hard floor at 80%
   const maxWords = Math.ceil(wordCount * 1.05);
 
   // Load rework prompt from DB (Settings > System Prompts)
@@ -480,12 +540,17 @@ export async function reworkViolations(
   }
 
   // Hydrate template variables
-  const prompt = promptTemplate
+  let prompt = promptTemplate
     .replace(/\{\{wordCount\}\}/g, String(wordCount))
     .replace('{{minWords}}', String(minWords))
     .replace('{{maxWords}}', String(maxWords))
     .replace('{{violationList}}', violationList)
-    .replace('{{content}}', content);
+    .replace('{{content}}', contentWithoutSeo);
+
+  // Round escalation: if previous rounds failed to fix, be more aggressive
+  if (round > 1) {
+    prompt += `\n\nIMPORTANT: This is Round ${round}. The violations listed above were NOT fixed in previous rounds. You MUST fix every single one this time. For banned words, delete them outright — do not try to preserve them. A shorter text is acceptable.`;
+  }
 
   const reworkFn = () =>
     providerRegistry.complete({
@@ -499,9 +564,9 @@ export async function reworkViolations(
 
   const result = stripThinkingBlocks(response.content);
 
-  // Word count guard: reject if result dropped more than 10%
+  // Word count guard: reject if result dropped below hard floor (80%)
   const resultWordCount = result.split(/\s+/).filter((w) => w.length > 0).length;
-  if (resultWordCount < wordCount * 0.9) {
+  if (resultWordCount < wordCount * 0.8) {
     logger.warn(
       {
         original: wordCount,
@@ -513,10 +578,15 @@ export async function reworkViolations(
     return content;
   }
 
-  return result;
+  // Re-attach SEO metadata block (untouched)
+  return seoBlock ? result + seoBlock : result;
 }
 
 // --- Rework Loop (auto-fix with re-audit) ---
+//
+//   for each round:
+//     1. Audit → 2. Programmatic pre-fix → 3. Re-audit → 4. AI rework → 5. Re-audit
+//   escalation on round > 1, break after 2 consecutive stalls
 
 export async function reworkLoop(
   content: string,
@@ -528,6 +598,7 @@ export async function reworkLoop(
 ): Promise<{ finalContent: string; rounds: ReworkRound[]; remainingViolations: Violation[] }> {
   const rounds: ReworkRound[] = [];
   let currentContent = content;
+  let consecutiveStalls = 0;
 
   for (let round = 1; round <= maxRounds; round++) {
     // Audit current content
@@ -536,10 +607,23 @@ export async function reworkLoop(
 
     const beforeCount = audit.total;
 
-    // Rework
-    currentContent = await reworkViolations(currentContent, audit.violations, model, userId, role);
+    // Step 1: Programmatic pre-fix for banned words (zero AI cost)
+    currentContent = programmaticBannedWordFix(currentContent, audit.violations);
 
-    // Re-audit
+    // Step 2: AI rework for remaining violations (with escalation on round > 1)
+    const postFixAudit = await auditContent(currentContent, userId);
+    if (postFixAudit.total > 0) {
+      currentContent = await reworkViolations(
+        currentContent,
+        postFixAudit.violations,
+        model,
+        userId,
+        role,
+        round,
+      );
+    }
+
+    // Re-audit to measure progress
     const afterAudit = await auditContent(currentContent, userId);
     const fixedCount = beforeCount - afterAudit.total;
 
@@ -553,10 +637,16 @@ export async function reworkLoop(
     rounds.push(roundResult);
     onRound?.(roundResult);
 
-    // If no improvement, stop
-    if (fixedCount <= 0) break;
     // If clean, stop
     if (afterAudit.total === 0) break;
+
+    // Stall detection: allow one stall (next round has escalation), break on second
+    if (fixedCount <= 0) {
+      consecutiveStalls++;
+      if (consecutiveStalls >= 2) break;
+    } else {
+      consecutiveStalls = 0;
+    }
   }
 
   // Final audit

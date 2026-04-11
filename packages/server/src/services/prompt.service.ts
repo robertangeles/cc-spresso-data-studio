@@ -203,7 +203,7 @@ Constraints: ${data.constraints.length > 0 ? data.constraints.join(', ') : 'None
 Desired Output Format: ${data.outputFormat}
 Target Audience: ${data.targetAudience}`;
 
-  const model = data.model || 'claude-haiku-4-5';
+  const model = data.model || 'anthropic/claude-haiku-4-5';
 
   logger.info({ model, persona: data.persona }, 'APEX prompt generation started');
 

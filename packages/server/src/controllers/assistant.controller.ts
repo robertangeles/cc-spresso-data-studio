@@ -36,7 +36,7 @@ export async function chat(req: Request, res: Response<ApiResponse<unknown>>, ne
 
     const response = await withSessionGate(req.user.userId, req.user.role, () =>
       providerRegistry.complete({
-        model: 'claude-haiku-4-5',
+        model: 'anthropic/claude-haiku-4-5',
         messages,
         temperature: 0.5,
         maxTokens: 1000,

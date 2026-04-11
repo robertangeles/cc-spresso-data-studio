@@ -179,7 +179,7 @@ async function generateTitle(conversationId: string, firstMessage: string) {
     if (conversation?.title.startsWith('[CB]')) return; // preserve CB prefix
 
     const response = await providerRegistry.complete({
-      model: 'claude-haiku-4-5',
+      model: 'anthropic/claude-haiku-4-5',
       messages: [
         {
           role: 'system',
