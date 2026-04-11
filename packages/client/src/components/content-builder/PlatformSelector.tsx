@@ -147,12 +147,11 @@ const PLATFORM_ORDER = [
   'tiktok',
   'pinterest',
   'blog',
-  'email',
   'youtube',
 ];
 
 // Platforms that don't need OAuth (always "connected")
-const ALWAYS_CONNECTED = ['blog', 'email'];
+const ALWAYS_CONNECTED = ['blog'];
 
 export function PlatformSelector({
   channels,
