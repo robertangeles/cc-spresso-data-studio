@@ -53,7 +53,7 @@ export function AICommandBar({
     const el = inputRef.current;
     if (el) {
       el.style.height = 'auto';
-      el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
+      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
     }
   }, [input]);
 
@@ -181,9 +181,9 @@ export function AICommandBar({
                 ? `Refine your ${activePromptName} output...`
                 : 'Tell Spresso what content to create...'
             }
-            rows={4}
+            rows={1}
             disabled={isProcessing}
-            className="w-full resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[96px] leading-6"
+            className="w-full resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[24px] max-h-[120px] leading-6"
           />
           <p className="text-[10px] text-text-tertiary/50 text-right">
             Enter to send · Shift+Enter for newline
