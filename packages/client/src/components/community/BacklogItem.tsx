@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronUp, ChevronDown, Pencil, Trash2, Check, X } from 'lucide-react';
+import { ChevronUp, MessageSquare, Pencil, Trash2 } from 'lucide-react';
 import type { BacklogItem as BacklogItemType } from '@cc/shared';
 
 interface BacklogItemProps {
@@ -13,19 +13,23 @@ interface BacklogItemProps {
     updates: { title?: string; description?: string; category?: string },
   ) => Promise<unknown>;
   onDelete?: (itemId: string) => Promise<unknown>;
+  onClick?: () => void;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  planned: 'bg-gradient-to-r from-blue-500/20 to-blue-600/20 text-blue-400',
-  in_progress: 'bg-gradient-to-r from-accent/20 to-amber-600/20 text-amber-400',
-  shipped: 'bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 text-emerald-400',
+const CATEGORY_COLORS: Record<string, string> = {
+  content: 'bg-blue-500',
+  platform: 'bg-purple-500',
+  ai: 'bg-emerald-500',
+  ux: 'bg-amber-500',
+  billing: 'bg-red-500',
+  integration: 'bg-cyan-500',
+  community: 'bg-pink-500',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  planned: 'Planned',
-  in_progress: 'In Progress',
-  shipped: 'Shipped',
-};
+function getCategoryColor(category: string): string {
+  const lower = category.toLowerCase();
+  return CATEGORY_COLORS[lower] ?? 'bg-text-tertiary';
+}
 
 export function BacklogItemCard({
   item,
@@ -35,25 +39,19 @@ export function BacklogItemCard({
   isAdmin = false,
   onUpdate,
   onDelete,
+  onClick,
 }: BacklogItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(item.title);
   const [editDescription, setEditDescription] = useState(item.description ?? '');
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleUpvote = () => {
+  const handleUpvote = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (item.userVote === 'up') {
       onRemoveVote(item.id);
     } else {
       onVote(item.id, 'up');
-    }
-  };
-
-  const handleDownvote = () => {
-    if (item.userVote === 'down') {
-      onRemoveVote(item.id);
-    } else {
-      onVote(item.id, 'down');
     }
   };
 
@@ -71,141 +69,130 @@ export function BacklogItemCard({
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!onDelete) return;
     await onDelete(item.id);
   };
 
+  if (isEditing) {
+    return (
+      <div className="rounded-lg bg-surface-2 border border-border-subtle p-3 space-y-2">
+        <input
+          type="text"
+          value={editTitle}
+          onChange={(e) => setEditTitle(e.target.value)}
+          className="w-full rounded border border-border-default bg-surface-3 px-2 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
+          autoFocus
+          onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+        />
+        <textarea
+          value={editDescription}
+          onChange={(e) => setEditDescription(e.target.value)}
+          rows={3}
+          placeholder="Add a description..."
+          className="w-full rounded border border-border-default bg-surface-3 px-2 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none resize-none"
+        />
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!editTitle.trim() || isSaving}
+            className="rounded bg-accent px-3 py-1 text-xs font-medium text-surface-0 disabled:opacity-50"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEditTitle(item.title);
+              setEditDescription(item.description ?? '');
+              setIsEditing(false);
+            }}
+            className="rounded px-3 py-1 text-xs text-text-tertiary hover:bg-surface-3"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`rounded-xl bg-surface-2 p-3 shadow-dark-sm hover:-translate-y-1 hover:shadow-[0_4px_20px_rgba(0,0,0,0.4),0_0_15px_rgba(255,214,10,0.06)] transition-all duration-200 ease-spring group ${isDragging ? 'opacity-50 scale-95 ring-2 ring-accent/30' : ''}`}
+      onClick={onClick}
+      className={`group rounded-lg bg-surface-2 border border-border-subtle p-3 cursor-pointer
+        hover:border-border-hover hover:shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-150
+        ${isDragging ? 'opacity-40 rotate-2 scale-105 shadow-[0_8px_30px_rgba(0,0,0,0.5)]' : ''}`}
     >
-      <div className="flex items-start gap-3">
-        {/* Vote column */}
-        <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
+      {/* Category label chip */}
+      {item.category && (
+        <div className="mb-2">
+          <span
+            className={`inline-block rounded-sm px-2 py-0.5 text-[10px] font-bold text-white ${getCategoryColor(item.category)}`}
+          >
+            {item.category}
+          </span>
+        </div>
+      )}
+
+      {/* Title */}
+      <h4 className="text-sm font-medium text-text-primary leading-snug">{item.title}</h4>
+
+      {/* Description preview */}
+      {item.description && (
+        <p className="mt-1 text-xs text-text-tertiary line-clamp-2">{item.description}</p>
+      )}
+
+      {/* Footer: votes + admin actions */}
+      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-border-subtle/50">
+        <div className="flex items-center gap-2">
+          {/* Upvote button */}
           <button
             type="button"
             onClick={handleUpvote}
-            className={`p-0.5 rounded transition-all duration-200 ease-spring active:scale-90 ${
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-all ${
               item.userVote === 'up'
-                ? 'text-emerald-400 bg-emerald-500/15 shadow-[0_0_8px_rgba(52,211,153,0.2)]'
-                : 'text-text-tertiary hover:text-emerald-400 hover:bg-emerald-500/10'
+                ? 'bg-accent/15 text-accent'
+                : 'text-text-tertiary hover:bg-surface-3 hover:text-text-secondary'
             }`}
-            aria-label="Upvote"
           >
-            <ChevronUp className="h-5 w-5" />
+            <ChevronUp className="h-3.5 w-3.5" />
+            <span className="font-semibold tabular-nums">{item.score}</span>
           </button>
-          <span
-            className={`text-sm font-bold tabular-nums ${
-              item.score > 0
-                ? 'text-accent'
-                : item.score < 0
-                  ? 'text-red-400'
-                  : 'text-text-tertiary'
-            }`}
-          >
-            {item.score}
-          </span>
-          <button
-            type="button"
-            onClick={handleDownvote}
-            className={`p-0.5 rounded transition-all duration-200 ease-spring active:scale-90 ${
-              item.userVote === 'down'
-                ? 'text-red-400 bg-red-500/15 shadow-[0_0_8px_rgba(239,68,68,0.2)]'
-                : 'text-text-tertiary hover:text-red-400 hover:bg-red-500/10'
-            }`}
-            aria-label="Downvote"
-          >
-            <ChevronDown className="h-5 w-5" />
-          </button>
-        </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {isEditing ? (
-            <div className="space-y-2">
-              <input
-                type="text"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                className="w-full rounded border border-border-default bg-surface-3 px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
-                autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-              />
-              <textarea
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                rows={2}
-                placeholder="Description..."
-                className="w-full rounded border border-border-default bg-surface-3 px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none resize-none"
-              />
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={!editTitle.trim() || isSaving}
-                  className="rounded p-1 text-green-400 hover:bg-green-500/10 disabled:opacity-50"
-                >
-                  <Check className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditTitle(item.title);
-                    setEditDescription(item.description ?? '');
-                    setIsEditing(false);
-                  }}
-                  className="rounded p-1 text-text-tertiary hover:bg-surface-3"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-start justify-between gap-2">
-                <h4 className="text-sm font-bold text-text-primary">{item.title}</h4>
-                {isAdmin && (
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setIsEditing(true)}
-                      className="rounded p-1 text-text-tertiary hover:text-accent hover:bg-accent/10 transition-colors"
-                      title="Edit"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDelete}
-                      className="rounded p-1 text-text-tertiary hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                )}
-              </div>
-              {item.description && (
-                <p className="mt-0.5 text-xs text-text-tertiary line-clamp-3">{item.description}</p>
-              )}
-              <div className="flex items-center gap-2 mt-2">
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    STATUS_COLORS[item.status] || 'bg-surface-3 text-text-tertiary'
-                  }`}
-                >
-                  {STATUS_LABELS[item.status] || item.status}
-                </span>
-                {item.category && (
-                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-surface-3/50 text-text-secondary">
-                    {item.category}
-                  </span>
-                )}
-              </div>
-            </>
+          {/* Description indicator */}
+          {item.description && (
+            <span className="text-text-tertiary" title="Has description">
+              <MessageSquare className="h-3 w-3" />
+            </span>
           )}
         </div>
+
+        {/* Admin actions */}
+        {isAdmin && (
+          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditing(true);
+              }}
+              className="rounded p-1 text-text-tertiary hover:text-accent hover:bg-accent/10 transition-colors"
+              title="Edit"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="rounded p-1 text-text-tertiary hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
