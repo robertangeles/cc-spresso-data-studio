@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronUp, MessageSquare, Pencil, Trash2 } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, MessageSquare, Pencil, Trash2, Calendar } from 'lucide-react';
 import type { BacklogItem as BacklogItemType } from '@cc/shared';
 
 interface BacklogItemProps {
@@ -10,7 +10,12 @@ interface BacklogItemProps {
   isAdmin?: boolean;
   onUpdate?: (
     itemId: string,
-    updates: { title?: string; description?: string; category?: string },
+    updates: {
+      title?: string;
+      description?: string;
+      category?: string;
+      estimatedRelease?: string | null;
+    },
   ) => Promise<unknown>;
   onDelete?: (itemId: string) => Promise<unknown>;
   onClick?: () => void;
@@ -31,6 +36,11 @@ function getCategoryColor(category: string): string {
   return CATEGORY_COLORS[lower] ?? 'bg-text-tertiary';
 }
 
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
 export function BacklogItemCard({
   item,
   onVote,
@@ -46,13 +56,16 @@ export function BacklogItemCard({
   const [editDescription, setEditDescription] = useState(item.description ?? '');
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleUpvote = (e: React.MouseEvent) => {
+  const handleLike = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (item.userVote === 'up') {
-      onRemoveVote(item.id);
-    } else {
-      onVote(item.id, 'up');
-    }
+    if (item.userVote === 'up') onRemoveVote(item.id);
+    else onVote(item.id, 'up');
+  };
+
+  const handleDislike = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (item.userVote === 'down') onRemoveVote(item.id);
+    else onVote(item.id, 'down');
   };
 
   const handleSave = async () => {
@@ -144,27 +157,52 @@ export function BacklogItemCard({
         <p className="mt-1 text-xs text-text-tertiary line-clamp-2">{item.description}</p>
       )}
 
-      {/* Footer: votes + admin actions */}
+      {/* Footer */}
       <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-border-subtle/50">
         <div className="flex items-center gap-2">
-          {/* Upvote button */}
+          {/* Like */}
           <button
             type="button"
-            onClick={handleUpvote}
+            onClick={handleLike}
             className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-all ${
               item.userVote === 'up'
-                ? 'bg-accent/15 text-accent'
-                : 'text-text-tertiary hover:bg-surface-3 hover:text-text-secondary'
+                ? 'bg-emerald-500/15 text-emerald-400'
+                : 'text-text-tertiary hover:bg-surface-3 hover:text-emerald-400'
             }`}
           >
-            <ChevronUp className="h-3.5 w-3.5" />
-            <span className="font-semibold tabular-nums">{item.score}</span>
+            <ThumbsUp className="h-3 w-3" />
+            <span className="font-semibold tabular-nums">{item.upvotes}</span>
+          </button>
+
+          {/* Dislike */}
+          <button
+            type="button"
+            onClick={handleDislike}
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-all ${
+              item.userVote === 'down'
+                ? 'bg-red-500/15 text-red-400'
+                : 'text-text-tertiary hover:bg-surface-3 hover:text-red-400'
+            }`}
+          >
+            <ThumbsDown className="h-3 w-3" />
+            <span className="font-semibold tabular-nums">{item.downvotes}</span>
           </button>
 
           {/* Description indicator */}
           {item.description && (
             <span className="text-text-tertiary" title="Has description">
               <MessageSquare className="h-3 w-3" />
+            </span>
+          )}
+
+          {/* Estimated release */}
+          {item.estimatedRelease && (
+            <span
+              className="flex items-center gap-1 text-[10px] text-text-tertiary"
+              title="Estimated release"
+            >
+              <Calendar className="h-3 w-3" />
+              {formatDate(item.estimatedRelease)}
             </span>
           )}
         </div>

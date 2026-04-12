@@ -1295,6 +1295,7 @@ export const backlogItems = pgTable(
     status: varchar('status', { length: 20 }).notNull().default('planned'),
     category: varchar('category', { length: 100 }),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    estimatedRelease: date('estimated_release', { mode: 'string' }),
     isArchived: boolean('is_archived').notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

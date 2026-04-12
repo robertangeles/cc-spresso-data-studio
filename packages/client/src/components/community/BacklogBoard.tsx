@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Plus, Loader2, Rocket, Hammer, CheckCircle2, X, ChevronUp } from 'lucide-react';
+import { Plus, Loader2, Rocket, Hammer, CheckCircle2, X, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useBacklogItems } from '../../hooks/useBacklog';
 import { BacklogItemCard } from './BacklogItem';
 import type { BacklogItem } from '@cc/shared';
@@ -303,6 +303,7 @@ function CardDetailModal({
   const [editTitle, setEditTitle] = useState(item.title);
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [editDesc, setEditDesc] = useState(item.description ?? '');
+  const [editRelease, setEditRelease] = useState(item.estimatedRelease ?? '');
 
   const STATUS_OPTIONS = [
     { value: 'planned', label: 'Planned', color: 'text-blue-400' },
@@ -432,7 +433,32 @@ function CardDetailModal({
             )}
           </div>
 
-          {/* Votes */}
+          {/* Estimated Release (admin editable) */}
+          <div>
+            <h4 className="text-xs font-semibold text-text-secondary mb-1">Estimated Release</h4>
+            {isAdmin ? (
+              <input
+                type="date"
+                value={editRelease}
+                onChange={async (e) => {
+                  setEditRelease(e.target.value);
+                  await onUpdate(item.id, { estimatedRelease: e.target.value || null });
+                }}
+                className="rounded-lg border border-border-default bg-surface-2 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none [color-scheme:dark]"
+              />
+            ) : (
+              <p className="text-sm text-text-secondary">
+                {item.estimatedRelease
+                  ? new Date(item.estimatedRelease).toLocaleDateString('en-US', {
+                      month: 'long',
+                      year: 'numeric',
+                    })
+                  : 'Not set'}
+              </p>
+            )}
+          </div>
+
+          {/* Likes / Dislikes */}
           <div className="flex items-center gap-3 pt-2 border-t border-border-subtle">
             <button
               type="button"
@@ -442,12 +468,28 @@ function CardDetailModal({
               }}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
                 item.userVote === 'up'
-                  ? 'bg-accent/15 text-accent'
+                  ? 'bg-emerald-500/15 text-emerald-400'
                   : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
               }`}
             >
-              <ChevronUp className="h-4 w-4" />
-              Upvote ({item.score})
+              <ThumbsUp className="h-4 w-4" />
+              Like ({item.upvotes})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (item.userVote === 'down') onRemoveVote(item.id);
+                else onVote(item.id, 'down');
+              }}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                item.userVote === 'down'
+                  ? 'bg-red-500/15 text-red-400'
+                  : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
+              }`}
+            >
+              <ThumbsDown className="h-4 w-4" />
+              Dislike ({item.downvotes})
             </button>
 
             {isAdmin && (

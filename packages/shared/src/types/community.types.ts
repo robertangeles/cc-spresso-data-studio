@@ -94,6 +94,7 @@ export interface BacklogItem {
   description: string | null;
   status: 'planned' | 'in_progress' | 'shipped';
   category: string | null;
+  estimatedRelease: string | null;
   createdBy: string | null;
   isArchived: boolean;
   sortOrder: number;
