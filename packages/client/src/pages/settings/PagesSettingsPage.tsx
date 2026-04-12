@@ -26,19 +26,21 @@ export function PagesSettingsPage() {
     try {
       const { data } = await api.get('/pages');
       setPages(data.data ?? []);
-      if (!activePage && data.data?.length > 0) {
-        selectPage(data.data[0]);
-      }
+      return data.data ?? [];
     } catch {
-      /* non-blocking */
+      return [];
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchPages();
-  }, [fetchPages]);
+    fetchPages().then((fetched: Page[]) => {
+      if (fetched.length > 0 && !activePage) {
+        selectPage(fetched[0]);
+      }
+    });
+  }, []);
 
   const selectPage = (page: Page) => {
     setActivePage(page);
