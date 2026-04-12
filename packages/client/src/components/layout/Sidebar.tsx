@@ -269,6 +269,22 @@ export function Sidebar() {
         </div>
       )}
 
+      {/* Legal links */}
+      <div className="mx-3 mb-1 flex gap-3">
+        <NavLink
+          to="/privacy"
+          className="text-[10px] text-text-tertiary hover:text-text-secondary transition-colors"
+        >
+          Privacy
+        </NavLink>
+        <NavLink
+          to="/terms"
+          className="text-[10px] text-text-tertiary hover:text-text-secondary transition-colors"
+        >
+          Terms
+        </NavLink>
+      </div>
+
       {/* User profile */}
       {user && (
         <div ref={menuRef} className="relative border-t border-border-subtle p-3">

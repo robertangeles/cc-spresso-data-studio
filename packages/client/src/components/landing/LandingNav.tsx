@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { SpressoLogo } from './SpressoLogo';
 
 interface LandingNavProps {
@@ -26,8 +27,20 @@ export function LandingNav({ onSignIn, onStartFree }: LandingNavProps) {
       <div className="mx-auto max-w-6xl flex items-center justify-between px-6 py-4">
         <SpressoLogo size="lg" />
 
-        {/* CTAs */}
+        {/* Nav links + CTAs */}
         <div className="flex items-center gap-3">
+          <Link
+            to="/privacy"
+            className="hidden sm:block px-3 py-2 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+          >
+            Privacy
+          </Link>
+          <Link
+            to="/terms"
+            className="hidden sm:block px-3 py-2 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+          >
+            Terms
+          </Link>
           <button
             onClick={onSignIn}
             className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors rounded-lg hover:bg-surface-2/50"

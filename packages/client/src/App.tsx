@@ -5,6 +5,8 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AdminRoute } from './components/auth/AdminRoute';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/LoginPage';
+import { PrivacyPage } from './pages/PrivacyPage';
+import { TermsPage } from './pages/TermsPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { FlowBuilderPage } from './pages/FlowBuilderPage';
@@ -65,6 +67,8 @@ export function App() {
               <Route path="/verify-email" element={<VerifyEmailPage />} />
               <Route path="/verify/:token" element={<VerifyTokenPage />} />
               <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
 
               {/* Protected routes */}
               <Route element={<ProtectedRoute />}>

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { LandingNav } from '../components/landing/LandingNav';
 import { HeroSection } from '../components/landing/HeroSection';
 import { ProblemSection } from '../components/landing/ProblemSection';
@@ -60,9 +61,21 @@ export function LoginPage() {
               Open Beta
             </span>
           </div>
-          <p className="text-xs text-text-tertiary">
-            Turn one idea into platform-ready posts. &copy; {new Date().getFullYear()} Spresso.
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="text-xs text-text-tertiary">&copy; {new Date().getFullYear()} Spresso.</p>
+            <Link
+              to="/privacy"
+              className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+            >
+              Privacy
+            </Link>
+            <Link
+              to="/terms"
+              className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+            >
+              Terms
+            </Link>
+          </div>
         </div>
       </footer>
 
