@@ -147,6 +147,7 @@ export async function listConversations(userId: string) {
             and(
               eq(directMessages.conversationId, m.conversationId),
               sql`${directMessages.createdAt} > ${lastRead.createdAt}`,
+              ne(directMessages.userId, userId),
             ),
           );
         unreadCount = result?.count ?? 0;
@@ -155,7 +156,12 @@ export async function listConversations(userId: string) {
       const [result] = await db
         .select({ count: count() })
         .from(directMessages)
-        .where(eq(directMessages.conversationId, m.conversationId));
+        .where(
+          and(
+            eq(directMessages.conversationId, m.conversationId),
+            ne(directMessages.userId, userId),
+          ),
+        );
       unreadCount = result?.count ?? 0;
     }
 
