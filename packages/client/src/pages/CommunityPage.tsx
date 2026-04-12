@@ -170,15 +170,15 @@ export function CommunityPage() {
     if (!socket || !isConnected || viewMode !== 'dm' || !activeDMId) return;
 
     socket.emit('dm:join', { conversationId: activeDMId });
-    // Mark DM read THEN refetch unreads
+    // Mark DM read THEN refetch DM conversations (which carry unread counts)
     markDmRead(activeDMId)
       .catch(() => {})
-      .then(() => refetchUnreads());
+      .then(() => refetchDMs());
 
     return () => {
       socket.emit('dm:leave', { conversationId: activeDMId });
     };
-  }, [socket, isConnected, viewMode, activeDMId, refetchUnreads]);
+  }, [socket, isConnected, viewMode, activeDMId, refetchDMs]);
 
   // ── Socket event listeners ─────────────────────────────────
   useEffect(() => {
