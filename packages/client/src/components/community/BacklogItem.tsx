@@ -156,7 +156,7 @@ export function BacklogItemCard({
       {item.estimatedRelease && (
         <p className="flex items-center gap-1 mt-1 text-[10px] text-text-tertiary">
           <Calendar className="h-3 w-3" />
-          {formatDate(item.estimatedRelease)}
+          ETA: {formatDate(item.estimatedRelease)}
         </p>
       )}
 
