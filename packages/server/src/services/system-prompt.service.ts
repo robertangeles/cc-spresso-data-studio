@@ -129,7 +129,21 @@ export async function seedDefaultPrompts(): Promise<void> {
 Each violation object:
 {"rule": "rule name", "sentence": "the exact sentence that violates", "explanation": "why this violates the rule"}
 
-Focus on SUBJECTIVE rules only — things that require judgment:
+## AI WRITING PATTERN DETECTION (always check)
+Flag sentences that exhibit these AI writing patterns. Use rule name "AI pattern" for each:
+- Formulaic transitions: "Furthermore", "Moreover", "Additionally", "It is worth noting", "Importantly"
+- Hedging language: "It's important to understand", "One might argue", "It could be said", "There is no denying"
+- Generic summarization: "In conclusion", "To summarize", "Overall", "At the end of the day"
+- Abstract generalization without specific detail: "many people", "various factors", "numerous benefits", "a wide range of"
+- Inverted emphasis: "What makes this interesting is...", "The real question is...", "What's remarkable is..."
+- Performative depth: "This goes beyond mere...", "At its core...", "On a deeper level...", "It's not just about X, it's about Y"
+- Symmetrical phrasing: "Not just X, but Y", "Both A and B", "Whether X or Y"
+- Filler hedges: "quite", "rather", "somewhat", "arguably", "essentially", "fundamentally"
+- Overly smooth connectives: sentences that link too neatly with no friction or surprise
+
+Only flag sentences where the pattern is clear and the sentence would read as AI-generated to a human reader. Do not flag every transition word — flag the ones that make the writing feel robotic.
+
+## SUBJECTIVE STYLE RULES (check if provided)
 - Narrator thesis statements (narrator directly stating a cultural insight)
 - Decorative metaphors (not grounded in physical reality)
 - Polished wrap-ups (tidy lessons, rhythmic callbacks, inspirational reframes)
@@ -137,7 +151,6 @@ Focus on SUBJECTIVE rules only — things that require judgment:
 - Setup-and-pivot patterns ("Most people think... but actually...")
 - Mirrored sentences (A then B then restate in reverse)
 
-RULES:
 {{rules}}
 
 TEXT:
@@ -147,6 +160,32 @@ Return ONLY the JSON array. No explanation outside the array.`,
       category: 'content-ops',
     });
     logger.info('Seeded Content Audit system prompt');
+  } else if (!auditExists.body.includes('AI WRITING PATTERN DETECTION')) {
+    // Migrate: add AI pattern detection to existing audit prompt
+    const updatedBody = auditExists.body.replace(
+      'Focus on SUBJECTIVE rules only',
+      `## AI WRITING PATTERN DETECTION (always check)
+Flag sentences that exhibit these AI writing patterns. Use rule name "AI pattern" for each:
+- Formulaic transitions: "Furthermore", "Moreover", "Additionally", "It is worth noting", "Importantly"
+- Hedging language: "It's important to understand", "One might argue", "It could be said", "There is no denying"
+- Generic summarization: "In conclusion", "To summarize", "Overall", "At the end of the day"
+- Abstract generalization without specific detail: "many people", "various factors", "numerous benefits", "a wide range of"
+- Inverted emphasis: "What makes this interesting is...", "The real question is...", "What's remarkable is..."
+- Performative depth: "This goes beyond mere...", "At its core...", "On a deeper level...", "It's not just about X, it's about Y"
+- Symmetrical phrasing: "Not just X, but Y", "Both A and B", "Whether X or Y"
+- Filler hedges: "quite", "rather", "somewhat", "arguably", "essentially", "fundamentally"
+- Overly smooth connectives: sentences that link too neatly with no friction or surprise
+
+Only flag sentences where the pattern is clear and the sentence would read as AI-generated to a human reader. Do not flag every transition word — flag the ones that make the writing feel robotic.
+
+## SUBJECTIVE STYLE RULES (check if provided)
+Focus on SUBJECTIVE rules only`,
+    );
+    await db
+      .update(schema.systemPrompts)
+      .set({ body: updatedBody, updatedAt: new Date() })
+      .where(eq(schema.systemPrompts.slug, 'content-audit'));
+    logger.info('Updated content-audit prompt: added AI pattern detection');
   }
 
   // --- Content Auto-Fix (Rework) prompt ---
@@ -178,6 +217,7 @@ FIX INSTRUCTIONS BY VIOLATION TYPE:
 - Semicolon: Replace with a period. Capitalize the next word.
 - "There is/are": Rewrite with a concrete subject performing an action.
 - Similar-length sentences: Vary one sentence — shorten it or combine with its neighbor.
+- AI pattern: Rewrite the sentence to sound like a specific human wrote it. Replace generic phrasing with concrete, specific details. Remove hedging and filler words. Break symmetrical structures. Make it sound like someone talking, not writing a report.
 
 VIOLATIONS TO FIX:
 {{violationList}}
@@ -202,6 +242,20 @@ Return the full revised text. No commentary, no explanation, no word count — j
         .set({ body: updatedBody, updatedAt: new Date() })
         .where(eq(schema.systemPrompts.slug, 'content-rework'));
       logger.info('Updated content-rework prompt: improved banned word instruction');
+    }
+    // Migrate: add AI pattern fix instruction if missing
+    if (!reworkExists.body.includes('AI pattern:')) {
+      const withAiPattern = reworkExists.body.replace(
+        'VIOLATIONS TO FIX:',
+        '- AI pattern: Rewrite the sentence to sound like a specific human wrote it. Replace generic phrasing with concrete, specific details. Remove hedging and filler words. Break symmetrical structures. Make it sound like someone talking, not writing a report.\n\nVIOLATIONS TO FIX:',
+      );
+      if (withAiPattern !== reworkExists.body) {
+        await db
+          .update(schema.systemPrompts)
+          .set({ body: withAiPattern, updatedAt: new Date() })
+          .where(eq(schema.systemPrompts.slug, 'content-rework'));
+        logger.info('Updated content-rework prompt: added AI pattern fix instruction');
+      }
     }
   }
 }

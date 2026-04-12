@@ -364,7 +364,8 @@ export async function aiAudit(
     .map((r) => r.rules)
     .join('\n\n');
 
-  if (!rulesText.trim()) return [];
+  // Always run — AI pattern detection is built into the prompt
+  // User rules are optional additions
 
   // Load audit prompt from DB (Settings > System Prompts)
   let promptTemplate: string;
