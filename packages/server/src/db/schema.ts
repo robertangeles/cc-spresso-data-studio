@@ -1397,3 +1397,19 @@ export const openrouterModelCatalog = pgTable(
     index('idx_catalog_provider_slug').on(t.providerSlug),
   ],
 );
+
+// ============================================================
+// PAGES (CMS-lite for legal/static pages)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const pages = pgTable('pages', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  slug: varchar('slug', { length: 100 }).notNull().unique(),
+  title: varchar('title', { length: 255 }).notNull(),
+  body: text('body').notNull().default(''),
+  isPublished: boolean('is_published').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

@@ -38,6 +38,7 @@ import { BillingPage } from './pages/settings/BillingPage';
 import { EmailTemplatePage } from './pages/settings/EmailTemplatePage';
 import { CommunityPage } from './pages/CommunityPage';
 import { CommunitySettingsPage } from './pages/settings/CommunitySettingsPage';
+import { PagesSettingsPage } from './pages/settings/PagesSettingsPage';
 import { SubscriptionProvider } from './context/SubscriptionContext';
 // ContentCalendarPage removed — calendar is now inline in Content Builder
 
@@ -104,6 +105,7 @@ export function App() {
                       <Route path="admin/system-prompts" element={<SystemPromptsPage />} />
                       <Route path="admin/email-templates" element={<EmailTemplatePage />} />
                       <Route path="admin/community" element={<CommunitySettingsPage />} />
+                      <Route path="admin/pages" element={<PagesSettingsPage />} />
                     </Route>
                   </Route>
                 </Route>

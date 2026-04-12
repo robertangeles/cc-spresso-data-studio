@@ -30,6 +30,7 @@ import { emailTemplateRoutes } from './emailTemplate.routes.js';
 import { communityRoutes } from './community.routes.js';
 import { dmRoutes } from './dm.routes.js';
 import { backlogRoutes } from './backlog.routes.js';
+import { pagesRoutes } from './pages.routes.js';
 
 const router = Router();
 
@@ -70,6 +71,7 @@ router.use('/admin/email-templates', emailTemplateRoutes);
 router.use('/community', communityRoutes);
 router.use('/dm', dmRoutes);
 router.use('/backlog', backlogRoutes);
+router.use('/pages', pagesRoutes);
 
 // Connected-platforms lookup (used by Content Builder for status dots + hint banner)
 router.get('/oauth/connected', authenticate, async (req, res, next) => {

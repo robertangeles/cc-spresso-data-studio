@@ -14,6 +14,7 @@ import { seedDefaultCreditCosts } from './services/credit.service.js';
 import { seedDefaultTemplates } from './services/emailTemplate.service.js';
 import { initSocketIO } from './socket/index.js';
 import { seedCommunityDefaults } from './seeds/community.seed.js';
+import { seedPages } from './services/pages.service.js';
 
 async function start() {
   await verifyConnection();
@@ -28,6 +29,7 @@ async function start() {
   await seedDefaultCreditCosts();
   await seedDefaultTemplates();
   await seedCommunityDefaults();
+  await seedPages();
 
   startSchedulerCron();
 
