@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { FileText, Save, Eye, Pencil } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { api } from '../../lib/api';
@@ -22,25 +22,28 @@ export function PagesSettingsPage() {
   const [viewMode, setViewMode] = useState<'edit' | 'preview' | 'split'>('split');
   const [saveMessage, setSaveMessage] = useState('');
 
+  const initializedRef = useRef(false);
+
   const fetchPages = useCallback(async () => {
     try {
       const { data } = await api.get('/pages');
-      setPages(data.data ?? []);
-      return data.data ?? [];
+      const fetched = (data.data ?? []) as Page[];
+      setPages(fetched);
+      // Auto-select first page on initial load only
+      if (!initializedRef.current && fetched.length > 0) {
+        initializedRef.current = true;
+        selectPage(fetched[0]);
+      }
     } catch {
-      return [];
+      /* non-blocking */
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchPages().then((fetched: Page[]) => {
-      if (fetched.length > 0 && !activePage) {
-        selectPage(fetched[0]);
-      }
-    });
-  }, []);
+    fetchPages();
+  }, [fetchPages]);
 
   const selectPage = (page: Page) => {
     setActivePage(page);
