@@ -171,11 +171,15 @@ export function CommunityPage() {
 
     socket.emit('dm:join', { conversationId: activeDMId });
     // Mark DM read THEN refetch DM conversations (which carry unread counts)
-    markDmRead(activeDMId)
-      .catch(() => {})
-      .then(() => refetchDMs());
+    // Small delay to ensure messages are loaded before marking read
+    const timer = setTimeout(() => {
+      markDmRead(activeDMId)
+        .then(() => refetchDMs())
+        .catch((err) => console.warn('markDmRead failed:', err));
+    }, 500);
 
     return () => {
+      clearTimeout(timer);
       socket.emit('dm:leave', { conversationId: activeDMId });
     };
   }, [socket, isConnected, viewMode, activeDMId, refetchDMs]);
