@@ -141,6 +141,7 @@ export async function updateItem(
     status?: string;
     category?: string;
     sortOrder?: number;
+    estimatedRelease?: string | null;
   },
 ) {
   const [item] = await db.select().from(backlogItems).where(eq(backlogItems.id, itemId)).limit(1);
@@ -158,6 +159,7 @@ export async function updateItem(
   if (data.status !== undefined) updates.status = data.status;
   if (data.category !== undefined) updates.category = data.category?.trim() || null;
   if (data.sortOrder !== undefined) updates.sortOrder = data.sortOrder;
+  if (data.estimatedRelease !== undefined) updates.estimatedRelease = data.estimatedRelease;
 
   const [updated] = await db
     .update(backlogItems)

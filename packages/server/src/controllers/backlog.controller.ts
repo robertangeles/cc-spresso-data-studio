@@ -56,7 +56,9 @@ export async function updateItem(
 ) {
   try {
     if (!req.user) throw new UnauthorizedError();
-    const item = await backlogService.updateItem(req.params.id, req.body);
+    await backlogService.updateItem(req.params.id, req.body);
+    // Return enriched item with vote tallies
+    const item = await backlogService.getItem(req.params.id, req.user.userId);
     res.json({ success: true, data: item });
   } catch (err) {
     next(err);
