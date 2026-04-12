@@ -12,7 +12,7 @@ import type {
 } from '@cc/shared';
 import { detectPlatform } from '@cc/shared';
 import Markdown from 'react-markdown';
-import { Send } from 'lucide-react';
+import { Send, Copy, Check } from 'lucide-react';
 import { Card } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import { Modal } from '../../ui/Modal';
@@ -769,6 +769,7 @@ function LiveStepCard({
 }: LiveStepCardProps) {
   const [editFeedback, setEditFeedback] = useState('');
   const [viewMode, setViewMode] = useState<'raw' | 'preview' | 'edit' | 'audit'>('preview');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [editBuffer, setEditBuffer] = useState<Record<string, string>>({});
   const [auditResult, setAuditResult] = useState<{
     violations: AuditViolation[];
@@ -996,6 +997,22 @@ function LiveStepCard({
                             : auditResult
                               ? `Audit (${auditResult.total})`
                               : 'Audit'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(value);
+                            setCopiedKey(key);
+                            setTimeout(() => setCopiedKey(null), 2000);
+                          }}
+                          className="rounded px-1.5 py-0.5 text-text-tertiary hover:text-accent hover:bg-accent/10 transition-colors"
+                          title="Copy to clipboard"
+                        >
+                          {copiedKey === key ? (
+                            <Check className="h-3.5 w-3.5 text-green-400" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
                         </button>
                       </>
                     )}
