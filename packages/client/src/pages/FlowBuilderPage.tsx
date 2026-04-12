@@ -102,7 +102,7 @@ export function FlowBuilderPage() {
       <Modal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
-        title="Delete Orchestration"
+        title="Delete Workflow"
         confirmLabel="Delete"
         onConfirm={confirmDelete}
         variant="danger"

@@ -218,13 +218,13 @@ export function ContentBuilderPage() {
     try {
       const raw = localStorage.getItem(ORCHESTRATION_RELAY_KEY);
       if (!raw) {
-        toast('Nothing to load from orchestration', 'info');
+        toast('Nothing to load from workflow', 'info');
         return;
       }
       payload = JSON.parse(raw);
     } catch {
       localStorage.removeItem(ORCHESTRATION_RELAY_KEY);
-      toast('Could not load orchestration content', 'error');
+      toast('Could not load workflow content', 'error');
       return;
     }
 
@@ -983,8 +983,8 @@ export function ContentBuilderPage() {
         onConfirm={handleConfirmReplace}
       >
         <p>
-          You have unsaved content in the editor. Loading orchestration output will replace it. Save
-          your current draft first if you want to keep it.
+          You have unsaved content in the editor. Loading workflow output will replace it. Save your
+          current draft first if you want to keep it.
         </p>
       </Modal>
     </div>

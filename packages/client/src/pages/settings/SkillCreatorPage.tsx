@@ -37,7 +37,7 @@ const STEPS = [
     id: 'outputs',
     label: '5. Outputs',
     guide:
-      'Define what your skill produces. Each output gets a key that other skills can reference when chaining in an orchestration.\n\nFor most skills, a single output named "result" with type "markdown" works well. Use multiple outputs when the skill produces distinct pieces (e.g., "subject_line" and "email_body").',
+      'Define what your skill produces. Each output gets a key that other skills can reference when chaining in an workflow.\n\nFor most skills, a single output named "result" with type "markdown" works well. Use multiple outputs when the skill produces distinct pieces (e.g., "subject_line" and "email_body").',
   },
   {
     id: 'config',
@@ -49,7 +49,7 @@ const STEPS = [
     id: 'review',
     label: '7. Review & Save',
     guide:
-      'Review your skill configuration. Once saved, it will appear in the Skills catalog and can be used in orchestrations.\n\nYou can always edit the skill later from the catalog.',
+      'Review your skill configuration. Once saved, it will appear in the Skills catalog and can be used in workflows.\n\nYou can always edit the skill later from the catalog.',
   },
 ];
 

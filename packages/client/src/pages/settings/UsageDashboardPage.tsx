@@ -19,7 +19,10 @@ function formatDuration(ms: number): string {
 
 export default function UsageDashboardPage() {
   const [dateRange] = useState<{ from?: string; to?: string }>({});
-  const { summary, byModel, byFlow, timeseries, suggestions, isLoading, error, refresh } = useUsage(dateRange.from, dateRange.to);
+  const { summary, byModel, byFlow, timeseries, suggestions, isLoading, error, refresh } = useUsage(
+    dateRange.from,
+    dateRange.to,
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -134,7 +137,9 @@ export default function UsageDashboardPage() {
                 <div key={m.modelId} className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-text-primary">{m.displayName}</span>
+                      <span className="truncate text-sm font-medium text-text-primary">
+                        {m.displayName}
+                      </span>
                       <span className="text-xs text-text-tertiary">{m.percentage}%</span>
                     </div>
                     <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
@@ -155,7 +160,7 @@ export default function UsageDashboardPage() {
 
         {/* By Flow */}
         <div className="rounded-lg border border-border-default bg-surface-2 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-text-secondary">Cost by Orchestration</h2>
+          <h2 className="mb-3 text-sm font-semibold text-text-secondary">Cost by Workflow</h2>
           {byFlow.length === 0 ? (
             <p className="text-sm text-text-tertiary">No usage data yet</p>
           ) : (
@@ -166,7 +171,9 @@ export default function UsageDashboardPage() {
                     <span className="text-sm font-medium text-text-primary">{f.flowName}</span>
                     <span className="ml-2 text-xs text-text-tertiary">{f.requestCount} runs</span>
                   </div>
-                  <span className="text-sm font-semibold text-text-primary">{formatCost(f.totalCost)}</span>
+                  <span className="text-sm font-semibold text-text-primary">
+                    {formatCost(f.totalCost)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -212,7 +219,9 @@ function SummaryCard({
     <div className="rounded-lg border border-border-default bg-surface-2 p-4">
       <div className="flex items-center gap-2">
         {icon}
-        <span className="text-xs font-medium uppercase tracking-wider text-text-secondary">{label}</span>
+        <span className="text-xs font-medium uppercase tracking-wider text-text-secondary">
+          {label}
+        </span>
       </div>
       <p className="mt-2 text-2xl font-bold text-text-primary">{value}</p>
       <p className="mt-0.5 text-xs text-text-tertiary">{subtitle}</p>

@@ -33,7 +33,7 @@ interface Conversation {
 
 const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/flows', label: 'Orchestrations', icon: Workflow },
+  { to: '/flows', label: 'Workflows', icon: Workflow },
   { to: '/skills', label: 'Skills', icon: Zap },
   { to: '/content', label: 'Content Studio', icon: PenTool },
   { to: '/content/library', label: 'Content Library', icon: Library },

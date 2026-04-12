@@ -645,7 +645,7 @@ export function ContentLibraryPage() {
           </div>
           <h3 className="text-lg font-bold text-text-primary mb-2">Your library is empty</h3>
           <p className="text-sm text-text-secondary max-w-md mb-1">
-            Run an orchestration to generate content across platforms.
+            Run a workflow to generate content across platforms.
           </p>
           <p className="text-xs text-text-tertiary">One idea, twelve assets.</p>
         </div>

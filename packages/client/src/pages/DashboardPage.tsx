@@ -46,17 +46,17 @@ export function DashboardPage() {
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-text-primary">Orchestrations</h1>
+          <h1 className="text-xl font-bold tracking-tight text-text-primary">Workflows</h1>
           <p className="mt-0.5 text-sm text-text-tertiary">One idea in. Twelve assets out.</p>
         </div>
-        <Button onClick={() => setShowCreate(true)}>+ New Orchestration</Button>
+        <Button onClick={() => setShowCreate(true)}>+ New Workflow</Button>
       </div>
 
       {showCreate && (
         <form onSubmit={handleCreate} className="mt-4 flex gap-3">
           <Input
             label=""
-            placeholder="Orchestration name..."
+            placeholder="Workflow name..."
             value={newFlowName}
             onChange={(e) => setNewFlowName(e.target.value)}
             autoFocus
@@ -75,13 +75,17 @@ export function DashboardPage() {
           icon={Workflow}
           title="Nothing brewing yet."
           description="Create an orchestration. One idea in, twelve assets out."
-          actionLabel="+ New Orchestration"
+          actionLabel="+ New Workflow"
           onAction={() => setShowCreate(true)}
         />
       ) : (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {flows.map((flow, i) => (
-            <div key={flow.id} className="animate-slide-up" style={{ animationDelay: `${i * 75}ms` }}>
+            <div
+              key={flow.id}
+              className="animate-slide-up"
+              style={{ animationDelay: `${i * 75}ms` }}
+            >
               <FlowCard flow={flow} onDelete={handleDelete} />
             </div>
           ))}
@@ -90,12 +94,14 @@ export function DashboardPage() {
       <Modal
         isOpen={!!deleteId}
         onClose={() => setDeleteId(null)}
-        title="Delete Orchestration"
+        title="Delete Workflow"
         confirmLabel="Delete"
         onConfirm={confirmDelete}
         variant="danger"
       >
-        <p>Permanently delete this orchestration and all its configuration? This cannot be undone.</p>
+        <p>
+          Permanently delete this orchestration and all its configuration? This cannot be undone.
+        </p>
       </Modal>
     </div>
   );

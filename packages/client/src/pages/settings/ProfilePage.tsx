@@ -304,7 +304,7 @@ function RulesEngineTab() {
       <div className="mb-4 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
         <p className="text-sm text-blue-400">
           Rules are injected as system instructions into <strong>every AI call</strong> in your
-          orchestrations. Active rules apply globally — no need to repeat them in skill prompts.
+          workflows. Active rules apply globally — no need to repeat them in skill prompts.
         </p>
       </div>
 
@@ -392,7 +392,7 @@ function RulesEngineTab() {
         </div>
       ) : rules.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border-default py-8 text-center text-sm text-text-tertiary">
-          No rules yet. Add your first rule to enforce it across all orchestrations.
+          No rules yet. Add your first rule to enforce it across all workflows.
         </div>
       ) : (
         <div className="space-y-2">
@@ -494,7 +494,7 @@ function BrandKitTab({
       <div className="mb-4 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
         <p className="text-sm text-blue-400">
           Your Brand Kit helps AI understand your brand voice and audience. This context is
-          available to all skills and orchestrations.
+          available to all skills and workflows.
         </p>
       </div>
 
