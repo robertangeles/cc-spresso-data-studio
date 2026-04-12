@@ -14,6 +14,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
+// Trust proxy so req.protocol reads X-Forwarded-Proto (Render terminates SSL at load balancer)
+app.set('trust proxy', 1);
+
 // Security — relax CSP in production to allow inline styles from Vite build
 app.use(
   helmet({
