@@ -40,7 +40,7 @@ const COLUMNS: Array<{
 
 export function BacklogBoard({ isAdmin = false }: BacklogBoardProps) {
   const [categoryFilter, setCategoryFilter] = useState<string>('');
-  const { items, loading, vote, removeVote, createItem, updateItem } = useBacklogItems({
+  const { items, loading, vote, removeVote, createItem, updateItem, deleteItem } = useBacklogItems({
     category: categoryFilter || undefined,
   });
 
@@ -285,6 +285,9 @@ export function BacklogBoard({ isAdmin = false }: BacklogBoardProps) {
                             onVote={vote}
                             onRemoveVote={removeVote}
                             isDragging={dragItemId === item.id}
+                            isAdmin={isAdmin}
+                            onUpdate={updateItem}
+                            onDelete={deleteItem}
                           />
                         </div>
                       ))

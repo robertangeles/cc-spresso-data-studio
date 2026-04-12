@@ -57,5 +57,19 @@ export function useBacklogItems(filters: { status?: string; category?: string } 
     return res.data as BacklogItem;
   };
 
-  return { items, loading, refetch: fetchItems, vote, removeVote, createItem, updateItem };
+  const deleteItem = async (itemId: string) => {
+    await api.delete(`/backlog/items/${itemId}`);
+    setItems((prev) => prev.filter((item) => item.id !== itemId));
+  };
+
+  return {
+    items,
+    loading,
+    refetch: fetchItems,
+    vote,
+    removeVote,
+    createItem,
+    updateItem,
+    deleteItem,
+  };
 }
