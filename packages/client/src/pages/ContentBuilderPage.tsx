@@ -50,6 +50,8 @@ export function ContentBuilderPage() {
   const [pinterestBoardId, setPinterestBoardId] = useState('');
   const [pinterestBoardName, setPinterestBoardName] = useState('');
   const [pinterestLink, setPinterestLink] = useState('');
+  const [youtubeTags, setYoutubeTags] = useState('');
+  const [youtubePrivacy, setYoutubePrivacy] = useState('public');
   const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const pendingRelayRef = useRef<OrchestrationRelayPayload | null>(null);
@@ -505,6 +507,7 @@ export function ContentBuilderPage() {
             ? builder.platformBodies
             : Object.fromEntries(builder.selectedChannels.map((id) => [id, builder.mainBody])),
         imageUrl: builder.imageUrl,
+        videoUrl: builder.videoUrl,
         status: 'draft',
       });
       const items = batchData.data ?? [];
@@ -863,6 +866,11 @@ export function ContentBuilderPage() {
                     }}
                     pinterestLink={pinterestLink}
                     onPinterestLinkChange={setPinterestLink}
+                    youtubeTags={youtubeTags}
+                    onYoutubeTagsChange={setYoutubeTags}
+                    youtubePrivacy={youtubePrivacy}
+                    onYoutubePrivacyChange={setYoutubePrivacy}
+                    videoUrl={builder.videoUrl}
                   />
                   {builder.activeTab && (
                     <div className="mt-1.5 flex justify-end px-1">
@@ -882,6 +890,8 @@ export function ContentBuilderPage() {
                   <MediaStudio
                     imageUrl={builder.imageUrl}
                     onImageChange={builder.setImageUrl}
+                    videoUrl={builder.videoUrl}
+                    onVideoChange={builder.setVideoUrl}
                     selectedChannels={selectedChannelObjects}
                     flowState={builder.flowState}
                     nudge={builder.flowState === 'ADAPTED'}

@@ -5,6 +5,8 @@ import { api } from '../../lib/api';
 interface MediaStudioProps {
   imageUrl: string | null;
   onImageChange: (url: string | null) => void;
+  videoUrl?: string | null;
+  onVideoChange?: (url: string | null) => void;
   selectedChannels: Array<{
     id: string;
     name: string;
@@ -41,6 +43,8 @@ function getSuggestedDimensions(
 export default function MediaStudio({
   imageUrl,
   onImageChange,
+  videoUrl,
+  onVideoChange,
   selectedChannels,
   nudge,
 }: MediaStudioProps) {
@@ -49,6 +53,7 @@ export default function MediaStudio({
   const [activePreset, setActivePreset] = useState<StylePresetId>('realistic');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -57,25 +62,35 @@ export default function MediaStudio({
   const uploadToServer = useCallback(
     async (file: File) => {
       setIsUploading(true);
+      setUploadProgress(0);
       try {
+        const isVideo = file.type.startsWith('video/');
         const formData = new FormData();
-        formData.append('image', file);
-        const { data } = await api.post('/upload/image', formData, {
+        formData.append(isVideo ? 'video' : 'image', file);
+        const { data } = await api.post(isVideo ? '/upload/video' : '/upload/image', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (e) => {
+            if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+          },
         });
-        onImageChange(data.data.url);
+        if (isVideo) {
+          onVideoChange?.(data.data.url);
+        } else {
+          onImageChange(data.data.url);
+        }
       } catch (err) {
-        console.error('Image upload failed:', err);
+        console.error('Upload failed:', err);
       } finally {
         setIsUploading(false);
+        setUploadProgress(0);
       }
     },
-    [onImageChange],
+    [onImageChange, onVideoChange],
   );
 
   const handleFileSelect = useCallback(
     (file: File) => {
-      if (!file.type.startsWith('image/')) return;
+      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
       uploadToServer(file);
     },
     [uploadToServer],
@@ -131,7 +146,7 @@ export default function MediaStudio({
   }, []);
 
   /* ── Collapsed bar ──────────────────────────────────────── */
-  if (isCollapsed && !imageUrl) {
+  if (isCollapsed && !imageUrl && !videoUrl) {
     return (
       <button
         type="button"
@@ -144,6 +159,28 @@ export default function MediaStudio({
         <span className="font-medium">Add Media</span>
         <ChevronDown size={14} />
       </button>
+    );
+  }
+
+  /* ── Video preview state ────────────────────────────────── */
+  if (videoUrl) {
+    return (
+      <div className="rounded-xl border border-border-subtle bg-surface-1 p-3">
+        <div className="relative group rounded-lg overflow-hidden inline-block">
+          <video src={videoUrl} className="h-20 w-auto rounded-lg" muted />
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => onVideoChange?.(null)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/80 hover:bg-red-500 text-white text-sm font-medium transition-colors"
+            >
+              <X size={14} />
+              Remove
+            </button>
+          </div>
+        </div>
+        <p className="mt-1 text-[10px] text-text-tertiary">Video uploaded</p>
+      </div>
     );
   }
 
@@ -218,7 +255,7 @@ export default function MediaStudio({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/mp4,video/webm,video/quicktime"
         className="hidden"
         onChange={handleInputChange}
       />
@@ -252,8 +289,18 @@ export default function MediaStudio({
             {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
           </div>
           <span className="text-xs text-text-secondary">
-            {isUploading ? 'Uploading...' : 'Drop or click'}
+            {isUploading
+              ? `Uploading${uploadProgress > 0 ? ` ${uploadProgress}%` : '...'}`
+              : 'Drop or click'}
           </span>
+          {isUploading && uploadProgress > 0 && (
+            <div className="w-3/4 h-1 rounded-full bg-surface-3 overflow-hidden mt-1">
+              <div
+                className="h-full rounded-full bg-accent transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          )}
         </button>
 
         {/* Vertical divider */}

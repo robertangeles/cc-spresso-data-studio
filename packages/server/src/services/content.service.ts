@@ -172,6 +172,7 @@ interface CreateContentData {
   contentType?: string;
   status?: string;
   imageUrl?: string;
+  videoUrl?: string;
   sourceContentId?: string;
   tags?: string[];
   metadata?: Record<string, unknown>;
@@ -189,6 +190,7 @@ export async function createContentItem(data: CreateContentData) {
       contentType: data.contentType ?? 'markdown',
       status: data.status ?? 'draft',
       imageUrl: data.imageUrl ?? null,
+      videoUrl: data.videoUrl ?? null,
       sourceContentId: data.sourceContentId ?? null,
       tags: data.tags ?? [],
       metadata: data.metadata ?? {},
@@ -208,6 +210,7 @@ export async function createMultiPlatformContent(data: {
   mainBody: string;
   platformBodies: Record<string, string>; // channelId -> adapted body
   imageUrl?: string;
+  videoUrl?: string;
   status?: string;
 }) {
   const channelIds = Object.keys(data.platformBodies);
@@ -222,6 +225,7 @@ export async function createMultiPlatformContent(data: {
       title: data.title,
       body: data.platformBodies[channelIds[0]],
       imageUrl: data.imageUrl ?? null,
+      videoUrl: data.videoUrl ?? null,
       status: data.status ?? 'draft',
     })
     .returning();
@@ -238,6 +242,7 @@ export async function createMultiPlatformContent(data: {
         title: data.title,
         body: data.platformBodies[channelIds[i]],
         imageUrl: data.imageUrl ?? null,
+        videoUrl: data.videoUrl ?? null,
         sourceContentId: canonical.id,
         status: data.status ?? 'draft',
       })

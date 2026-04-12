@@ -173,7 +173,7 @@ const PLATFORMS: PlatformInfo[] = [
       'Create OAuth 2.0 credentials',
       'Enter Client ID and Client Secret below',
     ],
-    status: 'coming-soon',
+    status: 'ready',
   },
 ];
 

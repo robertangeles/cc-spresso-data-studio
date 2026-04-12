@@ -871,6 +871,7 @@ const OAUTH_ENABLED_PLATFORMS = new Set([
   'linkedin',
   'pinterest',
   'twitter',
+  'youtube',
 ]);
 
 // Platforms that use credential-based auth (handle + app password)
@@ -907,6 +908,7 @@ function SocialAccountsTab() {
         'linkedin',
         'pinterest',
         'twitter',
+        'youtube',
       ];
       const accounts: ConnectedAccount[] = [];
 
@@ -1195,8 +1197,6 @@ function SocialAccountsTab() {
                       </div>
                     </div>
                   ))}
-                  {/* Pinterest: board selector */}
-                  {platform.id === 'pinterest' && <PinterestBoardSelector />}
                 </div>
               )}
             </div>
@@ -1383,111 +1383,6 @@ function SocialAccountsTab() {
           ))}
         </div>
       </Modal>
-    </div>
-  );
-}
-
-// --- Pinterest Board Selector ---
-
-function PinterestBoardSelector() {
-  const { toast } = useToast();
-  const [boards, setBoards] = useState<Array<{ id: string; name: string }>>([]);
-  const [selectedBoard, setSelectedBoard] = useState<string>('');
-  const [selectedBoardName, setSelectedBoardName] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-
-  // Fetch boards and current default
-  const loadBoards = async () => {
-    setIsLoading(true);
-    try {
-      const { data } = await api.get('/oauth/pinterest/boards');
-      setBoards(data.data ?? []);
-
-      // Check current default from account status
-      const statusRes = await api.get('/oauth/pinterest/status');
-      const metadata = statusRes.data.data?.metadata as
-        | { defaultBoardId?: string; defaultBoardName?: string }
-        | undefined;
-      if (metadata?.defaultBoardId) {
-        setSelectedBoard(metadata.defaultBoardId);
-        setSelectedBoardName(metadata.defaultBoardName ?? '');
-      }
-    } catch {
-      // silently fail — boards will show empty
-    } finally {
-      setIsLoading(false);
-      setLoaded(true);
-    }
-  };
-
-  useEffect(() => {
-    loadBoards();
-  }, []);
-
-  const handleSave = async () => {
-    if (!selectedBoard) {
-      toast('Select a board first', 'error');
-      return;
-    }
-    setIsSaving(true);
-    try {
-      await api.put('/oauth/pinterest/default-board', {
-        boardId: selectedBoard,
-        boardName: selectedBoardName,
-      });
-      toast('Default Pinterest board saved', 'success');
-    } catch {
-      toast('Failed to save board', 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  if (!loaded) return null;
-
-  return (
-    <div className="mt-2 rounded-md bg-surface-3/50 p-3">
-      <p className="text-xs font-medium text-text-secondary mb-2">
-        Default Board (required for publishing)
-      </p>
-      <div className="flex items-center gap-2">
-        <select
-          value={selectedBoard}
-          onChange={(e) => {
-            setSelectedBoard(e.target.value);
-            const board = boards.find((b) => b.id === e.target.value);
-            setSelectedBoardName(board?.name ?? '');
-          }}
-          className="flex-1 rounded-md border border-border-default bg-surface-2 px-3 py-1.5 text-sm text-text-primary
-                     focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
-        >
-          <option value="">
-            {isLoading
-              ? 'Loading boards...'
-              : boards.length === 0
-                ? 'No boards found'
-                : 'Select a board...'}
-          </option>
-          {boards.map((board) => (
-            <option key={board.id} value={board.id}>
-              {board.name}
-            </option>
-          ))}
-        </select>
-        <Button
-          size="sm"
-          variant="primary"
-          onClick={handleSave}
-          disabled={!selectedBoard || isSaving}
-        >
-          {isSaving ? '...' : 'Save'}
-        </Button>
-      </div>
-      {selectedBoard && selectedBoardName && (
-        <p className="mt-1 text-[10px] text-green-400">Pins will publish to: {selectedBoardName}</p>
-      )}
     </div>
   );
 }

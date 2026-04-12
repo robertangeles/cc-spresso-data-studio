@@ -101,6 +101,61 @@ export async function uploadImage(
 }
 
 /**
+ * Upload video to Cloudinary via multipart form-data (streaming from disk).
+ * Does NOT load the file into memory — uses file path for streaming.
+ */
+export async function uploadVideo(
+  filePath: string,
+  options: { folder: string; publicId: string; mimetype?: string },
+): Promise<UploadResult> {
+  const { unlink } = await import('fs/promises');
+
+  const config = await getCloudinaryConfig();
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${config.cloudName}/video/upload`;
+  const folder = `${config.uploadFolder}/${options.folder}`;
+  const timestamp = String(Math.floor(Date.now() / 1000));
+
+  const signature = await generateSignature(
+    { folder, public_id: options.publicId, timestamp },
+    config.apiSecret,
+  );
+
+  // Read file as blob for form data
+  const { readFile } = await import('fs/promises');
+  const fileBuffer = await readFile(filePath);
+  const blob = new Blob([fileBuffer], { type: options.mimetype || 'video/mp4' });
+
+  const formData = new FormData();
+  formData.append('file', blob, options.publicId);
+  formData.append('folder', folder);
+  formData.append('public_id', options.publicId);
+  formData.append('api_key', config.apiKey);
+  formData.append('timestamp', timestamp);
+  formData.append('signature', signature);
+
+  const res = await fetch(uploadUrl, {
+    method: 'POST',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    body: formData as any,
+    signal: AbortSignal.timeout(300_000), // 5 min timeout
+  });
+
+  // Clean up temp file regardless of result
+  await unlink(filePath).catch(() => {});
+
+  if (!res.ok) {
+    const errText = await res.text();
+    logger.error({ status: res.status, body: errText }, 'Cloudinary video upload failed');
+    throw new Error(`Cloudinary video upload failed: ${errText}`);
+  }
+
+  const data = (await res.json()) as { secure_url: string; public_id: string };
+  logger.info({ publicId: data.public_id }, 'Video uploaded to Cloudinary');
+
+  return { url: data.secure_url, publicId: data.public_id };
+}
+
+/**
  * Delete an image from Cloudinary by its public ID.
  */
 export async function deleteImage(publicId: string): Promise<void> {

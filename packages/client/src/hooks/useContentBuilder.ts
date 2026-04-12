@@ -14,6 +14,7 @@ interface ContentBuilderState {
   mainBody: string;
   platformBodies: Record<string, string>;
   imageUrl: string | null;
+  videoUrl: string | null;
   selectedChannels: string[];
   selectedAccounts: Record<string, string[]>; // channelId → socialAccountId[]
   activePromptId: string | null;
@@ -33,6 +34,7 @@ const initialState: ContentBuilderState = {
   mainBody: '',
   platformBodies: {},
   imageUrl: null,
+  videoUrl: null,
   selectedChannels: [],
   selectedAccounts: {},
   activePromptId: null,
@@ -119,6 +121,14 @@ export function useContentBuilder() {
   const setImageUrl = useCallback(
     (url: string | null) => {
       setState((prev) => ({ ...prev, imageUrl: url }));
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const setVideoUrl = useCallback(
+    (url: string | null) => {
+      setState((prev) => ({ ...prev, videoUrl: url }));
       markDirty();
     },
     [markDirty],
@@ -353,7 +363,7 @@ export function useContentBuilder() {
       ...initialState,
       selectedChannels: prev.selectedChannels,
       selectedAccounts: prev.selectedAccounts,
-      activeTab: prev.activeTab,
+      activeTab: null, // Back to Main tab after publish
       activePromptId: prev.activePromptId,
       activePromptName: prev.activePromptName,
       activePromptBody: prev.activePromptBody,
@@ -383,6 +393,7 @@ export function useContentBuilder() {
     setMainBody,
     setPlatformBody,
     setImageUrl,
+    setVideoUrl,
 
     // Actions
     toggleChannel,

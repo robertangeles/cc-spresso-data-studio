@@ -31,6 +31,7 @@ import { communityRoutes } from './community.routes.js';
 import { dmRoutes } from './dm.routes.js';
 import { backlogRoutes } from './backlog.routes.js';
 import { pagesRoutes } from './pages.routes.js';
+import { youtubeOAuthRoutes } from './oauth/youtube.routes.js';
 
 const router = Router();
 
@@ -65,6 +66,7 @@ router.use('/oauth/threads', threadsOAuthRoutes);
 router.use('/oauth/linkedin', linkedinOAuthRoutes);
 router.use('/oauth/pinterest', pinterestOAuthRoutes);
 router.use('/oauth/twitter', twitterOAuthRoutes);
+router.use('/oauth/youtube', youtubeOAuthRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/billing', billingRoutes);
 router.use('/admin/email-templates', emailTemplateRoutes);

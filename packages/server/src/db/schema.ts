@@ -474,6 +474,7 @@ export const contentItems = pgTable(
     contentType: varchar('content_type', { length: 50 }).notNull().default('markdown'),
     status: varchar('status', { length: 50 }).notNull().default('draft'),
     imageUrl: varchar('image_url', { length: 500 }),
+    videoUrl: varchar('video_url', { length: 500 }),
     sourceContentId: uuid('source_content_id'),
     tags: jsonb('tags').notNull().default('[]'),
     metadata: jsonb('metadata').notNull().default('{}'),

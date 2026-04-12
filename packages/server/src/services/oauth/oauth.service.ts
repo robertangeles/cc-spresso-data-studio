@@ -9,6 +9,7 @@ import { ThreadsOAuthProvider } from './threads.oauth.js';
 import { LinkedInOAuthProvider } from './linkedin.oauth.js';
 import { PinterestOAuthProvider } from './pinterest.oauth.js';
 import { TwitterOAuthProvider } from './twitter.oauth.js';
+import { YouTubeOAuthProvider } from './youtube.oauth.js';
 
 // Registry of OAuth providers
 const providers: Record<string, OAuthProvider> = {
@@ -19,6 +20,7 @@ const providers: Record<string, OAuthProvider> = {
   linkedin: new LinkedInOAuthProvider(),
   pinterest: new PinterestOAuthProvider(),
   twitter: new TwitterOAuthProvider(),
+  youtube: new YouTubeOAuthProvider(),
 };
 
 export function getOAuthProvider(platform: string): OAuthProvider {

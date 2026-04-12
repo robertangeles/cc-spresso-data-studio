@@ -14,6 +14,7 @@ import { publishToThreads } from './publishers/threads.publisher.js';
 import { publishToLinkedIn } from './publishers/linkedin.publisher.js';
 import { publishToTwitter } from './publishers/twitter.publisher.js';
 import { publishToPinterest } from './publishers/pinterest.publisher.js';
+import { publishToYouTube } from './publishers/youtube.publisher.js';
 
 /**
  * List all scheduled posts for a user, ordered by scheduledAt asc, pending first.
@@ -365,6 +366,60 @@ export async function processDuePosts(): Promise<number> {
                 { postId: post.id, error: result.error },
                 'Pinterest auto-publish failed',
               );
+            }
+          }
+        }
+        // Attempt auto-publish to YouTube
+        if (channelSlug === 'youtube') {
+          // Refresh token if expired (YouTube tokens last 1 hour)
+          if (
+            account.tokenExpiresAt &&
+            account.tokenExpiresAt < new Date() &&
+            account.refreshToken
+          ) {
+            try {
+              const provider = (await import('./oauth/oauth.service.js')).getOAuthProvider(
+                'youtube',
+              );
+              const newTokens = await provider.refreshToken(account.refreshToken);
+              await updateAccountTokens(account.id, {
+                accessToken: newTokens.accessToken,
+                refreshToken: newTokens.refreshToken ?? account.refreshToken,
+              });
+              account.accessToken = newTokens.accessToken;
+              logger.info({ postId: post.id }, 'YouTube token refreshed before publish');
+            } catch (refreshErr) {
+              publishError = 'YouTube token refresh failed — reconnect your account';
+              logger.error({ err: refreshErr, postId: post.id }, 'YouTube token refresh failed');
+            }
+          }
+
+          const postMeta = (post.metadata ?? {}) as { tags?: string[]; privacyStatus?: string };
+          const videoUrl = contentItem.videoUrl;
+          if (publishError) {
+            // Token refresh failed — skip publish
+          } else if (!videoUrl) {
+            publishError = 'YouTube requires a video — upload a video to this content item';
+          } else {
+            const result = await publishToYouTube({
+              accessToken: account.accessToken,
+              title: contentItem.title ?? '',
+              description: contentItem.body,
+              tags: postMeta.tags,
+              videoUrl,
+              privacyStatus:
+                (postMeta.privacyStatus as 'public' | 'unlisted' | 'private') ?? 'public',
+            });
+
+            if (result.success) {
+              autoPublished = true;
+              logger.info(
+                { postId: post.id, videoId: result.videoId },
+                'Auto-published to YouTube',
+              );
+            } else {
+              publishError = result.error ?? 'YouTube publish failed';
+              logger.warn({ postId: post.id, error: result.error }, 'YouTube auto-publish failed');
             }
           }
         }

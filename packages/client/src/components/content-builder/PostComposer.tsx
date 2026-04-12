@@ -28,6 +28,12 @@ interface PostComposerProps {
   onPinterestBoardChange?: (boardId: string, boardName: string) => void;
   pinterestLink?: string;
   onPinterestLinkChange?: (link: string) => void;
+  // YouTube per-post fields
+  youtubeTags?: string;
+  onYoutubeTagsChange?: (tags: string) => void;
+  youtubePrivacy?: string;
+  onYoutubePrivacyChange?: (privacy: string) => void;
+  videoUrl?: string | null;
 }
 
 /** Slugs that typically use a title field */
@@ -161,6 +167,11 @@ export function PostComposer({
   onPinterestBoardChange,
   pinterestLink = '',
   onPinterestLinkChange,
+  youtubeTags = '',
+  onYoutubeTagsChange,
+  youtubePrivacy = 'public',
+  onYoutubePrivacyChange,
+  videoUrl,
 }: PostComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMainTab = activeTab === null;
@@ -274,6 +285,17 @@ export function PostComposer({
           link={pinterestLink}
           onLinkChange={onPinterestLinkChange}
           hasImage={!!imageUrl}
+        />
+      )}
+
+      {/* YouTube-specific fields */}
+      {activeChannel?.slug === 'youtube' && (
+        <YouTubeFields
+          tags={youtubeTags}
+          onTagsChange={onYoutubeTagsChange}
+          privacy={youtubePrivacy}
+          onPrivacyChange={onYoutubePrivacyChange}
+          hasVideo={!!videoUrl}
         />
       )}
 
@@ -442,6 +464,62 @@ function PinterestFields({
           value={link}
           onChange={(e) => onLinkChange?.(e.target.value)}
           placeholder="https://your-site.com/article"
+          className="flex-1 rounded-md border border-border-default bg-surface-3 px-2 py-1 text-xs text-text-primary
+                     placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+        />
+      </div>
+    </div>
+  );
+}
+
+// --- YouTube-specific fields ---
+
+function YouTubeFields({
+  tags,
+  onTagsChange,
+  privacy,
+  onPrivacyChange,
+  hasVideo,
+}: {
+  tags: string;
+  onTagsChange?: (tags: string) => void;
+  privacy: string;
+  onPrivacyChange?: (privacy: string) => void;
+  hasVideo: boolean;
+}) {
+  return (
+    <div className="mb-3 space-y-2 rounded-lg border border-red-600/20 bg-red-600/5 p-3">
+      {/* Video warning */}
+      {!hasVideo && (
+        <div className="flex items-center gap-2 text-xs text-amber-400">
+          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+          <span>YouTube requires a video. Upload one in Media Studio.</span>
+        </div>
+      )}
+
+      {/* Privacy */}
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-text-secondary whitespace-nowrap">Privacy</label>
+        <select
+          value={privacy}
+          onChange={(e) => onPrivacyChange?.(e.target.value)}
+          className="flex-1 rounded-md border border-border-default bg-surface-3 px-2 py-1 text-xs text-text-primary
+                     focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+        >
+          <option value="public">Public</option>
+          <option value="unlisted">Unlisted</option>
+          <option value="private">Private</option>
+        </select>
+      </div>
+
+      {/* Tags */}
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-text-secondary whitespace-nowrap">Tags</label>
+        <input
+          type="text"
+          value={tags}
+          onChange={(e) => onTagsChange?.(e.target.value)}
+          placeholder="comma, separated, tags"
           className="flex-1 rounded-md border border-border-default bg-surface-3 px-2 py-1 text-xs text-text-primary
                      placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
         />
