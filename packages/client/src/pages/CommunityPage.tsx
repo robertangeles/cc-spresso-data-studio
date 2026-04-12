@@ -8,6 +8,7 @@ import {
   useUnreadCounts,
   useChannelMembers,
   markChannelRead,
+  markDmRead,
   joinChannel,
 } from '../hooks/useCommunity';
 import { useDMConversations, useDMMessages, createDMConversation } from '../hooks/useDMs';
@@ -153,8 +154,10 @@ export function CommunityPage() {
     socket.emit('channel:join', { channelId: activeChannelId });
     // Auto-join channel (creates channel_members row) so user appears in member list
     joinChannel(activeChannelId).catch(() => {});
-    markChannelRead(activeChannelId).catch(() => {});
-    refetchUnreads();
+    // Mark read THEN refetch unreads — must await to avoid race condition
+    markChannelRead(activeChannelId)
+      .catch(() => {})
+      .then(() => refetchUnreads());
 
     return () => {
       socket.emit('channel:leave', { channelId: activeChannelId });
@@ -167,11 +170,15 @@ export function CommunityPage() {
     if (!socket || !isConnected || viewMode !== 'dm' || !activeDMId) return;
 
     socket.emit('dm:join', { conversationId: activeDMId });
+    // Mark DM read THEN refetch unreads
+    markDmRead(activeDMId)
+      .catch(() => {})
+      .then(() => refetchUnreads());
 
     return () => {
       socket.emit('dm:leave', { conversationId: activeDMId });
     };
-  }, [socket, isConnected, viewMode, activeDMId]);
+  }, [socket, isConnected, viewMode, activeDMId, refetchUnreads]);
 
   // ── Socket event listeners ─────────────────────────────────
   useEffect(() => {

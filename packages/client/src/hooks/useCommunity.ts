@@ -133,3 +133,7 @@ export async function joinChannel(channelId: string) {
 export async function markChannelRead(channelId: string) {
   await api.put(`/community/channels/${channelId}/read`);
 }
+
+export async function markDmRead(conversationId: string) {
+  await api.put(`/dm/conversations/${conversationId}/read`);
+}

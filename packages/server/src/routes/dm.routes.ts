@@ -13,6 +13,7 @@ router.get('/conversations', dmController.listConversations);
 router.post('/conversations', dmController.createConversation);
 router.get('/conversations/:id/messages', dmController.getMessages);
 router.post('/conversations/:id/messages', dmController.sendMessage);
+router.put('/conversations/:id/read', dmController.markRead);
 
 // ── Messages ────────────────────────────────────────────────
 router.put('/messages/:id', dmController.editMessage);

@@ -161,6 +161,8 @@ export function registerCommunitySocketHandlers(io: SocketIOServer, socket: Sock
   socket.on('read:update', async (data: { channelId: string; messageId: string }) => {
     try {
       await communityService.updateLastRead(data.channelId, userId, data.messageId);
+      // Confirm back to the user so other tabs/components refresh unread counts
+      socket.emit('unread:update', { channelId: data.channelId });
     } catch (err) {
       logger.error({ userId, err }, 'Socket read:update failed');
     }

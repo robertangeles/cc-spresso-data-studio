@@ -135,3 +135,17 @@ export async function unblock(
     next(err);
   }
 }
+
+export async function markRead(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError();
+    const result = await dmService.markConversationRead(req.params.id, req.user.userId);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}

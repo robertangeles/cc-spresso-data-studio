@@ -427,3 +427,18 @@ export async function updateLastRead(conversationId: string, userId: string, mes
       ),
     );
 }
+
+export async function markConversationRead(conversationId: string, userId: string) {
+  const [latest] = await db
+    .select({ id: directMessages.id })
+    .from(directMessages)
+    .where(eq(directMessages.conversationId, conversationId))
+    .orderBy(desc(directMessages.createdAt))
+    .limit(1);
+
+  if (latest) {
+    await updateLastRead(conversationId, userId, latest.id);
+  }
+
+  return { conversationId, read: true };
+}
