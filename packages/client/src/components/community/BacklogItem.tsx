@@ -152,6 +152,14 @@ export function BacklogItemCard({
       {/* Title */}
       <h4 className="text-sm font-medium text-text-primary leading-snug">{item.title}</h4>
 
+      {/* Estimated release date */}
+      {item.estimatedRelease && (
+        <p className="flex items-center gap-1 mt-1 text-[10px] text-text-tertiary">
+          <Calendar className="h-3 w-3" />
+          {formatDate(item.estimatedRelease)}
+        </p>
+      )}
+
       {/* Description preview */}
       {item.description && (
         <p className="mt-1 text-xs text-text-tertiary line-clamp-2">{item.description}</p>
@@ -192,17 +200,6 @@ export function BacklogItemCard({
           {item.description && (
             <span className="text-text-tertiary" title="Has description">
               <MessageSquare className="h-3 w-3" />
-            </span>
-          )}
-
-          {/* Estimated release */}
-          {item.estimatedRelease && (
-            <span
-              className="flex items-center gap-1 text-[10px] text-text-tertiary"
-              title="Estimated release"
-            >
-              <Calendar className="h-3 w-3" />
-              {formatDate(item.estimatedRelease)}
             </span>
           )}
         </div>
