@@ -1,12 +1,11 @@
-import { useState, useMemo } from 'react';
-import { Filter, Plus, Loader2, Rocket, Hammer, CheckCircle2 } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { Filter, Plus, Loader2, Rocket, Hammer, CheckCircle2, X } from 'lucide-react';
 import { useBacklogItems } from '../../hooks/useBacklog';
 import { BacklogItemCard } from './BacklogItem';
 import type { BacklogItem } from '@cc/shared';
 
 interface BacklogBoardProps {
   isAdmin?: boolean;
-  onCreateItem?: () => void;
 }
 
 const COLUMNS: Array<{
@@ -39,11 +38,22 @@ const COLUMNS: Array<{
   },
 ];
 
-export function BacklogBoard({ isAdmin = false, onCreateItem }: BacklogBoardProps) {
+export function BacklogBoard({ isAdmin = false }: BacklogBoardProps) {
   const [categoryFilter, setCategoryFilter] = useState<string>('');
-  const { items, loading, vote, removeVote } = useBacklogItems({
+  const { items, loading, vote, removeVote, createItem, updateItem } = useBacklogItems({
     category: categoryFilter || undefined,
   });
+
+  // Create form state
+  const [showCreate, setShowCreate] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newCategory, setNewCategory] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Drag-and-drop state
+  const [dragItemId, setDragItemId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
@@ -67,6 +77,53 @@ export function BacklogBoard({ isAdmin = false, onCreateItem }: BacklogBoardProp
     return result;
   }, [items]);
 
+  const handleCreate = async () => {
+    if (!newTitle.trim()) return;
+    setIsCreating(true);
+    try {
+      await createItem({
+        title: newTitle.trim(),
+        description: newDescription.trim() || undefined,
+        category: newCategory.trim() || undefined,
+      });
+      setNewTitle('');
+      setNewDescription('');
+      setNewCategory('');
+      setShowCreate(false);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  // Drag handlers (admin only)
+  const handleDragStart = useCallback((itemId: string) => {
+    setDragItemId(itemId);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, status: string) => {
+    e.preventDefault();
+    setDropTarget(status);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDropTarget(null);
+  }, []);
+
+  const handleDrop = useCallback(
+    async (status: string) => {
+      if (!dragItemId) return;
+      setDropTarget(null);
+      setDragItemId(null);
+
+      // Find the item and check if status actually changed
+      const item = items.find((i) => i.id === dragItemId);
+      if (!item || item.status === status) return;
+
+      await updateItem(dragItemId, { status });
+    },
+    [dragItemId, items, updateItem],
+  );
+
   return (
     <div
       className="flex-1 flex flex-col min-w-0"
@@ -75,7 +132,7 @@ export function BacklogBoard({ isAdmin = false, onCreateItem }: BacklogBoardProp
           'radial-gradient(ellipse at center 0%, rgba(255,255,255,0.015) 0%, transparent 60%), #0a0a0b',
       }}
     >
-      {/* Header — glass bar */}
+      {/* Header */}
       <div
         className="flex items-center justify-between px-6 py-4 flex-shrink-0 shadow-dark-sm"
         style={{
@@ -90,7 +147,6 @@ export function BacklogBoard({ isAdmin = false, onCreateItem }: BacklogBoardProp
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Category filter — glass dropdown */}
           <div className="relative">
             <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-tertiary pointer-events-none" />
             <select
@@ -107,10 +163,10 @@ export function BacklogBoard({ isAdmin = false, onCreateItem }: BacklogBoardProp
             </select>
           </div>
 
-          {isAdmin && onCreateItem && (
+          {isAdmin && (
             <button
               type="button"
-              onClick={onCreateItem}
+              onClick={() => setShowCreate(!showCreate)}
               className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-accent to-amber-600 px-3 py-1.5 text-xs font-semibold text-surface-0 hover:shadow-[0_0_12px_rgba(255,214,10,0.15)] transition-all duration-200 ease-spring hover:scale-[1.02] active:scale-[0.98]"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -119,6 +175,54 @@ export function BacklogBoard({ isAdmin = false, onCreateItem }: BacklogBoardProp
           )}
         </div>
       </div>
+
+      {/* Inline create form */}
+      {showCreate && (
+        <div className="px-6 py-3 border-b border-border-subtle bg-surface-2/30">
+          <div className="max-w-lg space-y-2">
+            <input
+              type="text"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="Feature title..."
+              autoFocus
+              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none"
+              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            />
+            <textarea
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              placeholder="Description (optional)"
+              rows={2}
+              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none resize-none"
+            />
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                placeholder="Category (optional)"
+                className="flex-1 rounded-lg border border-border-default bg-surface-3 px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={!newTitle.trim() || isCreating}
+                className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-surface-0 disabled:opacity-50 hover:bg-accent-hover transition-colors"
+              >
+                {isCreating ? 'Adding...' : 'Add'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                className="rounded-lg p-1.5 text-text-tertiary hover:text-text-secondary hover:bg-surface-3 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Board */}
       {loading ? (
@@ -131,10 +235,19 @@ export function BacklogBoard({ isAdmin = false, onCreateItem }: BacklogBoardProp
             {COLUMNS.map((col) => {
               const Icon = col.icon;
               const colItems = grouped[col.status] || [];
+              const isDropping = dropTarget === col.status;
 
               return (
-                <div key={col.status} className="flex flex-col">
-                  {/* Column header — glass pill */}
+                <div
+                  key={col.status}
+                  className={`flex flex-col rounded-xl transition-all duration-200 ${
+                    isDropping ? 'ring-2 ring-accent/40 bg-accent/5' : ''
+                  }`}
+                  onDragOver={(e) => isAdmin && handleDragOver(e, col.status)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={() => isAdmin && handleDrop(col.status)}
+                >
+                  {/* Column header */}
                   <div className="flex items-center gap-2 pb-3 mb-3">
                     <div
                       className={`flex items-center gap-2 bg-gradient-to-r ${col.headerGradient} backdrop-blur-sm rounded-full px-3 py-1 ${col.accentClass}`}
@@ -148,7 +261,7 @@ export function BacklogBoard({ isAdmin = false, onCreateItem }: BacklogBoardProp
                   </div>
 
                   {/* Items */}
-                  <div className="space-y-2 flex-1">
+                  <div className="space-y-2 flex-1 min-h-[100px]">
                     {colItems.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-10 rounded-xl bg-surface-2/10 backdrop-blur-sm">
                         <Icon className={`h-6 w-6 ${col.accentClass} opacity-30 mb-2`} />
@@ -160,8 +273,19 @@ export function BacklogBoard({ isAdmin = false, onCreateItem }: BacklogBoardProp
                           key={item.id}
                           className="animate-slide-up"
                           style={{ animationDelay: `${index * 50}ms` }}
+                          draggable={isAdmin}
+                          onDragStart={() => isAdmin && handleDragStart(item.id)}
+                          onDragEnd={() => {
+                            setDragItemId(null);
+                            setDropTarget(null);
+                          }}
                         >
-                          <BacklogItemCard item={item} onVote={vote} onRemoveVote={removeVote} />
+                          <BacklogItemCard
+                            item={item}
+                            onVote={vote}
+                            onRemoveVote={removeVote}
+                            isDragging={dragItemId === item.id}
+                          />
                         </div>
                       ))
                     )}

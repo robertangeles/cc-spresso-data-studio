@@ -74,7 +74,7 @@ export function DashboardPage() {
         <EmptyState
           icon={Workflow}
           title="Nothing brewing yet."
-          description="Create an orchestration. One idea in, twelve assets out."
+          description="Create a workflow. One idea in, twelve assets out."
           actionLabel="+ New Workflow"
           onAction={() => setShowCreate(true)}
         />
@@ -99,9 +99,7 @@ export function DashboardPage() {
         onConfirm={confirmDelete}
         variant="danger"
       >
-        <p>
-          Permanently delete this orchestration and all its configuration? This cannot be undone.
-        </p>
+        <p>Permanently delete this workflow and all its configuration? This cannot be undone.</p>
       </Modal>
     </div>
   );

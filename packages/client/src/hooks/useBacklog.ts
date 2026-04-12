@@ -42,5 +42,20 @@ export function useBacklogItems(filters: { status?: string; category?: string } 
     }
   };
 
-  return { items, loading, refetch: fetchItems, vote, removeVote };
+  const createItem = async (data: { title: string; description?: string; category?: string }) => {
+    const { data: res } = await api.post('/backlog/items', data);
+    setItems((prev) => [res.data, ...prev]);
+    return res.data as BacklogItem;
+  };
+
+  const updateItem = async (
+    itemId: string,
+    updates: { status?: string; title?: string; description?: string; category?: string },
+  ) => {
+    const { data: res } = await api.put(`/backlog/items/${itemId}`, updates);
+    setItems((prev) => prev.map((item) => (item.id === itemId ? res.data : item)));
+    return res.data as BacklogItem;
+  };
+
+  return { items, loading, refetch: fetchItems, vote, removeVote, createItem, updateItem };
 }

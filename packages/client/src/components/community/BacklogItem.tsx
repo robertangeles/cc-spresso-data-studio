@@ -5,6 +5,7 @@ interface BacklogItemProps {
   item: BacklogItemType;
   onVote: (itemId: string, voteType: 'up' | 'down') => void;
   onRemoveVote: (itemId: string) => void;
+  isDragging?: boolean;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -19,7 +20,12 @@ const STATUS_LABELS: Record<string, string> = {
   shipped: 'Shipped',
 };
 
-export function BacklogItemCard({ item, onVote, onRemoveVote }: BacklogItemProps) {
+export function BacklogItemCard({
+  item,
+  onVote,
+  onRemoveVote,
+  isDragging = false,
+}: BacklogItemProps) {
   const handleUpvote = () => {
     if (item.userVote === 'up') {
       onRemoveVote(item.id);
@@ -37,7 +43,9 @@ export function BacklogItemCard({ item, onVote, onRemoveVote }: BacklogItemProps
   };
 
   return (
-    <div className="rounded-xl bg-surface-2 p-3 shadow-dark-sm hover:-translate-y-1 hover:shadow-[0_4px_20px_rgba(0,0,0,0.4),0_0_15px_rgba(255,214,10,0.06)] transition-all duration-200 ease-spring">
+    <div
+      className={`rounded-xl bg-surface-2 p-3 shadow-dark-sm hover:-translate-y-1 hover:shadow-[0_4px_20px_rgba(0,0,0,0.4),0_0_15px_rgba(255,214,10,0.06)] transition-all duration-200 ease-spring ${isDragging ? 'opacity-50 scale-95 ring-2 ring-accent/30' : ''}`}
+    >
       <div className="flex items-start gap-3">
         {/* Vote column */}
         <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
