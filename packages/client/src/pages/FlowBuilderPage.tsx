@@ -3,7 +3,6 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useFlow } from '../hooks/useFlows';
 import { FlowTabs } from '../components/flow/FlowTabs';
 import { FlowWorkspace } from '../components/flow/FlowWorkspace';
-import { FlowPreview } from '../components/flow/FlowPreview';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 
@@ -11,7 +10,7 @@ export function FlowBuilderPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { flow, isLoading, updateFlow } = useFlow(id!);
-  const [activeTab, setActiveTab] = useState('form');
+  const [activeTab, setActiveTab] = useState('edit');
 
   // Listen for banner click to switch to Generate tab
   const handleViewResults = useCallback(() => setActiveTab('run'), []);
@@ -92,8 +91,12 @@ export function FlowBuilderPage() {
 
       {/* Content area */}
       <div className="flex flex-1 overflow-hidden">
-        <FlowWorkspace activeTab={activeTab} flow={flow} updateFlow={updateFlow} onDelete={handleDelete} />
-        {activeTab === 'form' && <FlowPreview flowName={flow.name} fields={flow.config.fields} />}
+        <FlowWorkspace
+          activeTab={activeTab}
+          flow={flow}
+          updateFlow={updateFlow}
+          onDelete={handleDelete}
+        />
       </div>
 
       <Modal

@@ -1,4 +1,4 @@
-import { FormInput, GitBranch, SlidersHorizontal, Play } from 'lucide-react';
+import { Pencil, Play } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 interface FlowTabsProps {
@@ -7,9 +7,7 @@ interface FlowTabsProps {
 }
 
 const tabs: { id: string; label: string; icon: LucideIcon }[] = [
-  { id: 'form', label: 'Build', icon: FormInput },
-  { id: 'designer', label: 'Design', icon: GitBranch },
-  { id: 'details', label: 'Configure', icon: SlidersHorizontal },
+  { id: 'edit', label: 'Edit', icon: Pencil },
   { id: 'run', label: 'Generate', icon: Play },
 ];
 
