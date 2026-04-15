@@ -79,6 +79,26 @@ export async function archiveItem(
   }
 }
 
+export async function reorderItems(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError();
+    const { itemIds } = req.body;
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, data: null, error: 'itemIds must be a non-empty array' });
+    }
+    await backlogService.reorderItems(itemIds);
+    res.json({ success: true, data: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function vote(req: Request, res: Response<ApiResponse<unknown>>, next: NextFunction) {
   try {
     if (!req.user) throw new UnauthorizedError();

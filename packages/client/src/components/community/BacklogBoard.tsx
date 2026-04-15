@@ -39,7 +39,7 @@ const COLUMNS: Array<{
 ];
 
 export function BacklogBoard({ isAdmin = false }: BacklogBoardProps) {
-  const { items, loading, vote, removeVote, createItem, updateItem, deleteItem } =
+  const { items, loading, vote, removeVote, createItem, updateItem, reorderItems, deleteItem } =
     useBacklogItems();
 
   // Per-column inline add
@@ -50,6 +50,7 @@ export function BacklogBoard({ isAdmin = false }: BacklogBoardProps) {
   // Drag-and-drop
   const [dragItemId, setDragItemId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
 
   // Card detail modal
   const [selectedItem, setSelectedItem] = useState<BacklogItem | null>(null);
@@ -64,6 +65,10 @@ export function BacklogBoard({ isAdmin = false }: BacklogBoardProps) {
       if (result[item.status]) {
         result[item.status].push(item);
       }
+    }
+    // Sort each column by sortOrder
+    for (const key of Object.keys(result)) {
+      result[key].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
     }
     return result;
   }, [items]);
@@ -85,29 +90,89 @@ export function BacklogBoard({ isAdmin = false }: BacklogBoardProps) {
     }
   };
 
-  const handleDragStart = useCallback((itemId: string) => {
+  const handleDragStart = useCallback((e: React.DragEvent, itemId: string) => {
     setDragItemId(itemId);
+    e.dataTransfer.effectAllowed = 'move';
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, status: string) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
     setDropTarget(status);
   }, []);
 
-  const handleDragLeave = useCallback(() => {
-    setDropTarget(null);
+  const handleCardDragOver = useCallback((e: React.DragEvent, status: string, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTarget(status);
+
+    // Determine if cursor is in top or bottom half of the card
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const insertIndex = e.clientY < midY ? index : index + 1;
+    setDropIndex(insertIndex);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if leaving the column entirely (not entering a child)
+    const related = e.relatedTarget as HTMLElement | null;
+    if (!related || !e.currentTarget.contains(related)) {
+      setDropTarget(null);
+      setDropIndex(null);
+    }
   }, []);
 
   const handleDrop = useCallback(
-    async (status: string) => {
+    async (targetStatus: string) => {
       if (!dragItemId) return;
+      const currentDropIndex = dropIndex;
       setDropTarget(null);
+      setDropIndex(null);
       setDragItemId(null);
-      const item = items.find((i) => i.id === dragItemId);
-      if (!item || item.status === status) return;
-      await updateItem(dragItemId, { status });
+
+      const draggedItem = items.find((i) => i.id === dragItemId);
+      if (!draggedItem) return;
+
+      const targetItems = [...(grouped[targetStatus] || [])];
+
+      if (draggedItem.status === targetStatus) {
+        // Same column reorder
+        const oldIndex = targetItems.findIndex((i) => i.id === dragItemId);
+        if (oldIndex === -1) return;
+
+        // Remove from old position
+        targetItems.splice(oldIndex, 1);
+
+        // Calculate insert position (adjust for removal shift)
+        let insertAt = currentDropIndex ?? targetItems.length;
+        if (insertAt > oldIndex) insertAt = Math.max(0, insertAt - 1);
+        insertAt = Math.min(insertAt, targetItems.length);
+
+        // Insert at new position
+        targetItems.splice(insertAt, 0, draggedItem);
+
+        // Persist new order
+        const newOrder = targetItems.map((i) => i.id);
+        await reorderItems(newOrder);
+      } else {
+        // Cross-column move
+        // Remove from source column
+        const sourceItems = (grouped[draggedItem.status] || []).filter((i) => i.id !== dragItemId);
+
+        // Insert into target column at drop position
+        const insertAt = currentDropIndex ?? targetItems.length;
+        targetItems.splice(Math.min(insertAt, targetItems.length), 0, draggedItem);
+
+        // Update status first
+        await updateItem(dragItemId, { status: targetStatus });
+
+        // Then persist order for both columns
+        await reorderItems(sourceItems.map((i) => i.id));
+        await reorderItems(targetItems.map((i) => i.id));
+      }
     },
-    [dragItemId, items, updateItem],
+    [dragItemId, dropIndex, items, grouped, updateItem, reorderItems],
   );
 
   return (
@@ -142,8 +207,11 @@ export function BacklogBoard({ isAdmin = false }: BacklogBoardProps) {
                     isDropping ? 'ring-2 ring-accent/50 scale-[1.01]' : ''
                   }`}
                   onDragOver={(e) => isAdmin && handleDragOver(e, col.status)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={() => isAdmin && handleDrop(col.status)}
+                  onDragLeave={(e) => isAdmin && handleDragLeave(e)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    isAdmin && handleDrop(col.status);
+                  }}
                 >
                   {/* Column header */}
                   <div className="flex items-center justify-between px-3 py-3">
@@ -216,26 +284,45 @@ export function BacklogBoard({ isAdmin = false }: BacklogBoardProps) {
                       </div>
                     )}
 
-                    {colItems.map((item) => (
-                      <div
-                        key={item.id}
-                        draggable={isAdmin}
-                        onDragStart={() => isAdmin && handleDragStart(item.id)}
-                        onDragEnd={() => {
-                          setDragItemId(null);
-                          setDropTarget(null);
-                        }}
-                      >
-                        <BacklogItemCard
-                          item={item}
-                          onVote={vote}
-                          onRemoveVote={removeVote}
-                          isDragging={dragItemId === item.id}
-                          isAdmin={isAdmin}
-                          onUpdate={updateItem}
-                          onDelete={deleteItem}
-                          onClick={() => setSelectedItem(item)}
-                        />
+                    {colItems.map((item, index) => (
+                      <div key={item.id} className="relative">
+                        {/* Drop indicator line — shows above this card */}
+                        {dragItemId &&
+                          dragItemId !== item.id &&
+                          dropTarget === col.status &&
+                          dropIndex === index && (
+                            <div className="h-0.5 bg-accent rounded-full mx-1 -mt-1 mb-1 shadow-[0_0_6px_rgba(255,214,10,0.4)]" />
+                          )}
+                        <div
+                          draggable={isAdmin}
+                          onDragStart={(e) => isAdmin && handleDragStart(e, item.id)}
+                          onDragEnd={() => {
+                            setDragItemId(null);
+                            setDropTarget(null);
+                            setDropIndex(null);
+                          }}
+                          onDragOver={(e) => isAdmin && handleCardDragOver(e, col.status, index)}
+                          className={isAdmin ? 'cursor-grab active:cursor-grabbing' : ''}
+                        >
+                          <BacklogItemCard
+                            item={item}
+                            onVote={vote}
+                            onRemoveVote={removeVote}
+                            isDragging={dragItemId === item.id}
+                            isAdmin={isAdmin}
+                            onUpdate={updateItem}
+                            onDelete={deleteItem}
+                            onClick={() => setSelectedItem(item)}
+                          />
+                        </div>
+                        {/* Drop indicator line — shows below the last card */}
+                        {dragItemId &&
+                          dragItemId !== item.id &&
+                          dropTarget === col.status &&
+                          dropIndex === index + 1 &&
+                          index === colItems.length - 1 && (
+                            <div className="h-0.5 bg-accent rounded-full mx-1 mt-1 shadow-[0_0_6px_rgba(255,214,10,0.4)]" />
+                          )}
                       </div>
                     ))}
 

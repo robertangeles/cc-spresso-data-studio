@@ -50,11 +50,33 @@ export function useBacklogItems(filters: { status?: string; category?: string } 
 
   const updateItem = async (
     itemId: string,
-    updates: { status?: string; title?: string; description?: string; category?: string },
+    updates: {
+      status?: string;
+      title?: string;
+      description?: string;
+      category?: string;
+      sortOrder?: number;
+      estimatedRelease?: string | null;
+    },
   ) => {
     const { data: res } = await api.put(`/backlog/items/${itemId}`, updates);
     setItems((prev) => prev.map((item) => (item.id === itemId ? res.data : item)));
     return res.data as BacklogItem;
+  };
+
+  const reorderItems = async (itemIds: string[]) => {
+    await api.patch('/backlog/items/reorder', { itemIds });
+    // Optimistically update sortOrder in local state
+    setItems((prev) => {
+      const updated = [...prev];
+      for (const item of updated) {
+        const idx = itemIds.indexOf(item.id);
+        if (idx !== -1) {
+          item.sortOrder = idx;
+        }
+      }
+      return updated;
+    });
   };
 
   const deleteItem = async (itemId: string) => {
@@ -70,6 +92,7 @@ export function useBacklogItems(filters: { status?: string; category?: string } 
     removeVote,
     createItem,
     updateItem,
+    reorderItems,
     deleteItem,
   };
 }

@@ -13,6 +13,7 @@ router.get('/items', backlogController.listItems);
 router.get('/items/:id', backlogController.getItem);
 router.post('/items', requireRole('Administrator'), backlogController.createItem);
 router.put('/items/:id', requireRole('Administrator'), backlogController.updateItem);
+router.patch('/items/reorder', requireRole('Administrator'), backlogController.reorderItems);
 router.delete('/items/:id', requireRole('Administrator'), backlogController.archiveItem);
 
 // ── Voting ──────────────────────────────────────────────────

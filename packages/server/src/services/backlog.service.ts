@@ -1,6 +1,6 @@
 import { db } from '../db/index.js';
 import { backlogItems, backlogVotes, users } from '../db/schema.js';
-import { eq, and, count } from 'drizzle-orm';
+import { eq, and, count, inArray } from 'drizzle-orm';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 /**
@@ -51,8 +51,8 @@ export async function listItems(
     });
   }
 
-  // Sort by score descending
-  result.sort((a, b) => b.score - a.score);
+  // Sort by sortOrder first, then by score descending as tiebreaker
+  result.sort((a, b) => a.sortOrder - b.sortOrder || b.score - a.score);
   return result;
 }
 
@@ -223,6 +223,34 @@ export async function vote(itemId: string, userId: string, voteType: string) {
 
   // Return updated item with tallies
   return getItem(itemId, userId);
+}
+
+/**
+ * Reorder items within a column. Accepts an ordered array of item IDs
+ * and updates their sortOrder to match the array position.
+ */
+export async function reorderItems(itemIds: string[]) {
+  if (!itemIds.length) return;
+
+  // Validate all items exist
+  const existingItems = await db
+    .select({ id: backlogItems.id })
+    .from(backlogItems)
+    .where(inArray(backlogItems.id, itemIds));
+
+  if (existingItems.length !== itemIds.length) {
+    throw new ValidationError({ items: ['One or more item IDs are invalid'] });
+  }
+
+  // Update sortOrder for each item based on its position in the array
+  await Promise.all(
+    itemIds.map((id, index) =>
+      db
+        .update(backlogItems)
+        .set({ sortOrder: index, updatedAt: new Date() })
+        .where(eq(backlogItems.id, id)),
+    ),
+  );
 }
 
 export async function removeVote(itemId: string, userId: string) {
