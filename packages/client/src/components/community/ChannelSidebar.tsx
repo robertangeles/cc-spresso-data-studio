@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Hash, ChevronDown, ChevronRight, ListTodo, Plus, Loader2 } from 'lucide-react';
+import { Hash, ChevronDown, ChevronRight, Plus, Loader2 } from 'lucide-react';
 import type { CommunityChannel, DirectConversation } from '@cc/shared';
 import { UnreadBadge } from './UnreadBadge';
 import { PresenceIndicator } from './PresenceIndicator';
@@ -9,12 +9,11 @@ interface ChannelSidebarProps {
   dmConversations: DirectConversation[];
   activeChannelId: string | null;
   activeDMId: string | null;
-  activeView: 'channel' | 'dm' | 'backlog';
+  activeView: 'channel' | 'dm';
   unreadCounts: Record<string, number>;
   onlineUserIds: Set<string>;
   onSelectChannel: (channel: CommunityChannel) => void;
   onSelectDM: (conversation: DirectConversation) => void;
-  onSelectBacklog: () => void;
   onCreateChannel?: () => void;
   isAdmin?: boolean;
   loading?: boolean;
@@ -30,7 +29,6 @@ export function ChannelSidebar({
   onlineUserIds,
   onSelectChannel,
   onSelectDM,
-  onSelectBacklog,
   onCreateChannel,
   isAdmin = false,
   loading = false,
@@ -204,25 +202,6 @@ export function ChannelSidebar({
               )}
             </div>
           )}
-        </div>
-
-        {/* Backlog link */}
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={onSelectBacklog}
-            className={`flex items-center gap-2 w-full px-3 py-1.5 rounded-lg mx-1 text-sm transition-all duration-200 ease-spring ${
-              activeView === 'backlog'
-                ? 'bg-accent/10 text-text-primary shadow-[0_0_12px_rgba(255,214,10,0.08)]'
-                : 'text-text-secondary hover:bg-white/[0.03] hover:text-text-primary'
-            }`}
-            style={{ maxWidth: 'calc(100% - 0.5rem)' }}
-          >
-            <ListTodo
-              className={`h-4 w-4 flex-shrink-0 ${activeView === 'backlog' ? 'text-accent' : ''}`}
-            />
-            <span>Backlog</span>
-          </button>
         </div>
       </nav>
     </aside>

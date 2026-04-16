@@ -1,7 +1,4 @@
-import { ChevronUp } from 'lucide-react';
 import { PresenceIndicator } from './PresenceIndicator';
-import { BacklogItemCard } from './BacklogItem';
-import type { BacklogItem } from '@cc/shared';
 
 interface MemberInfo {
   userId: string;
@@ -12,10 +9,7 @@ interface MemberInfo {
 interface MemberPanelProps {
   members: Array<{ userId: string; name: string; email: string; avatarUrl?: string | null }>;
   onlineUserIds: Set<string>;
-  backlogPreview: BacklogItem[];
   onStartDM: (userId: string) => void;
-  onVote: (itemId: string, voteType: 'up' | 'down') => void;
-  onRemoveVote: (itemId: string) => void;
 }
 
 function getInitials(name: string): string {
@@ -27,14 +21,7 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-export function MemberPanel({
-  members,
-  onlineUserIds,
-  backlogPreview,
-  onStartDM,
-  onVote,
-  onRemoveVote,
-}: MemberPanelProps) {
+export function MemberPanel({ members, onlineUserIds, onStartDM }: MemberPanelProps) {
   const onlineMembers: MemberInfo[] = [];
   const offlineMembers: MemberInfo[] = [];
 
@@ -135,29 +122,6 @@ export function MemberPanel({
                     {member.name}
                   </span>
                 </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Backlog preview */}
-        {backlogPreview.length > 0 && (
-          <div className="px-3 pt-2">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary px-1 mb-2 flex items-center gap-1">
-              <ChevronUp className="h-3 w-3 text-accent" />
-              <span className="bg-gradient-to-r from-accent to-amber-600 bg-clip-text text-transparent">
-                Top Requests
-              </span>
-            </h3>
-            <div className="space-y-2">
-              {backlogPreview.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="animate-slide-up"
-                  style={{ animationDelay: `${index * 40}ms` }}
-                >
-                  <BacklogItemCard item={item} onVote={onVote} onRemoveVote={onRemoveVote} />
-                </div>
               ))}
             </div>
           </div>

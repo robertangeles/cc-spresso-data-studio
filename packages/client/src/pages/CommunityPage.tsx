@@ -12,12 +12,10 @@ import {
   joinChannel,
 } from '../hooks/useCommunity';
 import { useDMConversations, useDMMessages, createDMConversation } from '../hooks/useDMs';
-import { useBacklogItems } from '../hooks/useBacklog';
 import { getAccessToken } from '../lib/api';
 import { ChannelSidebar } from '../components/community/ChannelSidebar';
 import { MessageArea } from '../components/community/MessageArea';
 import { MemberPanel } from '../components/community/MemberPanel';
-import { BacklogBoard } from '../components/community/BacklogBoard';
 import type {
   CommunityChannel,
   CommunityMessage,
@@ -26,7 +24,7 @@ import type {
   ReactionGroup,
 } from '@cc/shared';
 
-type ViewMode = 'channel' | 'dm' | 'backlog';
+type ViewMode = 'channel' | 'dm';
 
 export function CommunityPage() {
   const { '*': routeWild } = useParams();
@@ -77,17 +75,6 @@ export function CommunityPage() {
   // Members for current channel
   const members = useChannelMembers(viewMode === 'channel' ? activeChannelId : null);
 
-  // Backlog preview (top 3 by score)
-  const {
-    items: backlogItems,
-    vote: backlogVote,
-    removeVote: backlogRemoveVote,
-  } = useBacklogItems();
-  const backlogPreview = useMemo(
-    () => [...backlogItems].sort((a, b) => b.score - a.score).slice(0, 3),
-    [backlogItems],
-  );
-
   // Online user IDs as a Set
   const onlineUserIds = useMemo(() => new Set(onlineUsers.keys()), [onlineUsers]);
 
@@ -115,7 +102,7 @@ export function CommunityPage() {
   useEffect(() => {
     if (!channels.length) return;
 
-    // Parse route: channel/:slug, dm/:id, backlog, or empty (default)
+    // Parse route: channel/:slug, dm/:id, or empty (default)
     const parts = routeWild?.split('/') ?? [];
 
     if (parts[0] === 'channel' && parts[1]) {
@@ -130,11 +117,6 @@ export function CommunityPage() {
     if (parts[0] === 'dm' && parts[1]) {
       setViewMode('dm');
       setActiveDMId(parts[1]);
-      return;
-    }
-
-    if (parts[0] === 'backlog') {
-      setViewMode('backlog');
       return;
     }
 
@@ -319,11 +301,6 @@ export function CommunityPage() {
     [navigate],
   );
 
-  const handleSelectBacklog = useCallback(() => {
-    setViewMode('backlog');
-    navigate('/community/backlog');
-  }, [navigate]);
-
   const handleSendMessage = useCallback(
     async (content: string) => {
       if (!activeChannelId || !socket) return;
@@ -419,14 +396,11 @@ export function CommunityPage() {
         onlineUserIds={onlineUserIds}
         onSelectChannel={handleSelectChannel}
         onSelectDM={handleSelectDM}
-        onSelectBacklog={handleSelectBacklog}
         isAdmin={isAdmin}
         loading={channelsLoading}
       />
 
-      {viewMode === 'backlog' ? (
-        <BacklogBoard isAdmin={isAdmin} />
-      ) : viewMode === 'channel' ? (
+      {viewMode === 'channel' ? (
         <div className="flex-1 flex relative">
           <MessageArea
             channel={activeChannel}
@@ -448,10 +422,7 @@ export function CommunityPage() {
             <MemberPanel
               members={members}
               onlineUserIds={onlineUserIds}
-              backlogPreview={backlogPreview}
               onStartDM={handleStartDM}
-              onVote={backlogVote}
-              onRemoveVote={backlogRemoveVote}
             />
           )}
         </div>
