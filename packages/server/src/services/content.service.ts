@@ -67,6 +67,9 @@ const DEFAULT_CHANNELS = [
 ];
 
 export async function seedChannels(): Promise<void> {
+  const validSlugs = DEFAULT_CHANNELS.map((ch) => ch.slug);
+
+  // Seed missing channels
   for (const ch of DEFAULT_CHANNELS) {
     const existing = await db.query.channels.findFirst({
       where: eq(schema.channels.slug, ch.slug),
@@ -74,6 +77,15 @@ export async function seedChannels(): Promise<void> {
     if (!existing) {
       await db.insert(schema.channels).values(ch);
       logger.info({ channel: ch.name }, 'Channel seeded');
+    }
+  }
+
+  // Remove channels that are no longer in the default list
+  const allChannels = await db.query.channels.findMany();
+  for (const ch of allChannels) {
+    if (!validSlugs.includes(ch.slug)) {
+      await db.delete(schema.channels).where(eq(schema.channels.id, ch.id));
+      logger.info({ channel: ch.name }, 'Channel removed (no longer in defaults)');
     }
   }
 }
