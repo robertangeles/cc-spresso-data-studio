@@ -1,6 +1,8 @@
 import { eq, and, desc, asc, sql, max } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
+import { logActivity } from './project-activity.service.js';
+import { uploadImage } from './cloudinary.service.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -98,10 +100,11 @@ export async function createProject(
     clientContacts?: unknown;
     startDate?: string;
     endDate?: string;
+    organisationId?: string;
   },
 ) {
-  return db.transaction(async (tx) => {
-    const [project] = await tx
+  const project = await db.transaction(async (tx) => {
+    const [proj] = await tx
       .insert(schema.projects)
       .values({
         userId,
@@ -112,6 +115,7 @@ export async function createProject(
         clientContacts: data.clientContacts ?? [],
         startDate: data.startDate ?? null,
         endDate: data.endDate ?? null,
+        organisationId: data.organisationId ?? null,
       })
       .returning();
 
@@ -124,15 +128,21 @@ export async function createProject(
 
     await tx.insert(schema.kanbanColumns).values(
       defaultColumns.map((col) => ({
-        projectId: project.id,
+        projectId: proj.id,
         name: col.name,
         color: col.color,
         sortOrder: col.sortOrder,
       })),
     );
 
-    return project;
+    return proj;
   });
+
+  logActivity(project.id, userId, 'project.created', 'project', project.id, {
+    name: project.name,
+  }).catch(() => {});
+
+  return project;
 }
 
 export async function getProject(projectId: string, userId: string) {
@@ -287,6 +297,8 @@ export async function createCard(
     tags?: unknown;
     flowId?: string;
     contentItemId?: string;
+    assigneeId?: string;
+    coverImageUrl?: string;
   },
 ) {
   await verifyProjectOwnership(projectId, userId);
@@ -311,8 +323,15 @@ export async function createCard(
       sortOrder: nextOrder,
       flowId: data.flowId ?? null,
       contentItemId: data.contentItemId ?? null,
+      assigneeId: data.assigneeId ?? null,
+      coverImageUrl: data.coverImageUrl ?? null,
     })
     .returning();
+
+  logActivity(projectId, userId, 'card.created', 'card', card.id, {
+    title: card.title,
+    columnId: card.columnId,
+  }).catch(() => {});
 
   return card;
 }
@@ -328,9 +347,11 @@ export async function updateCard(
     tags?: unknown;
     flowId?: string | null;
     contentItemId?: string | null;
+    assigneeId?: string | null;
+    coverImageUrl?: string | null;
   },
 ) {
-  await verifyCardOwnership(cardId, userId);
+  const ownership = await verifyCardOwnership(cardId, userId);
 
   const [updated] = await db
     .update(schema.kanbanCards)
@@ -338,13 +359,19 @@ export async function updateCard(
     .where(eq(schema.kanbanCards.id, cardId))
     .returning();
 
+  logActivity(ownership.projectId, userId, 'card.updated', 'card', cardId, {
+    changes: Object.keys(data),
+  }).catch(() => {});
+
   return updated;
 }
 
 export async function deleteCard(cardId: string, userId: string) {
-  await verifyCardOwnership(cardId, userId);
+  const ownership = await verifyCardOwnership(cardId, userId);
 
   await db.delete(schema.kanbanCards).where(eq(schema.kanbanCards.id, cardId));
+
+  logActivity(ownership.projectId, userId, 'card.deleted', 'card', cardId, {}).catch(() => {});
 }
 
 export async function moveCard(
@@ -353,13 +380,18 @@ export async function moveCard(
   columnId: string,
   sortOrder: number,
 ) {
-  await verifyCardOwnership(cardId, userId);
+  const ownership = await verifyCardOwnership(cardId, userId);
 
   const [updated] = await db
     .update(schema.kanbanCards)
     .set({ columnId, sortOrder, updatedAt: new Date() })
     .where(eq(schema.kanbanCards.id, cardId))
     .returning();
+
+  logActivity(ownership.projectId, userId, 'card.moved', 'card', cardId, {
+    toColumnId: columnId,
+    sortOrder,
+  }).catch(() => {});
 
   return updated;
 }
@@ -428,6 +460,10 @@ export async function addComment(
     where: eq(schema.users.id, userId),
     columns: { name: true },
   });
+
+  logActivity(projectId, userId, 'comment.added', 'comment', comment.id, {
+    cardId,
+  }).catch(() => {});
 
   return { ...comment, userName: user?.name ?? null };
 }
@@ -511,6 +547,12 @@ export async function addAttachment(
     })
     .returning();
 
+  logActivity(projectId, userId, 'attachment.added', 'attachment', attachment.id, {
+    cardId,
+    fileName: attachment.fileName,
+    type: attachment.type,
+  }).catch(() => {});
+
   return attachment;
 }
 
@@ -528,4 +570,279 @@ export async function deleteAttachment(projectId: string, userId: string, attach
   await db
     .delete(schema.kanbanCardAttachments)
     .where(eq(schema.kanbanCardAttachments.id, attachmentId));
+}
+
+/**
+ * Upload a file to Cloudinary and create an attachment record in one step.
+ * Accepts base64 data URI or raw base64 string.
+ */
+export async function uploadCardAttachment(
+  projectId: string,
+  userId: string,
+  cardId: string,
+  file: {
+    buffer: Buffer;
+    originalname: string;
+    size: number;
+    mimetype: string;
+  },
+) {
+  await verifyProjectOwnership(projectId, userId);
+
+  // Verify the card belongs to this project
+  const card = await db.query.kanbanCards.findFirst({
+    where: and(eq(schema.kanbanCards.id, cardId), eq(schema.kanbanCards.projectId, projectId)),
+    columns: { id: true },
+  });
+  if (!card) throw new NotFoundError('Card');
+
+  const base64 = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+  const publicId = `card_${cardId}_${Date.now()}`;
+
+  const { url } = await uploadImage(base64, {
+    folder: `projects/${projectId}/cards`,
+    publicId,
+    overwrite: false,
+  });
+
+  const type = file.mimetype.startsWith('image/') ? 'image' : 'file';
+
+  const [attachment] = await db
+    .insert(schema.kanbanCardAttachments)
+    .values({
+      cardId,
+      userId,
+      type,
+      url,
+      fileName: file.originalname,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+    })
+    .returning();
+
+  logActivity(projectId, userId, 'attachment.added', 'attachment', attachment.id, {
+    cardId,
+    fileName: file.originalname,
+    type,
+  }).catch(() => {});
+
+  return attachment;
+}
+
+// ---------------------------------------------------------------------------
+// Project Members
+// ---------------------------------------------------------------------------
+
+export async function listProjectMembers(projectId: string, userId: string) {
+  await verifyProjectOwnership(projectId, userId);
+
+  const members = await db
+    .select({
+      id: schema.projectMembers.id,
+      projectId: schema.projectMembers.projectId,
+      userId: schema.projectMembers.userId,
+      userName: schema.users.name,
+      userEmail: schema.users.email,
+      userAvatar: schema.userProfiles.avatarUrl,
+      role: schema.projectMembers.role,
+      addedAt: schema.projectMembers.addedAt,
+    })
+    .from(schema.projectMembers)
+    .innerJoin(schema.users, eq(schema.projectMembers.userId, schema.users.id))
+    .leftJoin(schema.userProfiles, eq(schema.projectMembers.userId, schema.userProfiles.userId))
+    .where(eq(schema.projectMembers.projectId, projectId))
+    .orderBy(asc(schema.projectMembers.addedAt));
+
+  return members;
+}
+
+export async function addProjectMember(
+  projectId: string,
+  userId: string,
+  data: { userId: string; role: string },
+) {
+  await verifyProjectOwnership(projectId, userId);
+
+  // Validate target user exists
+  const targetUser = await db.query.users.findFirst({
+    where: eq(schema.users.id, data.userId),
+    columns: { id: true },
+  });
+  if (!targetUser) throw new NotFoundError('User');
+
+  const [member] = await db
+    .insert(schema.projectMembers)
+    .values({
+      projectId,
+      userId: data.userId,
+      role: data.role ?? 'member',
+    })
+    .returning();
+
+  return member;
+}
+
+export async function updateProjectMemberRole(
+  projectId: string,
+  userId: string,
+  targetUserId: string,
+  role: string,
+) {
+  await verifyProjectOwnership(projectId, userId);
+
+  const existing = await db.query.projectMembers.findFirst({
+    where: and(
+      eq(schema.projectMembers.projectId, projectId),
+      eq(schema.projectMembers.userId, targetUserId),
+    ),
+  });
+  if (!existing) throw new NotFoundError('Project member');
+
+  const [updated] = await db
+    .update(schema.projectMembers)
+    .set({ role })
+    .where(
+      and(
+        eq(schema.projectMembers.projectId, projectId),
+        eq(schema.projectMembers.userId, targetUserId),
+      ),
+    )
+    .returning();
+
+  return updated;
+}
+
+export async function removeProjectMember(projectId: string, userId: string, targetUserId: string) {
+  await verifyProjectOwnership(projectId, userId);
+
+  const existing = await db.query.projectMembers.findFirst({
+    where: and(
+      eq(schema.projectMembers.projectId, projectId),
+      eq(schema.projectMembers.userId, targetUserId),
+    ),
+  });
+  if (!existing) throw new NotFoundError('Project member');
+
+  await db
+    .delete(schema.projectMembers)
+    .where(
+      and(
+        eq(schema.projectMembers.projectId, projectId),
+        eq(schema.projectMembers.userId, targetUserId),
+      ),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Card Labels
+// ---------------------------------------------------------------------------
+
+export async function listLabels(projectId: string, userId: string) {
+  await verifyProjectOwnership(projectId, userId);
+
+  return db.query.cardLabels.findMany({
+    where: eq(schema.cardLabels.projectId, projectId),
+    orderBy: [asc(schema.cardLabels.name)],
+  });
+}
+
+export async function createLabel(
+  projectId: string,
+  userId: string,
+  data: { name: string; color: string },
+) {
+  await verifyProjectOwnership(projectId, userId);
+
+  if (!data.name?.trim()) throw new Error('Label name is required');
+  if (!data.color?.trim()) throw new Error('Label color is required');
+
+  const [label] = await db
+    .insert(schema.cardLabels)
+    .values({ projectId, name: data.name.trim(), color: data.color.trim() })
+    .returning();
+
+  return label;
+}
+
+export async function updateLabel(
+  projectId: string,
+  userId: string,
+  labelId: string,
+  data: { name?: string; color?: string },
+) {
+  await verifyProjectOwnership(projectId, userId);
+
+  const existing = await db.query.cardLabels.findFirst({
+    where: and(eq(schema.cardLabels.id, labelId), eq(schema.cardLabels.projectId, projectId)),
+  });
+  if (!existing) throw new NotFoundError('Label');
+
+  const [updated] = await db
+    .update(schema.cardLabels)
+    .set({
+      ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+      ...(data.color !== undefined ? { color: data.color.trim() } : {}),
+    })
+    .where(eq(schema.cardLabels.id, labelId))
+    .returning();
+
+  return updated;
+}
+
+export async function deleteLabel(projectId: string, userId: string, labelId: string) {
+  await verifyProjectOwnership(projectId, userId);
+
+  const existing = await db.query.cardLabels.findFirst({
+    where: and(eq(schema.cardLabels.id, labelId), eq(schema.cardLabels.projectId, projectId)),
+  });
+  if (!existing) throw new NotFoundError('Label');
+
+  await db.delete(schema.cardLabels).where(eq(schema.cardLabels.id, labelId));
+}
+
+export async function assignLabel(
+  projectId: string,
+  userId: string,
+  cardId: string,
+  labelId: string,
+) {
+  await verifyProjectOwnership(projectId, userId);
+
+  // Verify card and label both belong to this project
+  const [card, label] = await Promise.all([
+    db.query.kanbanCards.findFirst({
+      where: and(eq(schema.kanbanCards.id, cardId), eq(schema.kanbanCards.projectId, projectId)),
+      columns: { id: true },
+    }),
+    db.query.cardLabels.findFirst({
+      where: and(eq(schema.cardLabels.id, labelId), eq(schema.cardLabels.projectId, projectId)),
+      columns: { id: true },
+    }),
+  ]);
+
+  if (!card) throw new NotFoundError('Card');
+  if (!label) throw new NotFoundError('Label');
+
+  // Upsert — ignore conflict on duplicate
+  await db.insert(schema.cardLabelAssignments).values({ cardId, labelId }).onConflictDoNothing();
+
+  return { cardId, labelId };
+}
+
+export async function removeCardLabel(
+  projectId: string,
+  userId: string,
+  cardId: string,
+  labelId: string,
+) {
+  await verifyProjectOwnership(projectId, userId);
+
+  await db
+    .delete(schema.cardLabelAssignments)
+    .where(
+      and(
+        eq(schema.cardLabelAssignments.cardId, cardId),
+        eq(schema.cardLabelAssignments.labelId, labelId),
+      ),
+    );
 }
