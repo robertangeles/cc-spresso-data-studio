@@ -11,3 +11,4 @@ export * from './content.types.js';
 export * from './community.types.js';
 export * from './project.types.js';
 export * from './organisation.types.js';
+export * from './client.types.js';

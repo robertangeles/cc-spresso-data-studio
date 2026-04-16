@@ -36,6 +36,7 @@ import { tiktokOAuthRoutes } from './oauth/tiktok.routes.js';
 import { aiGenerationRoutes } from './ai-generation.routes.js';
 import { projectRoutes } from './project.routes.js';
 import { organisationRoutes } from './organisation.routes.js';
+import { clientRoutes } from './client.routes.js';
 
 const router = Router();
 
@@ -82,6 +83,7 @@ router.use('/backlog', backlogRoutes);
 router.use('/pages', pagesRoutes);
 router.use('/projects', projectRoutes);
 router.use('/organisations', organisationRoutes);
+router.use('/clients', clientRoutes);
 
 // Connected-platforms lookup (used by Content Builder for status dots + hint banner)
 router.get('/oauth/connected', authenticate, async (req, res, next) => {

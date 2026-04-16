@@ -18,6 +18,7 @@ export interface Project {
   status: ProjectStatus;
   clientName: string | null;
   clientContacts: ClientContact[];
+  clientId: string | null;
   startDate: string | null;
   endDate: string | null;
   createdAt: string;

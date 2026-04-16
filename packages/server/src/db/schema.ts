@@ -1440,6 +1440,8 @@ export const projects = pgTable(
     endDate: date('end_date'),
     // Plain UUID — FK constraint to organisations added once that table is stable
     organisationId: uuid('organisation_id'),
+    // FK → clients.id; nullable, set null on client delete
+    clientId: uuid('client_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1447,6 +1449,8 @@ export const projects = pgTable(
     index('idx_projects_user_id').on(t.userId),
     // Index: list projects for an organisation
     index('idx_projects_organisation_id').on(t.organisationId),
+    // Index: list projects for a client
+    index('idx_projects_client_id').on(t.clientId),
   ],
 );
 
@@ -1739,5 +1743,104 @@ export const projectActivities = pgTable(
     index('idx_project_activities_user_id').on(t.userId),
     // Composite: efficient descending feed query (project_id + created_at)
     index('idx_project_activities_project_created').on(t.projectId, t.createdAt),
+  ],
+);
+
+// ============================================================
+// CLIENTS (enterprise client registry per organisation)
+// Normal form: 2NF — every non-key column depends only on PK
+// OLTP table
+// ============================================================
+
+export const clients = pgTable(
+  'clients',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organisationId: uuid('organisation_id')
+      .notNull()
+      .references(() => organisations.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    industry: varchar('industry', { length: 100 }),
+    website: text('website'),
+    logoUrl: text('logo_url'),
+    // 'startup' | 'small' | 'medium' | 'large' | 'enterprise'
+    companySize: varchar('company_size', { length: 50 }),
+    abnTaxId: varchar('abn_tax_id', { length: 50 }),
+    addressLine1: varchar('address_line1', { length: 255 }),
+    addressLine2: varchar('address_line2', { length: 255 }),
+    city: varchar('city', { length: 100 }),
+    state: varchar('state', { length: 100 }),
+    postalCode: varchar('postal_code', { length: 20 }),
+    country: varchar('country', { length: 100 }),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: list clients for an organisation
+    index('idx_clients_org_id').on(t.organisationId),
+    // Index: search clients by name
+    index('idx_clients_name').on(t.name),
+  ],
+);
+
+// ============================================================
+// CLIENT CONTACTS (people at a client company)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const clientContacts = pgTable(
+  'client_contacts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    email: varchar('email', { length: 255 }),
+    phone: varchar('phone', { length: 50 }),
+    // e.g. 'CTO', 'Data Lead', 'Project Sponsor'
+    role: varchar('role', { length: 100 }),
+    isPrimary: boolean('is_primary').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: list contacts for a client
+    index('idx_client_contacts_client_id').on(t.clientId),
+  ],
+);
+
+// ============================================================
+// CLIENT CONTRACTS (engagement contracts per client)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const clientContracts = pgTable(
+  'client_contracts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    // e.g. 'Data Warehouse Build Phase 1'
+    name: varchar('name', { length: 255 }).notNull(),
+    // 'fixed-price' | 'time-materials' | 'retainer' | 'sow'
+    contractType: varchar('contract_type', { length: 50 }),
+    // 'draft' | 'active' | 'completed' | 'cancelled'
+    status: varchar('status', { length: 30 }).notNull().default('draft'),
+    startDate: date('start_date'),
+    endDate: date('end_date'),
+    billingRate: numeric('billing_rate', { precision: 10, scale: 2 }),
+    billingCurrency: varchar('billing_currency', { length: 3 }).notNull().default('AUD'),
+    slaTerms: text('sla_terms'),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: list contracts for a client
+    index('idx_client_contracts_client_id').on(t.clientId),
   ],
 );
