@@ -9,6 +9,7 @@ import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ProjectsListPage } from './pages/ProjectsListPage';
+import { ProjectsLayout } from './pages/ProjectsLayout';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
 import { FlowBuilderPage } from './pages/FlowBuilderPage';
@@ -78,8 +79,10 @@ export function App() {
               <Route element={<ProtectedRoute />}>
                 <Route element={<AppLayout />}>
                   <Route path="/chat" element={<ChatPage />} />
-                  <Route path="/projects" element={<ProjectsListPage />} />
-                  <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+                  <Route path="/projects" element={<ProjectsLayout />}>
+                    <Route index element={<ProjectsListPage />} />
+                    <Route path=":projectId" element={<ProjectDetailPage />} />
+                  </Route>
                   <Route path="/flows" element={<WorkflowsPage />} />
                   <Route path="/flows/:id" element={<FlowBuilderPage />} />
                   <Route path="/skills" element={<SkillsCatalogPage />} />
