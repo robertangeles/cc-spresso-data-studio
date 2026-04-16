@@ -35,7 +35,7 @@ const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/skills', label: 'Skills', icon: Zap },
   { to: '/flows', label: 'Workflows', icon: Workflow },
-  { to: '/content', label: 'Content Studio', icon: PenTool },
+  { to: '/content', label: 'Data Studio', icon: PenTool },
   { to: '/content/library', label: 'Content Library', icon: Library },
   { to: '/community', label: 'The Brew', icon: Users },
 ];

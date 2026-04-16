@@ -559,7 +559,7 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
                           openPickerFromHistory(run.id);
                         }}
                         className="px-1.5 py-2 text-text-tertiary hover:text-accent transition-colors"
-                        title="Send to Content Studio"
+                        title="Send to Data Studio"
                       >
                         <Send className="h-3 w-3" />
                       </button>
@@ -608,7 +608,7 @@ export function RunFlowTab({ flow }: RunFlowTabProps) {
                 </div>
                 <div>
                   <h4 className="text-base font-semibold text-text-primary group-hover:text-accent transition-colors">
-                    Send to Content Studio
+                    Send to Data Studio
                   </h4>
                   <p className="text-sm text-text-tertiary">
                     Select outputs, map to editor fields, and start publishing
@@ -878,7 +878,7 @@ function LiveStepCard({
               type="button"
               onClick={() => onSendToStudio(step)}
               className="flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/20 hover:border-accent/50 hover:shadow-[0_0_8px_rgba(255,214,10,0.1)] transition-all"
-              title="Send this step's output to Content Studio"
+              title="Send this step's output to Data Studio"
             >
               <Send className="h-3 w-3" />
               Send to Studio

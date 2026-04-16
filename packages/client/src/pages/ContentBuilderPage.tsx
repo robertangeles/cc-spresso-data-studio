@@ -597,9 +597,7 @@ export function ContentBuilderPage() {
       <div className="flex items-center justify-between border-b border-accent/10 bg-gradient-to-r from-surface-2 to-surface-1 px-4 py-2.5">
         <div className="flex items-center gap-3">
           <PenTool className="h-5 w-5 text-accent" />
-          <h1 className="text-lg font-semibold text-text-primary hidden lg:block">
-            Content Studio
-          </h1>
+          <h1 className="text-lg font-semibold text-text-primary hidden lg:block">Data Studio</h1>
           <h1 className="text-lg font-semibold text-text-primary lg:hidden">CB</h1>
 
           {/* Step indicator */}
@@ -622,7 +620,7 @@ export function ContentBuilderPage() {
                 setCalendarRefreshKey((k) => k + 1);
               }}
               disabled={builder.isSaving}
-              title="Reset Content Studio"
+              title="Reset Data Studio"
             >
               <RotateCcw className="mr-1.5 h-4 w-4" />
               Reset

@@ -486,7 +486,7 @@ export function AuthSettingsPage() {
                 label="From Name"
                 value={emailConfig.fromName}
                 onChange={(e) => setEmailConfig({ ...emailConfig, fromName: e.target.value })}
-                placeholder="Spresso Content Studio"
+                placeholder="Spresso Data Studio"
               />
 
               {emailTestResult && (

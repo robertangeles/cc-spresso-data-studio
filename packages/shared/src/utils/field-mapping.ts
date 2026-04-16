@@ -1,5 +1,5 @@
 /**
- * Smart field mapping for orchestration outputs → Content Studio editor.
+ * Smart field mapping for orchestration outputs → Data Studio editor.
  *
  * Heuristic rules map output key names to editor targets (title, mainBody,
  * imageUrl, or platform-specific bodies).  Unknown keys fall through to
@@ -104,7 +104,7 @@ export function buildOutputFields(
 
 /**
  * Resolve a list of output fields (with user-overridden targets) into
- * the final mapped fields for the Content Studio editor.
+ * the final mapped fields for the Data Studio editor.
  */
 export function resolveFields(
   fields: Array<{ key: string; value: string; target: MappingTarget }>,

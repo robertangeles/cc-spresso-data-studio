@@ -2,31 +2,31 @@ import { useCallback, useState } from 'react';
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import { PulsingGrid } from './PulsingGrid';
 
-// Platform preview cards — only verified, working platforms
-const HERO_PLATFORMS = [
+// Data modelling output preview cards
+const HERO_OUTPUTS = [
   {
-    name: 'LinkedIn',
-    color: '#0A66C2',
-    icon: 'in',
+    name: 'Star Schema',
+    color: '#3B82F6',
+    icon: '⭐',
     rotation: -3,
-    text: "I've been remote for 3 years. Here are the 5 biggest shifts that made all the difference...",
-    meta: '312/3000',
+    text: 'fact_sales → dim_customer, dim_product, dim_date, dim_store',
+    meta: 'Kimball',
   },
   {
-    name: 'X',
-    color: '#1DA1F2',
-    icon: '𝕏',
+    name: 'Data Vault',
+    color: '#8B5CF6',
+    icon: '🔐',
     rotation: 1,
-    text: '5 remote work tips that actually changed my daily routine 🧵',
-    meta: '187/280',
+    text: 'hub_customer → sat_customer_details, lnk_customer_order',
+    meta: 'DV 2.0',
   },
   {
-    name: 'Bluesky',
-    color: '#0085FF',
-    icon: '🦋',
+    name: 'Data Dictionary',
+    color: '#10B981',
+    icon: '📖',
     rotation: 4,
-    text: 'Remote work changed everything for me. Here are 5 things I do differently now ↓',
-    meta: '198/300',
+    text: 'customer_id: UUID PK — Unique identifier for each customer entity',
+    meta: 'Auto-gen',
   },
 ];
 
@@ -74,7 +74,8 @@ export function HeroSection({ onGetStarted, onScrollToHowItWorks }: HeroSectionP
               className="font-display text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.05] tracking-tight text-text-primary animate-slide-up"
               style={{ animationDelay: '200ms', animationFillMode: 'both' }}
             >
-              Turn one idea into <span className="text-gradient-amber">platform-ready posts</span>
+              Turn raw schemas into{' '}
+              <span className="text-gradient-amber">production-ready models</span>
             </h1>
 
             {/* Subheadline */}
@@ -82,8 +83,8 @@ export function HeroSection({ onGetStarted, onScrollToHowItWorks }: HeroSectionP
               className="mt-6 text-lg md:text-xl text-text-secondary font-heading leading-relaxed max-w-lg mx-auto lg:mx-0 animate-slide-up"
               style={{ animationDelay: '350ms', animationFillMode: 'both' }}
             >
-              Spresso helps coaches, consultants, and founder-creators turn one input into adapted
-              posts for LinkedIn, X, Facebook, and Bluesky — from one guided workflow.
+              Spresso helps data engineers and architects transform source schemas into Kimball star
+              schemas, Data Vault models, ERDs, and data dictionaries — powered by AI.
             </p>
 
             {/* CTAs */}
@@ -95,7 +96,7 @@ export function HeroSection({ onGetStarted, onScrollToHowItWorks }: HeroSectionP
                 onClick={onGetStarted}
                 className="group relative flex items-center gap-3 px-8 py-4 text-base font-semibold text-text-inverse bg-gradient-to-r from-accent to-amber-500 rounded-xl hover:from-accent-hover hover:to-amber-400 transition-all duration-300 hover:-translate-y-1 hover:shadow-glow-strong"
               >
-                Create your first post set
+                Start modelling for free
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </button>
               <button
@@ -129,17 +130,17 @@ export function HeroSection({ onGetStarted, onScrollToHowItWorks }: HeroSectionP
                     <div className="h-2.5 w-2.5 rounded-full bg-green-500/60" />
                   </div>
                   <span className="ml-3 text-[10px] font-mono text-text-tertiary/50">
-                    spresso — content editor
+                    spresso — data modelling studio
                   </span>
                 </div>
 
-                {/* Platform tabs — only verified platforms */}
+                {/* Model type tabs */}
                 <div className="flex gap-2 mb-3">
                   {[
-                    { name: 'LinkedIn', color: '#0A66C2' },
-                    { name: 'X', color: '#1DA1F2' },
-                    { name: 'Facebook', color: '#1877F2' },
-                    { name: 'Bluesky', color: '#0085FF' },
+                    { name: 'Star Schema', color: '#3B82F6' },
+                    { name: 'Data Vault', color: '#8B5CF6' },
+                    { name: '3NF', color: '#10B981' },
+                    { name: 'Dictionary', color: '#F59E0B' },
                   ].map((p, i) => (
                     <div
                       key={p.name}
@@ -154,75 +155,75 @@ export function HeroSection({ onGetStarted, onScrollToHowItWorks }: HeroSectionP
                   ))}
                 </div>
 
-                {/* Editor content */}
-                <div className="space-y-2 font-editor text-[13px] leading-relaxed">
-                  <p className="text-text-primary/90 font-medium">
-                    5 productivity tips that changed how I work remotely
+                {/* Schema content */}
+                <div className="space-y-1.5 font-mono text-[11px] leading-relaxed">
+                  <p className="text-blue-400">
+                    CREATE TABLE <span className="text-text-primary">fact_sales</span> (
                   </p>
-                  <p className="text-text-secondary/60 text-[12px]">
-                    I wasted my first year working from home. Meetings bled into deep work, Slack
-                    never stopped...
+                  <p className="text-text-secondary/70 pl-4">
+                    sale_id <span className="text-amber-400">UUID</span> PRIMARY KEY,
                   </p>
-                </div>
-
-                {/* Character count bar */}
-                <div className="mt-3 flex items-center gap-3">
-                  <div className="flex-1 h-1.5 rounded-full bg-surface-3/40 overflow-hidden">
-                    <div className="h-full w-3/5 rounded-full bg-gradient-to-r from-emerald-500 to-accent" />
-                  </div>
-                  <span className="text-[10px] font-mono text-text-tertiary">168/280</span>
+                  <p className="text-text-secondary/70 pl-4">
+                    customer_key <span className="text-amber-400">UUID</span> REFERENCES
+                    dim_customer,
+                  </p>
+                  <p className="text-text-secondary/70 pl-4">
+                    product_key <span className="text-amber-400">UUID</span> REFERENCES dim_product,
+                  </p>
+                  <p className="text-text-secondary/70 pl-4">
+                    amount <span className="text-amber-400">DECIMAL</span>(12,2)
+                  </p>
+                  <p className="text-blue-400">);</p>
                 </div>
 
                 {/* Bottom toolbar */}
-                <div className="mt-2 flex items-center justify-between pt-2 border-t border-border-subtle">
+                <div className="mt-3 flex items-center justify-between pt-2 border-t border-border-subtle">
                   <div className="flex items-center gap-2">
                     <div className="px-2 py-0.5 rounded bg-surface-3/50 text-[9px] font-mono text-text-tertiary">
-                      Ctrl+Shift+A
+                      AI-generated
                     </div>
-                    <span className="text-[10px] text-text-tertiary/50">Adapt all</span>
+                    <span className="text-[10px] text-text-tertiary/50">from 12 source tables</span>
                   </div>
                   <div className="px-3 py-1 rounded-md bg-accent/10 border border-accent/20 text-[10px] font-semibold text-accent">
-                    Adapt
+                    Export DDL
                   </div>
                 </div>
               </div>
 
-              {/* Platform cards — overlapping row */}
+              {/* Output cards — overlapping row */}
               <div className="relative z-20 flex justify-center gap-3 -mt-10 px-1">
-                {HERO_PLATFORMS.map((platform, i) => (
+                {HERO_OUTPUTS.map((output, i) => (
                   <div
-                    key={platform.name}
+                    key={output.name}
                     className="w-[160px] shrink-0 rounded-xl border border-border-subtle bg-surface-1 backdrop-blur-md p-3 shadow-dark-lg transition-all duration-500 hover:-translate-y-2 hover:shadow-glow-accent"
                     style={{
-                      transform: `rotate(${platform.rotation}deg) translateY(${i === 1 ? -8 : 0}px)`,
+                      transform: `rotate(${output.rotation}deg) translateY(${i === 1 ? -8 : 0}px)`,
                       animation: `slide-up-lg 700ms cubic-bezier(0.22, 1, 0.36, 1) both`,
                       animationDelay: `${700 + i * 120}ms`,
-                      boxShadow: `0 0 24px ${platform.color}18, 0 8px 24px rgba(0,0,0,0.5)`,
+                      boxShadow: `0 0 24px ${output.color}18, 0 8px 24px rgba(0,0,0,0.5)`,
                     }}
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="flex items-center gap-1.5">
                         <div
                           className="h-5 w-5 rounded-md flex items-center justify-center text-[9px] font-bold"
-                          style={{ backgroundColor: `${platform.color}20`, color: platform.color }}
+                          style={{ backgroundColor: `${output.color}20`, color: output.color }}
                         >
-                          {platform.icon}
+                          {output.icon}
                         </div>
                         <span className="text-[11px] font-semibold text-text-primary">
-                          {platform.name}
+                          {output.name}
                         </span>
                       </div>
-                      <span className="text-[8px] font-mono text-text-tertiary">
-                        {platform.meta}
-                      </span>
+                      <span className="text-[8px] font-mono text-text-tertiary">{output.meta}</span>
                     </div>
-                    <p className="text-[10px] text-text-secondary/70 leading-relaxed line-clamp-2">
-                      {platform.text}
+                    <p className="text-[10px] text-text-secondary/70 leading-relaxed line-clamp-2 font-mono">
+                      {output.text}
                     </p>
                     <div
                       className="mt-2 h-px w-full rounded"
                       style={{
-                        background: `linear-gradient(to right, ${platform.color}40, transparent)`,
+                        background: `linear-gradient(to right, ${output.color}40, transparent)`,
                       }}
                     />
                   </div>

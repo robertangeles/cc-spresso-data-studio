@@ -192,7 +192,7 @@ export function OutputPickerModal({
           <div>
             <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
               <Send className="h-4 w-4 text-accent" />
-              Send to Content Studio
+              Send to Data Studio
             </h3>
             <p className="text-xs text-text-tertiary mt-0.5">
               Select outputs and map them to editor fields

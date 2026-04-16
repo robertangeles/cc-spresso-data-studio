@@ -15,6 +15,11 @@ import { publishToLinkedIn } from './publishers/linkedin.publisher.js';
 import { publishToTwitter } from './publishers/twitter.publisher.js';
 import { publishToPinterest } from './publishers/pinterest.publisher.js';
 import { publishToYouTube } from './publishers/youtube.publisher.js';
+import {
+  publishToTikTok,
+  checkTikTokPublishStatus,
+  type TikTokPublishStatusResponse,
+} from './publishers/tiktok.publisher.js';
 
 /**
  * List all scheduled posts for a user, ordered by scheduledAt asc, pending first.
@@ -337,7 +342,7 @@ export async function processDuePosts(): Promise<number> {
         }
         // Attempt auto-publish to Pinterest
         if (channelSlug === 'pinterest') {
-          // Per-post metadata (boardId, link) set in Content Studio at schedule time
+          // Per-post metadata (boardId, link) set in Data Studio at schedule time
           const postMeta = (post.metadata ?? {}) as { boardId?: string; link?: string };
           // Fall back to account-level default board if not set per-post
           const acctMeta = (account.metadata ?? {}) as { defaultBoardId?: string };
@@ -381,6 +386,7 @@ export async function processDuePosts(): Promise<number> {
               const provider = (await import('./oauth/oauth.service.js')).getOAuthProvider(
                 'youtube',
               );
+              // account.refreshToken is already decrypted by getConnectedAccountById/getConnectedAccount
               const newTokens = await provider.refreshToken(account.refreshToken);
               await updateAccountTokens(account.id, {
                 accessToken: newTokens.accessToken,
@@ -423,6 +429,89 @@ export async function processDuePosts(): Promise<number> {
             }
           }
         }
+        // Attempt auto-publish to TikTok (ASYNC — returns publish_id, not final status)
+        if (channelSlug === 'tiktok') {
+          // Refresh token if expired
+          if (
+            account.tokenExpiresAt &&
+            account.tokenExpiresAt < new Date() &&
+            account.refreshToken
+          ) {
+            try {
+              const provider = (await import('./oauth/oauth.service.js')).getOAuthProvider(
+                'tiktok',
+              );
+              const newTokens = await provider.refreshToken(account.refreshToken);
+              await updateAccountTokens(account.id, {
+                accessToken: newTokens.accessToken,
+                refreshToken: newTokens.refreshToken ?? account.refreshToken,
+              });
+              account.accessToken = newTokens.accessToken;
+              logger.info({ postId: post.id }, 'TikTok token refreshed before publish');
+            } catch (refreshErr) {
+              publishError = 'TikTok token refresh failed — reconnect your account';
+              logger.error({ err: refreshErr, postId: post.id }, 'TikTok token refresh failed');
+            }
+          }
+
+          const postMeta = (post.metadata ?? {}) as {
+            privacyLevel?: string;
+            disableComment?: boolean;
+            disableDuet?: boolean;
+            disableStitch?: boolean;
+            brandContentToggle?: boolean;
+            brandOrganicToggle?: boolean;
+            isAigc?: boolean;
+            coverImageIndex?: number;
+          };
+          const videoUrl = contentItem.videoUrl;
+
+          if (publishError) {
+            // Token refresh failed — skip
+          } else if (!videoUrl) {
+            publishError = 'TikTok requires a video — upload a video to this content item';
+          } else {
+            const result = await publishToTikTok({
+              accessToken: account.accessToken,
+              videoUrl,
+              caption: contentItem.body,
+              privacyLevel:
+                (postMeta.privacyLevel as
+                  | 'PUBLIC_TO_EVERYONE'
+                  | 'MUTUAL_FOLLOW_FRIENDS'
+                  | 'FOLLOWER_OF_CREATOR'
+                  | 'SELF_ONLY') ?? 'PUBLIC_TO_EVERYONE',
+              disableComment: postMeta.disableComment,
+              disableDuet: postMeta.disableDuet,
+              disableStitch: postMeta.disableStitch,
+              brandContentToggle: postMeta.brandContentToggle,
+              brandOrganicToggle: postMeta.brandOrganicToggle,
+              isAigc: postMeta.isAigc,
+              coverImageIndex: postMeta.coverImageIndex,
+            });
+
+            if (result.success && result.publishId) {
+              // TikTok is ASYNC — mark as 'processing', not 'published'
+              // The pollTikTokProcessingPosts() job will check for completion
+              await db
+                .update(schema.scheduledPosts)
+                .set({
+                  status: 'processing',
+                  metadata: { ...(post.metadata as object), tiktokPublishId: result.publishId },
+                  updatedAt: now,
+                })
+                .where(eq(schema.scheduledPosts.id, post.id));
+              logger.info(
+                { postId: post.id, publishId: result.publishId },
+                'TikTok publish initiated — polling for completion',
+              );
+              continue; // Skip the normal published/failed logic below
+            } else {
+              publishError = result.error ?? 'TikTok publish failed';
+              logger.warn({ postId: post.id, error: result.error }, 'TikTok auto-publish failed');
+            }
+          }
+        }
       } else if (channelSlug) {
         publishError = `No connected ${channelSlug} account found`;
       }
@@ -460,4 +549,135 @@ export async function processDuePosts(): Promise<number> {
   }
 
   return duePosts.length;
+}
+
+/**
+ * Poll TikTok publish status for posts in 'processing' state.
+ * Called every 30 seconds by the cron job.
+ *
+ * TikTok's async publish flow:
+ *   1. publishToTikTok() returns a publish_id → post status = 'processing'
+ *   2. This function polls TikTok's status endpoint
+ *   3. When PUBLISH_COMPLETE → mark published
+ *   4. When FAILED → mark failed with reason
+ *   5. Stale check: if processing > 10 minutes → mark failed (timeout)
+ */
+export async function pollTikTokProcessingPosts(): Promise<number> {
+  const now = new Date();
+  const STALE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+  // Find all posts in 'processing' state (TikTok async publishes)
+  const processingPosts = await db.query.scheduledPosts.findMany({
+    where: eq(schema.scheduledPosts.status, 'processing'),
+  });
+
+  if (processingPosts.length === 0) return 0;
+
+  let completed = 0;
+
+  for (const post of processingPosts) {
+    const meta = (post.metadata ?? {}) as { tiktokPublishId?: string };
+    const publishId = meta.tiktokPublishId;
+
+    if (!publishId) {
+      // No publish_id — shouldn't happen, mark failed
+      await db
+        .update(schema.scheduledPosts)
+        .set({ status: 'failed', error: 'Missing TikTok publish ID', updatedAt: now })
+        .where(eq(schema.scheduledPosts.id, post.id));
+      completed++;
+      continue;
+    }
+
+    // Stale check: if processing for too long, mark as failed
+    const postUpdated = post.updatedAt ?? post.createdAt;
+    if (postUpdated && now.getTime() - postUpdated.getTime() > STALE_TIMEOUT_MS) {
+      logger.warn(
+        { postId: post.id, publishId },
+        'TikTok publish timed out (>10min) — marking as failed',
+      );
+      await db
+        .update(schema.scheduledPosts)
+        .set({ status: 'failed', error: 'TikTok publishing timed out', updatedAt: now })
+        .where(eq(schema.scheduledPosts.id, post.id));
+      completed++;
+      continue;
+    }
+
+    // Resolve the social account to get the access token
+    const account = post.socialAccountId
+      ? await getConnectedAccountById(post.socialAccountId)
+      : null;
+
+    if (!account?.accessToken) {
+      await db
+        .update(schema.scheduledPosts)
+        .set({
+          status: 'failed',
+          error: 'TikTok account disconnected during processing',
+          updatedAt: now,
+        })
+        .where(eq(schema.scheduledPosts.id, post.id));
+      completed++;
+      continue;
+    }
+
+    try {
+      const statusRes: TikTokPublishStatusResponse = await checkTikTokPublishStatus(
+        account.accessToken,
+        publishId,
+      );
+
+      const status = statusRes.data?.status;
+
+      if (status === 'PUBLISH_COMPLETE') {
+        const tiktokPostId = statusRes.data?.publicaly_available_post_id?.[0];
+        await db
+          .update(schema.scheduledPosts)
+          .set({
+            status: 'published',
+            publishedAt: now,
+            metadata: { ...(post.metadata as object), tiktokPostId },
+            updatedAt: now,
+          })
+          .where(eq(schema.scheduledPosts.id, post.id));
+
+        await db
+          .update(schema.contentItems)
+          .set({ status: 'published', updatedAt: now })
+          .where(eq(schema.contentItems.id, post.contentItemId));
+
+        logger.info({ postId: post.id, publishId, tiktokPostId }, 'TikTok publish complete');
+        completed++;
+      } else if (status === 'FAILED') {
+        const reason = statusRes.data?.fail_reason ?? 'Unknown failure';
+        await db
+          .update(schema.scheduledPosts)
+          .set({
+            status: 'failed',
+            error: `TikTok rejected: ${reason}`,
+            updatedAt: now,
+          })
+          .where(eq(schema.scheduledPosts.id, post.id));
+
+        logger.warn({ postId: post.id, publishId, reason }, 'TikTok publish failed');
+        completed++;
+      } else {
+        // Still processing (PROCESSING_UPLOAD, PROCESSING_DOWNLOAD, SEND_TO_USER_INBOX)
+        logger.debug({ postId: post.id, publishId, status }, 'TikTok still processing');
+      }
+    } catch (err) {
+      // Network error during poll — don't mark as failed, try again next cycle
+      logger.error(
+        { err, postId: post.id, publishId },
+        'TikTok status poll failed — will retry next cycle',
+      );
+    }
+  }
+
+  if (completed > 0) {
+    logger.info({ completed, total: processingPosts.length }, 'TikTok publish status poll cycle');
+  }
+
+  return completed;
 }

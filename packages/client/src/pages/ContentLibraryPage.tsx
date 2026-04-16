@@ -177,7 +177,7 @@ export function ContentLibraryPage() {
       const existing = localStorage.getItem(ORCHESTRATION_RELAY_KEY);
       if (existing) {
         const proceed = window.confirm(
-          'You have unsaved work in Content Studio. Opening remix will replace it. Continue?',
+          'You have unsaved work in Data Studio. Opening remix will replace it. Continue?',
         );
         if (!proceed) return;
       }
@@ -226,7 +226,7 @@ export function ContentLibraryPage() {
       const existing = localStorage.getItem(ORCHESTRATION_RELAY_KEY);
       if (existing) {
         const proceed = window.confirm(
-          'You have unsaved work in Content Studio. Opening repurposed content will replace it. Continue?',
+          'You have unsaved work in Data Studio. Opening repurposed content will replace it. Continue?',
         );
         if (!proceed) return;
       }

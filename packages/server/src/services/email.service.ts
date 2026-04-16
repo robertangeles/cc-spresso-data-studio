@@ -91,14 +91,14 @@ export async function sendEmail(
 /** Send a test email to verify Resend configuration. */
 export async function sendTestEmail(to: string): Promise<void> {
   const subject = 'Spresso — Email Configuration Test';
-  const text = `Hi there,\n\nThis is a test email from your Spresso instance to confirm email is configured correctly.\n\nSent at: ${new Date().toISOString()}\n\nCheers,\nSpresso Content Studio`;
+  const text = `Hi there,\n\nThis is a test email from your Spresso instance to confirm email is configured correctly.\n\nSent at: ${new Date().toISOString()}\n\nCheers,\nSpresso Data Studio`;
   const html = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; max-width:480px; margin:0 auto; padding:32px;">
   <h2 style="color:#333; margin-bottom:16px;">Email Configuration Test</h2>
   <p style="color:#555; line-height:1.6;">Hi there,</p>
   <p style="color:#555; line-height:1.6;">This is a test email from your Spresso instance to confirm that email is configured correctly.</p>
   <p style="color:#999; font-size:13px; margin-top:24px;">Sent at: ${new Date().toISOString()}</p>
-  <p style="color:#555; line-height:1.6;">Cheers,<br/>Spresso Content Studio</p>
+  <p style="color:#555; line-height:1.6;">Cheers,<br/>Spresso Data Studio</p>
 </div>`;
   await sendEmail(to, subject, html, text);
 }

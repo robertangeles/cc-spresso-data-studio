@@ -101,7 +101,7 @@ export function AuthSlideOver({
               </h2>
               <p className="mt-1 text-sm text-text-tertiary">
                 {mode === 'login'
-                  ? 'Sign in to your content studio'
+                  ? 'Sign in to your data studio'
                   : "Create your account — it's free during beta"}
               </p>
             </div>
