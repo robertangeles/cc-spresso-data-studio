@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings2 } from 'lucide-react';
+import { Settings2 } from 'lucide-react';
 import { useProject } from '../hooks/useProjects';
 import { KanbanBoard } from '../components/projects/KanbanBoard';
 import { ProjectSidebar } from '../components/projects/ProjectSidebar';
@@ -82,15 +82,6 @@ export function ProjectDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => navigate('/projects')}
-            className="flex items-center gap-1.5 text-sm text-text-tertiary hover:text-text-secondary transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Projects
-          </button>
-          <div className="h-5 w-px bg-border-subtle" />
           <div>
             <h1 className="text-lg font-bold tracking-tight text-text-primary">{project.name}</h1>
             {project.clientName && (
