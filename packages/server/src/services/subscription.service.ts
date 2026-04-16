@@ -440,7 +440,7 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
             userEmail: welcomeUser.email,
             planName: welcomePlan.displayName,
             creditsAllocated: String(welcomePlan.creditsPerMonth),
-            appName: 'Spresso',
+            appName: 'Spresso Data Studio',
             appUrl: 'https://spresso.xyz',
           });
         }
@@ -494,7 +494,7 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
               previousPlan: oldPlan?.displayName ?? 'Free',
               creditsAllocated: String(newPlan.creditsPerMonth),
               creditDelta: `${creditDelta > 0 ? '+' : ''}${creditDelta.toLocaleString()}`,
-              appName: 'Spresso',
+              appName: 'Spresso Data Studio',
               appUrl: 'https://spresso.xyz',
             });
           }
@@ -536,7 +536,7 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
               userName: cancelUser.name,
               userEmail: cancelUser.email,
               planName: cancelPlan?.displayName ?? 'your plan',
-              appName: 'Spresso',
+              appName: 'Spresso Data Studio',
               appUrl: 'https://spresso.xyz',
             });
           }
@@ -576,7 +576,7 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
                 invoiceAmount: `$${(invoice.amount_paid / 100).toFixed(2)}`,
                 invoiceDate: new Date().toLocaleDateString(),
                 invoicePdfUrl: invoice.hosted_invoice_url ?? '',
-                appName: 'Spresso',
+                appName: 'Spresso Data Studio',
                 appUrl: 'https://spresso.xyz',
               });
             }
@@ -607,7 +607,7 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
               userEmail: failedUser.email,
               invoiceAmount: `$${(invoice.amount_due / 100).toFixed(2)}`,
               invoicePdfUrl: invoice.hosted_invoice_url ?? '',
-              appName: 'Spresso',
+              appName: 'Spresso Data Studio',
               appUrl: 'https://spresso.xyz',
             });
           }
@@ -844,7 +844,7 @@ export async function changePlan(
         previousPlan: currentPlan.displayName,
         creditsAllocated: String(targetPlan.creditsPerMonth),
         effectiveDate: new Date(scheduledDate * 1000).toLocaleDateString(),
-        appName: 'Spresso',
+        appName: 'Spresso Data Studio',
         appUrl: 'https://spresso.xyz',
       });
     }

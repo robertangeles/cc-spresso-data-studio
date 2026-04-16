@@ -1,6 +1,7 @@
 import { eq, and, lte } from 'drizzle-orm';
 import { db, schema } from '../../db/index.js';
 import { logger } from '../../config/logger.js';
+import { encryptToken, decryptToken } from '../../utils/crypto.js';
 import type { OAuthProvider, OAuthTokens } from './oauth.interface.js';
 import { InstagramOAuthProvider } from './instagram.oauth.js';
 import { BlueskyOAuthProvider } from './bluesky.oauth.js';
@@ -10,6 +11,21 @@ import { LinkedInOAuthProvider } from './linkedin.oauth.js';
 import { PinterestOAuthProvider } from './pinterest.oauth.js';
 import { TwitterOAuthProvider } from './twitter.oauth.js';
 import { YouTubeOAuthProvider } from './youtube.oauth.js';
+import { TikTokOAuthProvider } from './tiktok.oauth.js';
+
+/**
+ * Decrypt token fields on a social account record after retrieval from DB.
+ * Returns a new object with accessToken and refreshToken decrypted.
+ */
+function decryptAccountTokens<
+  T extends { accessToken: string | null; refreshToken: string | null },
+>(account: T): T {
+  return {
+    ...account,
+    accessToken: account.accessToken ? decryptToken(account.accessToken) : null,
+    refreshToken: account.refreshToken ? decryptToken(account.refreshToken) : null,
+  };
+}
 
 // Registry of OAuth providers
 const providers: Record<string, OAuthProvider> = {
@@ -21,6 +37,7 @@ const providers: Record<string, OAuthProvider> = {
   pinterest: new PinterestOAuthProvider(),
   twitter: new TwitterOAuthProvider(),
   youtube: new YouTubeOAuthProvider(),
+  tiktok: new TikTokOAuthProvider(),
 };
 
 export function getOAuthProvider(platform: string): OAuthProvider {
@@ -56,8 +73,8 @@ export async function storeTokens(userId: string, platform: string, tokens: OAut
     await db
       .update(schema.socialAccounts)
       .set({
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken ?? null,
+        accessToken: encryptToken(tokens.accessToken),
+        refreshToken: tokens.refreshToken ? encryptToken(tokens.refreshToken) : null,
         tokenExpiresAt: tokens.expiresAt ?? null,
         accountId: tokens.accountId ?? existing.accountId,
         accountName: tokens.accountName ?? existing.accountName,
@@ -67,7 +84,7 @@ export async function storeTokens(userId: string, platform: string, tokens: OAut
         updatedAt: new Date(),
       })
       .where(eq(schema.socialAccounts.id, existing.id));
-    logger.info({ userId, platform, accountId }, 'OAuth tokens updated');
+    logger.info({ userId, platform, accountId }, 'OAuth tokens updated (encrypted)');
     return existing.id;
   } else {
     const [row] = await db
@@ -75,8 +92,8 @@ export async function storeTokens(userId: string, platform: string, tokens: OAut
       .values({
         userId,
         platform,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken ?? null,
+        accessToken: encryptToken(tokens.accessToken),
+        refreshToken: tokens.refreshToken ? encryptToken(tokens.refreshToken) : null,
         tokenExpiresAt: tokens.expiresAt ?? null,
         accountId: tokens.accountId ?? null,
         accountName: tokens.accountName ?? null,
@@ -85,7 +102,7 @@ export async function storeTokens(userId: string, platform: string, tokens: OAut
         isConnected: true,
       })
       .returning();
-    logger.info({ userId, platform, accountId }, 'OAuth tokens stored');
+    logger.info({ userId, platform, accountId }, 'OAuth tokens stored (encrypted)');
     return row.id;
   }
 }
@@ -107,50 +124,54 @@ export async function getConnectedPlatforms(userId: string): Promise<string[]> {
  * Get all connected accounts for a user, grouped info.
  */
 export async function getConnectedAccountsList(userId: string) {
-  return db.query.socialAccounts.findMany({
+  const accounts = await db.query.socialAccounts.findMany({
     where: and(
       eq(schema.socialAccounts.userId, userId),
       eq(schema.socialAccounts.isConnected, true),
     ),
   });
+  return accounts.map(decryptAccountTokens);
 }
 
 /**
  * Get all connected accounts for a specific platform.
  */
 export async function getConnectedAccounts(userId: string, platform: string) {
-  return db.query.socialAccounts.findMany({
+  const accounts = await db.query.socialAccounts.findMany({
     where: and(
       eq(schema.socialAccounts.userId, userId),
       eq(schema.socialAccounts.platform, platform),
       eq(schema.socialAccounts.isConnected, true),
     ),
   });
+  return accounts.map(decryptAccountTokens);
 }
 
 /**
  * Get a specific connected account by ID.
  */
 export async function getConnectedAccountById(socialAccountId: string) {
-  return db.query.socialAccounts.findFirst({
+  const account = await db.query.socialAccounts.findFirst({
     where: and(
       eq(schema.socialAccounts.id, socialAccountId),
       eq(schema.socialAccounts.isConnected, true),
     ),
   });
+  return account ? decryptAccountTokens(account) : account;
 }
 
 /**
  * Legacy: get first connected account for a platform (backward compat).
  */
 export async function getConnectedAccount(userId: string, platform: string) {
-  return db.query.socialAccounts.findFirst({
+  const account = await db.query.socialAccounts.findFirst({
     where: and(
       eq(schema.socialAccounts.userId, userId),
       eq(schema.socialAccounts.platform, platform),
       eq(schema.socialAccounts.isConnected, true),
     ),
   });
+  return account ? decryptAccountTokens(account) : account;
 }
 
 /**
@@ -163,12 +184,12 @@ export async function updateAccountTokens(
   await db
     .update(schema.socialAccounts)
     .set({
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      accessToken: encryptToken(tokens.accessToken),
+      refreshToken: tokens.refreshToken ? encryptToken(tokens.refreshToken) : undefined,
       updatedAt: new Date(),
     })
     .where(eq(schema.socialAccounts.id, accountId));
-  logger.info({ accountId }, 'Updated account tokens after refresh');
+  logger.info({ accountId }, 'Updated account tokens after refresh (encrypted)');
 }
 
 /**
@@ -199,7 +220,7 @@ export async function disconnectAccount(socialAccountId: string, userId: string)
   try {
     const provider = getOAuthProvider(account.platform);
     if (account.accessToken) {
-      await provider.revokeAccess(account.accessToken);
+      await provider.revokeAccess(decryptToken(account.accessToken));
     }
   } catch (err) {
     logger.warn(
@@ -239,12 +260,15 @@ export async function refreshExpiringTokens() {
       const provider = getOAuthProvider(account.platform);
       if (!account.accessToken) continue;
 
-      const newTokens = await provider.refreshToken(account.accessToken);
+      const decryptedToken = decryptToken(account.accessToken);
+      const newTokens = await provider.refreshToken(decryptedToken);
       await db
         .update(schema.socialAccounts)
         .set({
-          accessToken: newTokens.accessToken,
-          refreshToken: newTokens.refreshToken ?? account.refreshToken,
+          accessToken: encryptToken(newTokens.accessToken),
+          refreshToken: newTokens.refreshToken
+            ? encryptToken(newTokens.refreshToken)
+            : account.refreshToken,
           tokenExpiresAt: newTokens.expiresAt ?? null,
           updatedAt: new Date(),
         })

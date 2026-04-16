@@ -1,5 +1,10 @@
 # CLAUDE.md
 
+<!-- TOKEN BUDGET: Keep this file under 5,000 tokens (~2,800 words).
+     Currently ~3,700 tokens. If it grows past budget, refactor sections
+     into separate .md files in docs/ — but note Claude Code only auto-loads
+     this root file, not linked files. -->
+
 Project Rules for Claude Code Project: Spresso
 
 ---

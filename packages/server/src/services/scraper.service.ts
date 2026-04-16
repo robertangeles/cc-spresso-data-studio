@@ -96,7 +96,7 @@ export async function scrapeUrl(urlStr: string): Promise<ScrapedContent> {
     response = await fetch(url.toString(), {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Spresso/1.0 (Content Repurpose Bot)',
+        'User-Agent': 'SpressoDataStudio/1.0 (Data Modelling Bot)',
         Accept: 'text/html,application/xhtml+xml,text/plain',
       },
       redirect: 'follow',

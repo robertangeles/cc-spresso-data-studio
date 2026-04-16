@@ -177,3 +177,102 @@ export const updateProfileSchema = z.object({
 export type CreateRuleInput = z.infer<typeof createRuleSchema>;
 export type UpdateRuleInput = z.infer<typeof updateRuleSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+// ── Projects + Kanban ──────────────────────────────────────
+
+const clientContactSchema = z.object({
+  name: z.string().min(1).max(255),
+  email: z.string().email().optional(),
+  phone: z.string().max(50).optional(),
+  role: z.string().max(100).optional(),
+});
+
+export const createProjectSchema = z.object({
+  name: z.string().min(1, 'Project name is required').max(255),
+  description: z.string().max(5000).optional(),
+  clientName: z.string().max(255).optional(),
+  clientContacts: z.array(clientContactSchema).max(20).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+
+export const updateProjectSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().max(5000).nullable().optional(),
+  status: z.enum(['active', 'archived', 'completed']).optional(),
+  clientName: z.string().max(255).nullable().optional(),
+  clientContacts: z.array(clientContactSchema).max(20).optional(),
+  startDate: z.string().nullable().optional(),
+  endDate: z.string().nullable().optional(),
+});
+
+export const createColumnSchema = z.object({
+  name: z.string().min(1, 'Column name is required').max(255),
+  color: z.string().max(50).optional(),
+});
+
+export const updateColumnSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  color: z.string().max(50).nullable().optional(),
+});
+
+export const createCardSchema = z.object({
+  columnId: z.string().uuid(),
+  title: z.string().min(1, 'Card title is required').max(255),
+  description: z.string().max(5000).optional(),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+  dueDate: z.string().optional(),
+  tags: z.array(z.string().max(50)).max(10).optional(),
+  flowId: z.string().uuid().optional(),
+  contentItemId: z.string().uuid().optional(),
+});
+
+export const updateCardSchema = z.object({
+  title: z.string().min(1).max(255).optional(),
+  description: z.string().max(5000).nullable().optional(),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+  dueDate: z.string().nullable().optional(),
+  tags: z.array(z.string().max(50)).max(10).optional(),
+  flowId: z.string().uuid().nullable().optional(),
+  contentItemId: z.string().uuid().nullable().optional(),
+});
+
+export const moveCardSchema = z.object({
+  columnId: z.string().uuid(),
+  sortOrder: z.number().int().min(0),
+});
+
+export const reorderSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1),
+});
+
+export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
+export type CreateColumnInput = z.infer<typeof createColumnSchema>;
+export type UpdateColumnInput = z.infer<typeof updateColumnSchema>;
+export type CreateCardInput = z.infer<typeof createCardSchema>;
+export type UpdateCardInput = z.infer<typeof updateCardSchema>;
+export type MoveCardInput = z.infer<typeof moveCardSchema>;
+export type ReorderInput = z.infer<typeof reorderSchema>;
+
+// ── Card Comments + Attachments ────────────────────────────
+
+export const createCommentSchema = z.object({
+  content: z.string().min(1, 'Comment cannot be empty').max(5000),
+});
+
+export const updateCommentSchema = z.object({
+  content: z.string().min(1, 'Comment cannot be empty').max(5000),
+});
+
+export const createAttachmentSchema = z.object({
+  type: z.enum(['image', 'file', 'link']),
+  url: z.string().url().max(2000),
+  fileName: z.string().max(255).optional(),
+  fileSize: z.number().int().positive().optional(),
+  mimeType: z.string().max(100).optional(),
+});
+
+export type CreateCommentInput = z.infer<typeof createCommentSchema>;
+export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
+export type CreateAttachmentInput = z.infer<typeof createAttachmentSchema>;

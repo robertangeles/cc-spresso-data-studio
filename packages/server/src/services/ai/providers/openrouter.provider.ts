@@ -45,7 +45,7 @@ export class OpenRouterProvider implements IAIProvider {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
         'HTTP-Referer': 'https://spresso.xyz',
-        'X-Title': 'Spresso',
+        'X-Title': 'Spresso Data Studio',
       },
       body: JSON.stringify({
         model: request.model,
@@ -86,7 +86,7 @@ export class OpenRouterProvider implements IAIProvider {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${this.apiKey}`,
               'HTTP-Referer': 'https://spresso.xyz',
-              'X-Title': 'Spresso',
+              'X-Title': 'Spresso Data Studio',
             },
             body: JSON.stringify({
               model: request.model,

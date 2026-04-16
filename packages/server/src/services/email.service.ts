@@ -29,7 +29,7 @@ async function getEmailConfig(): Promise<EmailConfig> {
     cachedConfig = {
       apiKey: parsed.apiKey,
       fromAddress: parsed.fromAddress || 'noreply@spresso.xyz',
-      fromName: parsed.fromName || 'Spresso',
+      fromName: parsed.fromName || 'Spresso Data Studio',
     };
     return cachedConfig;
   }
@@ -39,7 +39,7 @@ async function getEmailConfig(): Promise<EmailConfig> {
     cachedConfig = {
       apiKey: parsed.pass,
       fromAddress: parsed.fromAddress || parsed.user || 'noreply@spresso.xyz',
-      fromName: parsed.fromName || 'Spresso',
+      fromName: parsed.fromName || 'Spresso Data Studio',
     };
     return cachedConfig;
   }
@@ -90,13 +90,13 @@ export async function sendEmail(
 
 /** Send a test email to verify Resend configuration. */
 export async function sendTestEmail(to: string): Promise<void> {
-  const subject = 'Spresso — Email Configuration Test';
-  const text = `Hi there,\n\nThis is a test email from your Spresso instance to confirm email is configured correctly.\n\nSent at: ${new Date().toISOString()}\n\nCheers,\nSpresso Data Studio`;
+  const subject = 'Spresso Data Studio — Email Configuration Test';
+  const text = `Hi there,\n\nThis is a test email from your Spresso Data Studio instance to confirm email is configured correctly.\n\nSent at: ${new Date().toISOString()}\n\nCheers,\nSpresso Data Studio`;
   const html = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; max-width:480px; margin:0 auto; padding:32px;">
   <h2 style="color:#333; margin-bottom:16px;">Email Configuration Test</h2>
   <p style="color:#555; line-height:1.6;">Hi there,</p>
-  <p style="color:#555; line-height:1.6;">This is a test email from your Spresso instance to confirm that email is configured correctly.</p>
+  <p style="color:#555; line-height:1.6;">This is a test email from your Spresso Data Studio instance to confirm that email is configured correctly.</p>
   <p style="color:#999; font-size:13px; margin-top:24px;">Sent at: ${new Date().toISOString()}</p>
   <p style="color:#555; line-height:1.6;">Cheers,<br/>Spresso Data Studio</p>
 </div>`;
@@ -109,7 +109,7 @@ export async function sendVerificationEmail(
   name: string,
   verificationUrl: string,
 ): Promise<void> {
-  const subject = 'Verify your Spresso account';
+  const subject = 'Verify your Spresso Data Studio account';
   const html = buildVerificationEmailHtml(name, verificationUrl);
   await sendEmail(to, subject, html);
 }
@@ -137,7 +137,7 @@ function buildVerificationEmailHtml(name: string, url: string): string {
           <tr>
             <td style="padding:32px 32px 24px;">
               <div style="font-size:20px; font-weight:700; color:#ffd60a; letter-spacing:-0.5px;">
-                ✦ Spresso
+                ✦ Spresso Data Studio
               </div>
             </td>
           </tr>
@@ -162,7 +162,7 @@ function buildVerificationEmailHtml(name: string, url: string): string {
           <tr>
             <td style="padding:24px 32px; border-top:1px solid #222;">
               <p style="margin:0; font-size:12px; color:#555;">
-                &copy; ${new Date().getFullYear()} Spresso &mdash; Create once. Reach everywhere.
+                &copy; ${new Date().getFullYear()} Spresso Data Studio &mdash; Model once. Query everything.
               </p>
             </td>
           </tr>

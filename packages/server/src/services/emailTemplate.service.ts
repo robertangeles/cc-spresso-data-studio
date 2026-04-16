@@ -114,7 +114,7 @@ export function previewTemplate(
   const sampleVars: Record<string, string> = {
     userName: 'Jane Doe',
     userEmail: 'jane@example.com',
-    appName: 'Spresso',
+    appName: 'Spresso Data Studio',
     appUrl: 'https://spresso.xyz',
     planName: 'Pro',
     planPrice: '$30/month',
@@ -159,7 +159,7 @@ export async function seedDefaultTemplates(): Promise<void> {
     <a href="{{appUrl}}/settings/billing" style="background: linear-gradient(135deg, #ffd60a, #f59e0b); color: #000; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Update Payment Method</a>
   </p>
   <p style="color: #888; font-size: 12px;">If your payment isn't resolved, your subscription may be canceled.</p>
-  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Team</p>
+  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Data Studio Team</p>
 </div>`,
         bodyText:
           'Payment failed. Please update your payment method at {{appUrl}}/settings/billing to keep your subscription active.',
@@ -173,16 +173,16 @@ export async function seedDefaultTemplates(): Promise<void> {
   const defaults = [
     {
       eventType: 'subscription_welcome',
-      subject: 'Welcome to Spresso {{planName}}!',
+      subject: 'Welcome to Spresso Data Studio {{planName}}!',
       bodyHtml: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #1a1a2e; color: #e0e0e0; padding: 40px; border-radius: 12px;">
-  <h1 style="color: #ffd60a; margin-bottom: 8px;">Welcome to Spresso {{planName}}!</h1>
+  <h1 style="color: #ffd60a; margin-bottom: 8px;">Welcome to Spresso Data Studio {{planName}}!</h1>
   <p>Hi {{userName}},</p>
   <p>Your {{planName}} subscription is now active. You have <strong style="color: #ffd60a;">{{creditsAllocated}} credits</strong> to use this month.</p>
   <p>Start creating amazing content at <a href="{{appUrl}}" style="color: #ffd60a;">{{appUrl}}</a></p>
-  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Team</p>
+  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Data Studio Team</p>
 </div>`,
       bodyText:
-        'Welcome to Spresso {{planName}}! Hi {{userName}}, your subscription is active with {{creditsAllocated}} credits. Visit {{appUrl}} to get started.',
+        'Welcome to Spresso Data Studio {{planName}}! Hi {{userName}}, your subscription is active with {{creditsAllocated}} credits. Visit {{appUrl}} to get started.',
       variables: ['userName', 'userEmail', 'planName', 'creditsAllocated', 'appUrl', 'appName'],
     },
     {
@@ -192,7 +192,7 @@ export async function seedDefaultTemplates(): Promise<void> {
   <h1 style="color: #ffd60a;">Upgrade Complete!</h1>
   <p>Hi {{userName}},</p>
   <p>You're now on the <strong style="color: #ffd60a;">{{planName}}</strong> plan. Your credits have been refreshed to <strong>{{creditsAllocated}}</strong>.</p>
-  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Team</p>
+  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Data Studio Team</p>
 </div>`,
       bodyText:
         "You've upgraded to {{planName}}! Hi {{userName}}, your credits have been refreshed to {{creditsAllocated}}.",
@@ -200,13 +200,13 @@ export async function seedDefaultTemplates(): Promise<void> {
     },
     {
       eventType: 'subscription_canceled',
-      subject: 'Your Spresso subscription has been canceled',
+      subject: 'Your Spresso Data Studio subscription has been canceled',
       bodyHtml: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #1a1a2e; color: #e0e0e0; padding: 40px; border-radius: 12px;">
   <h1 style="color: #ffd60a;">Subscription Canceled</h1>
   <p>Hi {{userName}},</p>
   <p>Your {{planName}} subscription has been canceled. You'll retain access until the end of your current billing period.</p>
   <p>We'd love to have you back. Visit <a href="{{appUrl}}/pricing" style="color: #ffd60a;">{{appUrl}}/pricing</a> anytime to resubscribe.</p>
-  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Team</p>
+  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Data Studio Team</p>
 </div>`,
       bodyText:
         'Your {{planName}} subscription has been canceled. You retain access until the end of your billing period. Visit {{appUrl}}/pricing to resubscribe.',
@@ -220,7 +220,7 @@ export async function seedDefaultTemplates(): Promise<void> {
   <p>Hi {{userName}},</p>
   <p>You have <strong style="color: #f59e0b;">{{creditsRemaining}}</strong> of {{creditsAllocated}} credits remaining ({{usagePercent}} used).</p>
   <p>Upgrade your plan to get more credits: <a href="{{appUrl}}/pricing" style="color: #ffd60a;">View Plans</a></p>
-  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Team</p>
+  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Data Studio Team</p>
 </div>`,
       bodyText:
         "You're running low on credits. {{creditsRemaining}} of {{creditsAllocated}} remaining ({{usagePercent}} used). Upgrade at {{appUrl}}/pricing",
@@ -233,7 +233,7 @@ export async function seedDefaultTemplates(): Promise<void> {
   <h1 style="color: #ef4444;">Credits Exhausted</h1>
   <p>Hi {{userName}},</p>
   <p>You've used all {{creditsAllocated}} credits for this billing period. Upgrade to continue creating: <a href="{{appUrl}}/pricing" style="color: #ffd60a;">Upgrade Now</a></p>
-  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Team</p>
+  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Data Studio Team</p>
 </div>`,
       bodyText:
         "You've used all {{creditsAllocated}} credits. Upgrade at {{appUrl}}/pricing to continue creating.",
@@ -246,7 +246,7 @@ export async function seedDefaultTemplates(): Promise<void> {
   <h1 style="color: #22c55e;">Payment Received</h1>
   <p>Hi {{userName}},</p>
   <p>We received your payment of <strong>{{invoiceAmount}}</strong> on {{invoiceDate}}.</p>
-  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Team</p>
+  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Data Studio Team</p>
 </div>`,
       bodyText: 'Payment of {{invoiceAmount}} received on {{invoiceDate}}. Thank you!',
       variables: ['userName', 'invoiceAmount', 'invoiceDate', 'invoicePdfUrl'],
@@ -262,7 +262,7 @@ export async function seedDefaultTemplates(): Promise<void> {
     <a href="{{appUrl}}/settings/billing" style="background: linear-gradient(135deg, #ffd60a, #f59e0b); color: #000; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Update Payment Method</a>
   </p>
   <p style="color: #888; font-size: 12px;">If your payment isn't resolved, your subscription may be canceled.</p>
-  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Team</p>
+  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Data Studio Team</p>
 </div>`,
       bodyText:
         'Payment failed. Please update your payment method at {{appUrl}}/settings/billing to keep your subscription active.',
@@ -270,7 +270,7 @@ export async function seedDefaultTemplates(): Promise<void> {
     },
     {
       eventType: 'email_verification',
-      subject: 'Verify your Spresso account',
+      subject: 'Verify your Spresso Data Studio account',
       bodyHtml: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #1a1a2e; color: #e0e0e0; padding: 40px; border-radius: 12px;">
   <h1 style="color: #ffd60a;">Verify Your Email</h1>
   <p>Hi {{userName}},</p>
@@ -279,7 +279,7 @@ export async function seedDefaultTemplates(): Promise<void> {
     <a href="{{verificationUrl}}" style="background: linear-gradient(135deg, #ffd60a, #f59e0b); color: #000; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">Verify Email</a>
   </p>
   <p style="color: #888; font-size: 12px;">This link expires in {{expiryHours}} hours. If you didn't create an account, ignore this email.</p>
-  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Team</p>
+  <p style="color: #888; font-size: 12px; margin-top: 32px;">— The Spresso Data Studio Team</p>
 </div>`,
       bodyText:
         'Verify your email: {{verificationUrl}} — This link expires in {{expiryHours}} hours.',

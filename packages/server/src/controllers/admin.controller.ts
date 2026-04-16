@@ -624,7 +624,7 @@ export async function updateSmtpConfig(
     let existingConfig = {
       apiKey: '',
       fromAddress: '',
-      fromName: 'Spresso',
+      fromName: 'Spresso Data Studio',
     };
     if (existing) {
       existingConfig = { ...existingConfig, ...JSON.parse(existing.value) };

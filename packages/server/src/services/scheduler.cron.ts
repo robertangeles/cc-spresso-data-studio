@@ -1,4 +1,4 @@
-import { processDuePosts } from './scheduler.service.js';
+import { processDuePosts, pollTikTokProcessingPosts } from './scheduler.service.js';
 import { refreshExpiringTokens } from './oauth/oauth.service.js';
 import { cleanupExpiredTokens, cleanupUnverifiedAccounts } from './verification.service.js';
 import { logger } from '../config/logger.js';
@@ -16,6 +16,16 @@ export function startSchedulerCron() {
     }
   }, 60_000);
   logger.info('Scheduler cron started (every minute)');
+
+  // Poll TikTok async publish status every 30 seconds
+  setInterval(async () => {
+    try {
+      await pollTikTokProcessingPosts();
+    } catch (err) {
+      logger.error({ err }, 'TikTok publish status poll error');
+    }
+  }, 30_000);
+  logger.info('TikTok publish status poller started (every 30s)');
 
   // Refresh OAuth tokens expiring within 7 days — daily at 3am
   scheduleDaily(3, async () => {
