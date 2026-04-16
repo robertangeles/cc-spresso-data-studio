@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Coffee,
+  Database,
   Plus,
   MessageSquare,
-  LayoutDashboard,
+  FolderKanban,
   Workflow,
   Zap,
   PenTool,
@@ -32,7 +32,7 @@ interface Conversation {
 }
 
 const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/projects', label: 'Projects', icon: FolderKanban },
   { to: '/skills', label: 'Skills', icon: Zap },
   { to: '/flows', label: 'Workflows', icon: Workflow },
   { to: '/content', label: 'Data Studio', icon: PenTool },
@@ -118,7 +118,7 @@ export function Sidebar() {
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-4 py-4 border-b border-border-subtle">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-dim">
-          <Coffee className="h-5 w-5 text-accent" />
+          <Database className="h-5 w-5 text-accent" />
         </div>
         <span className="text-lg font-bold tracking-tight text-text-primary">Spresso</span>
         <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-accent">

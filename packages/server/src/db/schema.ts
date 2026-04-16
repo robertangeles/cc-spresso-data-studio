@@ -111,10 +111,11 @@ export const flows = pgTable(
     // DEPRECATED: config JSONB — kept during migration, read from flow_fields + flow_steps
     config: jsonb('config').notNull().default('{"fields":[],"steps":[]}'),
     style: varchar('style', { length: 50 }),
+    projectId: uuid('project_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('idx_flows_user_id').on(t.userId)],
+  (t) => [index('idx_flows_user_id').on(t.userId), index('idx_flows_project_id').on(t.projectId)],
 );
 
 // ============================================================
@@ -476,6 +477,7 @@ export const contentItems = pgTable(
     imageUrl: varchar('image_url', { length: 500 }),
     videoUrl: varchar('video_url', { length: 500 }),
     sourceContentId: uuid('source_content_id'),
+    projectId: uuid('project_id'),
     tags: jsonb('tags').notNull().default('[]'),
     metadata: jsonb('metadata').notNull().default('{}'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -488,6 +490,7 @@ export const contentItems = pgTable(
     index('idx_content_items_channel_id').on(t.channelId),
     // Index: find repurposed posts linked to a parent content item
     index('idx_content_items_source_content_id').on(t.sourceContentId),
+    index('idx_content_items_project_id').on(t.projectId),
   ],
 );
 
@@ -1414,3 +1417,137 @@ export const pages = pgTable('pages', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ============================================================
+// PROJECTS (multi-project workspace for data modelling engagements)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const projects = pgTable(
+  'projects',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    description: text('description'),
+    status: varchar('status', { length: 50 }).notNull().default('active'),
+    clientName: varchar('client_name', { length: 255 }),
+    clientContacts: jsonb('client_contacts').notNull().default('[]'),
+    startDate: date('start_date'),
+    endDate: date('end_date'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_projects_user_id').on(t.userId)],
+);
+
+// ============================================================
+// KANBAN COLUMNS (per-project board columns)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const kanbanColumns = pgTable(
+  'kanban_columns',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    color: varchar('color', { length: 50 }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_kanban_columns_project_id').on(t.projectId)],
+);
+
+// ============================================================
+// KANBAN CARDS (tasks within kanban columns)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const kanbanCards = pgTable(
+  'kanban_cards',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    columnId: uuid('column_id')
+      .notNull()
+      .references(() => kanbanColumns.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description'),
+    priority: varchar('priority', { length: 20 }).notNull().default('medium'),
+    dueDate: date('due_date'),
+    tags: jsonb('tags').notNull().default('[]'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    flowId: uuid('flow_id').references(() => flows.id, { onDelete: 'set null' }),
+    contentItemId: uuid('content_item_id').references(() => contentItems.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_kanban_cards_column_id').on(t.columnId),
+    index('idx_kanban_cards_project_id').on(t.projectId),
+  ],
+);
+
+// ============================================================
+// KANBAN CARD COMMENTS (collaboration on cards)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const kanbanCardComments = pgTable(
+  'kanban_card_comments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    cardId: uuid('card_id')
+      .notNull()
+      .references(() => kanbanCards.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    content: text('content').notNull(),
+    isEdited: boolean('is_edited').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_kanban_card_comments_card_id').on(t.cardId)],
+);
+
+// ============================================================
+// KANBAN CARD ATTACHMENTS (files, images, links on cards)
+// Normal form: 2NF (metadata JSONB is OG data — acceptable)
+// OLTP table
+// ============================================================
+
+export const kanbanCardAttachments = pgTable(
+  'kanban_card_attachments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    cardId: uuid('card_id')
+      .notNull()
+      .references(() => kanbanCards.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 20 }).notNull(),
+    url: text('url').notNull(),
+    fileName: varchar('file_name', { length: 255 }),
+    fileSize: integer('file_size'),
+    mimeType: varchar('mime_type', { length: 100 }),
+    metadata: jsonb('metadata').default('{}'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_kanban_card_attachments_card_id').on(t.cardId)],
+);

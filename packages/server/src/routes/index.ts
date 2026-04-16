@@ -32,6 +32,9 @@ import { dmRoutes } from './dm.routes.js';
 import { backlogRoutes } from './backlog.routes.js';
 import { pagesRoutes } from './pages.routes.js';
 import { youtubeOAuthRoutes } from './oauth/youtube.routes.js';
+import { tiktokOAuthRoutes } from './oauth/tiktok.routes.js';
+import { aiGenerationRoutes } from './ai-generation.routes.js';
+import { projectRoutes } from './project.routes.js';
 
 const router = Router();
 
@@ -67,6 +70,8 @@ router.use('/oauth/linkedin', linkedinOAuthRoutes);
 router.use('/oauth/pinterest', pinterestOAuthRoutes);
 router.use('/oauth/twitter', twitterOAuthRoutes);
 router.use('/oauth/youtube', youtubeOAuthRoutes);
+router.use('/oauth/tiktok', tiktokOAuthRoutes);
+router.use('/ai', aiGenerationRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/billing', billingRoutes);
 router.use('/admin/email-templates', emailTemplateRoutes);
@@ -74,6 +79,7 @@ router.use('/community', communityRoutes);
 router.use('/dm', dmRoutes);
 router.use('/backlog', backlogRoutes);
 router.use('/pages', pagesRoutes);
+router.use('/projects', projectRoutes);
 
 // Connected-platforms lookup (used by Content Builder for status dots + hint banner)
 router.get('/oauth/connected', authenticate, async (req, res, next) => {

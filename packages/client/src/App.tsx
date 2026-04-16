@@ -8,7 +8,9 @@ import { LoginPage } from './pages/LoginPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
 import { RegisterPage } from './pages/RegisterPage';
-import { DashboardPage } from './pages/DashboardPage';
+import { ProjectsListPage } from './pages/ProjectsListPage';
+import { ProjectDetailPage } from './pages/ProjectDetailPage';
+import { WorkflowsPage } from './pages/WorkflowsPage';
 import { FlowBuilderPage } from './pages/FlowBuilderPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { SkillsCatalogPage } from './pages/SkillsCatalogPage';
@@ -75,8 +77,9 @@ export function App() {
               <Route element={<ProtectedRoute />}>
                 <Route element={<AppLayout />}>
                   <Route path="/chat" element={<ChatPage />} />
-                  <Route path="/dashboard" element={<DashboardPage />} />
-                  <Route path="/flows" element={<DashboardPage />} />
+                  <Route path="/projects" element={<ProjectsListPage />} />
+                  <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+                  <Route path="/flows" element={<WorkflowsPage />} />
                   <Route path="/flows/:id" element={<FlowBuilderPage />} />
                   <Route path="/skills" element={<SkillsCatalogPage />} />
                   <Route path="/skills/create" element={<SkillCreatorPage />} />
