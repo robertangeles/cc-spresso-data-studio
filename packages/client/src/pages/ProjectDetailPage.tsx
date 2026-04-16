@@ -5,7 +5,8 @@ import { useProject } from '../hooks/useProjects';
 import { KanbanBoard } from '../components/projects/KanbanBoard';
 import { ProjectSidebar } from '../components/projects/ProjectSidebar';
 import { KanbanCardModal } from '../components/projects/KanbanCardModal';
-import type { KanbanCard, UpdateCardDTO } from '@cc/shared';
+import { SearchFilterBar, type FilterState } from '../components/projects/SearchFilterBar';
+import type { KanbanCard, UpdateCardDTO, KanbanColumn } from '@cc/shared';
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -13,6 +14,7 @@ export function ProjectDetailPage() {
   const {
     project,
     isLoading,
+    updateProject,
     addColumn,
     updateColumn,
     deleteColumn,
@@ -25,6 +27,30 @@ export function ProjectDetailPage() {
   } = useProject(projectId!);
 
   const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null);
+  const [filters, setFilters] = useState<FilterState>({
+    query: '',
+    priorities: new Set(),
+    assigneeId: null,
+    labelId: null,
+  });
+
+  const applyFilters = (cols: KanbanColumn[]): KanbanColumn[] => {
+    const hasFilters =
+      filters.query || filters.priorities.size > 0 || filters.assigneeId || filters.labelId;
+    if (!hasFilters) return cols;
+    return cols.map((col) => ({
+      ...col,
+      cards: col.cards.filter((card) => {
+        if (filters.query && !card.title.toLowerCase().includes(filters.query.toLowerCase()))
+          return false;
+        if (filters.priorities.size > 0 && !filters.priorities.has(card.priority)) return false;
+        if (filters.assigneeId && card.assigneeId !== filters.assigneeId) return false;
+        if (filters.labelId && !(card.labels ?? []).some((l) => l.id === filters.labelId))
+          return false;
+        return true;
+      }),
+    }));
+  };
 
   if (isLoading) {
     return (
@@ -49,7 +75,7 @@ export function ProjectDetailPage() {
     );
   }
 
-  const columns = project.columns ?? [];
+  const columns = applyFilters(project.columns ?? []);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -98,42 +124,50 @@ export function ProjectDetailPage() {
       {/* Board + Sidebar */}
       <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
         {/* Kanban Board */}
-        <div className="flex-1 min-w-0 overflow-x-auto">
-          <KanbanBoard
-            columns={columns}
-            onCreateCard={async (columnId, title) => {
-              await createCard({ columnId, title });
-            }}
-            onUpdateCard={async (cardId, data) => {
-              await updateCard(cardId, data);
-            }}
-            onDeleteCard={async (cardId) => {
-              await deleteCard(cardId);
-            }}
-            onMoveCard={async (cardId, data) => {
-              await moveCard(cardId, data);
-            }}
-            onReorderCards={async (cardIds, columnId) => {
-              await reorderCards(cardIds, columnId);
-            }}
-            onAddColumn={async (data) => {
-              await addColumn(data);
-            }}
-            onUpdateColumn={async (columnId, data) => {
-              await updateColumn(columnId, data);
-            }}
-            onDeleteColumn={async (columnId) => {
-              await deleteColumn(columnId);
-            }}
-            onReorderColumns={async (columnIds) => {
-              await reorderColumns(columnIds);
-            }}
-            onCardClick={setSelectedCard}
-          />
+        <div className="flex-1 min-w-0 overflow-x-auto flex flex-col">
+          <SearchFilterBar projectId={projectId!} filters={filters} onChange={setFilters} />
+          <div className="flex-1 min-h-0">
+            <KanbanBoard
+              columns={columns}
+              onCreateCard={async (columnId, title) => {
+                await createCard({ columnId, title });
+              }}
+              onUpdateCard={async (cardId, data) => {
+                await updateCard(cardId, data);
+              }}
+              onDeleteCard={async (cardId) => {
+                await deleteCard(cardId);
+              }}
+              onMoveCard={async (cardId, data) => {
+                await moveCard(cardId, data);
+              }}
+              onReorderCards={async (cardIds, columnId) => {
+                await reorderCards(cardIds, columnId);
+              }}
+              onAddColumn={async (data) => {
+                await addColumn(data);
+              }}
+              onUpdateColumn={async (columnId, data) => {
+                await updateColumn(columnId, data);
+              }}
+              onDeleteColumn={async (columnId) => {
+                await deleteColumn(columnId);
+              }}
+              onReorderColumns={async (columnIds) => {
+                await reorderColumns(columnIds);
+              }}
+              onCardClick={setSelectedCard}
+            />
+          </div>
         </div>
 
         {/* Project Sidebar */}
-        <ProjectSidebar project={project} />
+        <ProjectSidebar
+          project={project}
+          onUpdate={async (u) => {
+            await updateProject(u);
+          }}
+        />
       </div>
 
       {/* Card detail modal */}

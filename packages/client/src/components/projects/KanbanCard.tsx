@@ -1,6 +1,15 @@
 import { Calendar, Workflow, FileText, Tag } from 'lucide-react';
 import type { KanbanCard as KanbanCardType } from '@cc/shared';
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 interface KanbanCardProps {
   card: KanbanCardType;
   onDragStart: (e: React.DragEvent) => void;
@@ -39,6 +48,20 @@ export function KanbanCard({ card, onDragStart, isDragging, onClick }: KanbanCar
           : 'hover:-translate-y-0.5 hover:shadow-dark-lg hover:border-white/10'
       }`}
     >
+      {/* Label chips at top */}
+      {card.labels && card.labels.length > 0 && (
+        <div className="flex gap-1 flex-wrap mb-2">
+          {card.labels.map((label) => (
+            <span
+              key={label.id}
+              title={label.name}
+              className="h-1.5 w-8 rounded-full"
+              style={{ backgroundColor: label.color }}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Title */}
       <p className="text-sm font-medium text-text-primary line-clamp-2 leading-snug">
         {card.title}
@@ -92,6 +115,27 @@ export function KanbanCard({ card, onDragStart, isDragging, onClick }: KanbanCar
               {tag}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Assignee avatar — bottom right */}
+      {card.assigneeId && card.assigneeName && (
+        <div className="flex justify-end mt-2">
+          {card.assigneeAvatar ? (
+            <img
+              src={card.assigneeAvatar}
+              alt={card.assigneeName}
+              title={card.assigneeName}
+              className="h-5 w-5 rounded-full object-cover ring-1 ring-white/10"
+            />
+          ) : (
+            <div
+              title={card.assigneeName}
+              className="h-5 w-5 rounded-full bg-gradient-to-br from-accent/40 to-amber-600/40 flex items-center justify-center text-[8px] font-bold text-accent ring-1 ring-accent/20"
+            >
+              {getInitials(card.assigneeName)}
+            </div>
+          )}
         </div>
       )}
     </div>

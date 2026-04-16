@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { X, Trash2, Calendar, Tag, MessageSquare, Paperclip } from 'lucide-react';
+import { X, Trash2, Calendar, Tag, MessageSquare, Paperclip, Activity } from 'lucide-react';
 import type { KanbanCard, UpdateCardDTO } from '@cc/shared';
 import { CardComments } from './CardComments';
 import { CardAttachments } from './CardAttachments';
+import { AssigneePicker } from './AssigneePicker';
+import { CardLabelPicker } from './CardLabelPicker';
+import { ActivityLog } from './ActivityLog';
 
 interface KanbanCardModalProps {
   card: KanbanCard | null;
@@ -19,12 +22,13 @@ const PRIORITY_OPTIONS: Array<{ value: string; label: string; style: string }> =
   { value: 'low', label: 'Low', style: 'bg-slate-500/15 text-slate-400' },
 ];
 
-type TabKey = 'details' | 'comments' | 'attachments';
+type TabKey = 'details' | 'comments' | 'attachments' | 'activity';
 
 const TABS: Array<{ key: TabKey; label: string; icon: typeof MessageSquare }> = [
   { key: 'details', label: 'Details', icon: Tag },
   { key: 'comments', label: 'Comments', icon: MessageSquare },
   { key: 'attachments', label: 'Attachments', icon: Paperclip },
+  { key: 'activity', label: 'Activity', icon: Activity },
 ];
 
 export function KanbanCardModal({
@@ -207,6 +211,34 @@ export function KanbanCardModal({
                   className="w-full rounded-lg border border-border-subtle bg-surface-2/50 px-3 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent/40 focus:outline-none focus:shadow-[0_0_8px_rgba(255,214,10,0.1)] transition-all"
                 />
               </div>
+
+              {/* Assignee */}
+              <div>
+                <label className="text-xs font-semibold text-text-secondary mb-1.5 block">
+                  Assignee
+                </label>
+                <AssigneePicker
+                  projectId={card.projectId}
+                  assigneeId={card.assigneeId}
+                  assigneeName={card.assigneeName}
+                  assigneeAvatar={card.assigneeAvatar}
+                  onAssign={async (userId) => {
+                    await onUpdate({ assigneeId: userId });
+                  }}
+                />
+              </div>
+
+              {/* Labels */}
+              <div>
+                <label className="text-xs font-semibold text-text-secondary mb-1.5 block">
+                  Labels
+                </label>
+                <CardLabelPicker
+                  projectId={card.projectId}
+                  cardId={card.id}
+                  cardLabels={card.labels ?? []}
+                />
+              </div>
             </div>
           )}
 
@@ -221,41 +253,49 @@ export function KanbanCardModal({
               <CardAttachments cardId={card.id} projectId={card.projectId} />
             </div>
           )}
+
+          {activeTab === 'activity' && (
+            <div className="px-5 py-4 h-[400px]">
+              <ActivityLog projectId={card.projectId} cardId={card.id} />
+            </div>
+          )}
         </div>
 
-        {/* Actions — always visible */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-border-subtle flex-shrink-0">
-          <button
-            type="button"
-            onClick={handleDelete}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-              confirmDelete
-                ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500/30'
-                : 'text-red-400/70 hover:bg-red-500/10 hover:text-red-400'
-            }`}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            {confirmDelete ? 'Click again to confirm' : 'Delete'}
-          </button>
+        {/* Actions — only show on Details tab */}
+        {activeTab === 'details' && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-border-subtle flex-shrink-0">
+            <button
+              type="button"
+              onClick={handleDelete}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                confirmDelete
+                  ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500/30'
+                  : 'text-red-400/70 hover:bg-red-500/10 hover:text-red-400'
+              }`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {confirmDelete ? 'Click again to confirm' : 'Delete'}
+            </button>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-1.5 text-xs text-text-tertiary hover:text-text-secondary hover:bg-surface-3/50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!title.trim() || isSaving}
-              className="rounded-lg bg-gradient-to-r from-accent to-amber-600 px-4 py-1.5 text-xs font-medium text-surface-0 disabled:opacity-50 hover:shadow-[0_0_12px_rgba(255,214,10,0.25)] transition-all duration-200"
-            >
-              {isSaving ? 'Saving...' : 'Save changes'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg px-4 py-1.5 text-xs text-text-tertiary hover:text-text-secondary hover:bg-surface-3/50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={!title.trim() || isSaving}
+                className="rounded-lg bg-gradient-to-r from-accent to-amber-600 px-4 py-1.5 text-xs font-medium text-surface-0 disabled:opacity-50 hover:shadow-[0_0_12px_rgba(255,214,10,0.25)] transition-all duration-200"
+              >
+                {isSaving ? 'Saving...' : 'Save changes'}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

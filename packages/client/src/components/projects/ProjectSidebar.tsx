@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   PanelRightClose,
   PanelRightOpen,
@@ -8,15 +8,137 @@ import {
   Calendar,
   CheckCircle2,
   BarChart3,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
-import type { ProjectWithBoard } from '@cc/shared';
+import type { ProjectWithBoard, UpdateProjectDTO, ProjectStatus } from '@cc/shared';
+import { ActivityLog } from './ActivityLog';
 
 interface ProjectSidebarProps {
   project: ProjectWithBoard;
+  onUpdate?: (updates: UpdateProjectDTO) => Promise<void>;
 }
 
-export function ProjectSidebar({ project }: ProjectSidebarProps) {
+const STATUS_OPTIONS: Array<{ value: ProjectStatus; label: string; style: string }> = [
+  { value: 'active', label: 'Active', style: 'bg-emerald-500/15 text-emerald-400' },
+  { value: 'completed', label: 'Completed', style: 'bg-blue-500/15 text-blue-400' },
+  { value: 'archived', label: 'Archived', style: 'bg-slate-500/15 text-slate-400' },
+];
+
+function InlineText({
+  value,
+  placeholder,
+  multiline = false,
+  onSave,
+}: {
+  value: string;
+  placeholder: string;
+  multiline?: boolean;
+  onSave: (val: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+
+  const startEdit = () => {
+    setDraft(value);
+    setEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setDraft(value);
+  };
+
+  const save = async () => {
+    if (draft.trim() === value) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(draft.trim());
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !multiline) {
+      e.preventDefault();
+      void save();
+    }
+    if (e.key === 'Escape') cancel();
+  };
+
+  if (editing) {
+    const commonProps = {
+      ref: inputRef as React.RefObject<HTMLInputElement & HTMLTextAreaElement>,
+      value: draft,
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+        setDraft(e.target.value),
+      onKeyDown: handleKeyDown,
+      onBlur: () => void save(),
+      disabled: saving,
+      className:
+        'w-full rounded-lg border border-accent/40 bg-surface-2/50 px-2.5 py-1.5 text-sm text-text-primary focus:outline-none focus:shadow-[0_0_8px_rgba(255,214,10,0.1)] transition-all resize-none',
+    };
+    return (
+      <div className="flex flex-col gap-1">
+        {multiline ? (
+          <textarea {...commonProps} rows={3} />
+        ) : (
+          <input {...commonProps} type="text" />
+        )}
+        <div className="flex gap-1 justify-end">
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              cancel();
+            }}
+            className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-surface-3 transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              void save();
+            }}
+            className="p-1 rounded text-accent hover:bg-accent/10 transition-colors"
+          >
+            <Check className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startEdit}
+      className="group flex items-start gap-1.5 w-full text-left"
+    >
+      <span
+        className={`flex-1 text-sm ${value ? 'text-text-primary' : 'text-text-tertiary italic'} group-hover:text-accent transition-colors`}
+      >
+        {value || placeholder}
+      </span>
+      <Pencil className="h-3 w-3 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 flex-shrink-0" />
+    </button>
+  );
+}
+
+export function ProjectSidebar({ project, onUpdate }: ProjectSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
 
   // Card stats
   const columns = project.columns ?? [];
@@ -46,6 +168,23 @@ export function ProjectSidebar({ project }: ProjectSidebarProps) {
     role?: string;
   }>;
 
+  const handleSave = async (updates: UpdateProjectDTO) => {
+    if (onUpdate) await onUpdate(updates);
+  };
+
+  const handleStatusChange = async (status: ProjectStatus) => {
+    setSavingStatus(true);
+    try {
+      await handleSave({ status });
+    } finally {
+      setSavingStatus(false);
+    }
+  };
+
+  const handleDateChange = async (field: 'startDate' | 'endDate', val: string) => {
+    await handleSave({ [field]: val || null });
+  };
+
   if (collapsed) {
     return (
       <button
@@ -60,9 +199,9 @@ export function ProjectSidebar({ project }: ProjectSidebarProps) {
   }
 
   return (
-    <div className="w-72 shrink-0 rounded-xl border border-border-subtle bg-surface-2/40 backdrop-blur-glass p-4 space-y-5 animate-slide-up">
+    <div className="w-72 shrink-0 rounded-xl border border-border-subtle bg-surface-2/40 backdrop-blur-glass p-4 flex flex-col gap-5 animate-slide-up overflow-y-auto max-h-full">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-shrink-0">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
           Project Info
         </h3>
@@ -75,6 +214,107 @@ export function ProjectSidebar({ project }: ProjectSidebarProps) {
           <PanelRightClose className="h-3.5 w-3.5" />
         </button>
       </div>
+
+      {/* Editable project name */}
+      {onUpdate && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
+            Name
+          </p>
+          <InlineText
+            value={project.name}
+            placeholder="Project name"
+            onSave={(val) => handleSave({ name: val })}
+          />
+        </div>
+      )}
+
+      {/* Editable description */}
+      {onUpdate && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
+            Description
+          </p>
+          <InlineText
+            value={project.description ?? ''}
+            placeholder="Add a description..."
+            multiline
+            onSave={(val) => handleSave({ description: val || null })}
+          />
+        </div>
+      )}
+
+      {/* Status picker */}
+      {onUpdate && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5">
+            Status
+          </p>
+          <div className="flex gap-1.5 flex-wrap">
+            {STATUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                disabled={savingStatus}
+                onClick={() => void handleStatusChange(opt.value)}
+                className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-all duration-150 ${
+                  project.status === opt.value
+                    ? `${opt.style} ring-1 ring-current/30 shadow-[0_0_8px_rgba(255,214,10,0.1)]`
+                    : 'bg-surface-3/50 text-text-tertiary hover:text-text-secondary'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Editable client name */}
+      {onUpdate && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
+            Client
+          </p>
+          <InlineText
+            value={project.clientName ?? ''}
+            placeholder="Client name..."
+            onSave={(val) => handleSave({ clientName: val || null })}
+          />
+        </div>
+      )}
+
+      {/* Date pickers */}
+      {onUpdate && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Calendar className="h-3.5 w-3.5 text-text-tertiary" />
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+              Dates
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[10px] text-text-tertiary mb-1">Start</p>
+              <input
+                type="date"
+                defaultValue={project.startDate?.split('T')[0] ?? ''}
+                onBlur={(e) => void handleDateChange('startDate', e.target.value)}
+                className="w-full rounded-lg border border-border-subtle bg-surface-2/50 px-2 py-1 text-xs text-text-primary focus:border-accent/40 focus:outline-none [color-scheme:dark] transition-all"
+              />
+            </div>
+            <div>
+              <p className="text-[10px] text-text-tertiary mb-1">End</p>
+              <input
+                type="date"
+                defaultValue={project.endDate?.split('T')[0] ?? ''}
+                onBlur={(e) => void handleDateChange('endDate', e.target.value)}
+                className="w-full rounded-lg border border-border-subtle bg-surface-2/50 px-2 py-1 text-xs text-text-primary focus:border-accent/40 focus:outline-none [color-scheme:dark] transition-all"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Progress */}
       <div>
@@ -160,8 +400,8 @@ export function ProjectSidebar({ project }: ProjectSidebarProps) {
         </div>
       )}
 
-      {/* Client info */}
-      {project.clientName && (
+      {/* Client info (read-only contacts) */}
+      {!onUpdate && project.clientName && (
         <div>
           <h4 className="text-xs font-semibold uppercase tracking-wider text-text-tertiary mb-2">
             Client
@@ -199,6 +439,16 @@ export function ProjectSidebar({ project }: ProjectSidebarProps) {
           )}
         </div>
       )}
+
+      {/* Recent Activity */}
+      <div className="flex-1 min-h-0">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-text-tertiary mb-3">
+          Recent Activity
+        </h4>
+        <div className="h-48">
+          <ActivityLog projectId={project.id} limit={10} />
+        </div>
+      </div>
     </div>
   );
 }
