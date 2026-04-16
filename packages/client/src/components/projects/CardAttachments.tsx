@@ -32,6 +32,7 @@ export function CardAttachments({ cardId, projectId }: CardAttachmentsProps) {
 
   const [attachments, setAttachments] = useState<CardAttachment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Add link form state
   const [showForm, setShowForm] = useState(false);
@@ -43,10 +44,14 @@ export function CardAttachments({ cardId, projectId }: CardAttachmentsProps) {
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
+    setError(null);
     api
       .get(base)
       .then(({ data }) => {
         if (!cancelled) setAttachments(data.data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Failed to load attachments');
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -60,6 +65,7 @@ export function CardAttachments({ cardId, projectId }: CardAttachmentsProps) {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) return;
     setIsAdding(true);
+    setError(null);
     try {
       const dto: CreateAttachmentDTO = {
         url: trimmedUrl,
@@ -72,14 +78,21 @@ export function CardAttachments({ cardId, projectId }: CardAttachmentsProps) {
       setName('');
       setType('link');
       setShowForm(false);
+    } catch {
+      setError('Failed to add attachment');
     } finally {
       setIsAdding(false);
     }
   };
 
   const handleDelete = async (attachmentId: string) => {
-    await api.delete(`${base}/${attachmentId}`);
-    setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    setError(null);
+    try {
+      await api.delete(`${base}/${attachmentId}`);
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    } catch {
+      setError('Failed to delete attachment');
+    }
   };
 
   if (isLoading) {
@@ -93,6 +106,11 @@ export function CardAttachments({ cardId, projectId }: CardAttachmentsProps) {
 
   return (
     <div className="flex flex-col h-full">
+      {error && (
+        <div className="mb-3 rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-xs text-red-400">
+          {error}
+        </div>
+      )}
       {/* Attachment list */}
       <div className="flex-1 overflow-y-auto space-y-2 mb-4 min-h-0">
         {attachments.length === 0 && !showForm ? (

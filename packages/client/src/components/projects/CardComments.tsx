@@ -26,6 +26,7 @@ export function CardComments({ cardId, projectId }: CardCommentsProps) {
 
   const [comments, setComments] = useState<CardComment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
   const [isPosting, setIsPosting] = useState(false);
 
@@ -36,10 +37,14 @@ export function CardComments({ cardId, projectId }: CardCommentsProps) {
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
+    setError(null);
     api
       .get(base)
       .then(({ data }) => {
         if (!cancelled) setComments(data.data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Failed to load comments');
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -53,10 +58,13 @@ export function CardComments({ cardId, projectId }: CardCommentsProps) {
     const content = newComment.trim();
     if (!content) return;
     setIsPosting(true);
+    setError(null);
     try {
       const { data } = await api.post(base, { content });
       setComments((prev) => [...prev, data.data]);
       setNewComment('');
+    } catch {
+      setError('Failed to post comment');
     } finally {
       setIsPosting(false);
     }
@@ -82,15 +90,25 @@ export function CardComments({ cardId, projectId }: CardCommentsProps) {
   const handleSaveEdit = async (commentId: string) => {
     const content = editContent.trim();
     if (!content) return;
-    const { data } = await api.put(`${base}/${commentId}`, { content });
-    setComments((prev) => prev.map((c) => (c.id === commentId ? data.data : c)));
-    setEditingId(null);
-    setEditContent('');
+    setError(null);
+    try {
+      const { data } = await api.put(`${base}/${commentId}`, { content });
+      setComments((prev) => prev.map((c) => (c.id === commentId ? data.data : c)));
+      setEditingId(null);
+      setEditContent('');
+    } catch {
+      setError('Failed to update comment');
+    }
   };
 
   const handleDelete = async (commentId: string) => {
-    await api.delete(`${base}/${commentId}`);
-    setComments((prev) => prev.filter((c) => c.id !== commentId));
+    setError(null);
+    try {
+      await api.delete(`${base}/${commentId}`);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+    } catch {
+      setError('Failed to delete comment');
+    }
   };
 
   if (isLoading) {
@@ -104,6 +122,11 @@ export function CardComments({ cardId, projectId }: CardCommentsProps) {
 
   return (
     <div className="flex flex-col h-full">
+      {error && (
+        <div className="mb-3 rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-xs text-red-400">
+          {error}
+        </div>
+      )}
       {/* Comment list */}
       <div className="flex-1 overflow-y-auto space-y-3 mb-4 min-h-0">
         {comments.length === 0 ? (
