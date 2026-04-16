@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Key, Copy, Check, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Key, Copy, Check, RefreshCw, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 
 interface InviteLinkProps {
   joinKey: string;
@@ -9,9 +9,12 @@ interface InviteLinkProps {
 
 export function InviteLink({ joinKey, canManage, onRegenerate }: InviteLinkProps) {
   const [copied, setCopied] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const maskedKey = joinKey.slice(0, 4) + '••••••••••••••••';
 
   const handleCopy = async () => {
     try {
@@ -50,8 +53,16 @@ export function InviteLink({ joinKey, canManage, onRegenerate }: InviteLinkProps
 
       <div className="flex items-center gap-2">
         <div className="flex-1 rounded-lg border border-border-subtle bg-surface-2/50 px-3 py-2 font-mono text-sm text-accent tracking-widest select-all overflow-x-auto">
-          {joinKey}
+          {revealed ? joinKey : maskedKey}
         </div>
+        <button
+          type="button"
+          onClick={() => setRevealed((v) => !v)}
+          title={revealed ? 'Hide key' : 'Reveal key'}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-subtle bg-surface-2/50 text-text-secondary hover:text-accent hover:border-accent/40 transition-all duration-200"
+        >
+          {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
         <button
           type="button"
           onClick={handleCopy}
