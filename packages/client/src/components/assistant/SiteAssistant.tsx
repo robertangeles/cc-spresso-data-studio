@@ -9,7 +9,7 @@ interface Message {
 }
 
 const GREETING =
-  "Hi! I'm your Spresso guide. Ask me anything about the platform \u2014 features, workflows, or how to get the most out of your content.";
+  "Hi! I'm your Spresso guide. Ask me anything about the platform \u2014 features, workflows, or how to get the most out of your data modelling.";
 
 export function SiteAssistant() {
   const [isOpen, setIsOpen] = useState(false);

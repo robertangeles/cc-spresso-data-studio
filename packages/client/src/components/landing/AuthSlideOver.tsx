@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { AuthForm } from './AuthForm';
-import { SpressoLogo } from './SpressoLogo';
+import { DataStudioLogo } from './DataStudioLogo';
 
 interface AuthSlideOverProps {
   isOpen: boolean;
@@ -65,7 +65,7 @@ export function AuthSlideOver({
         <div className="h-full bg-surface-1/95 backdrop-blur-xl border-l border-border-subtle flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-2">
-            <SpressoLogo size="md" />
+            <DataStudioLogo size="md" />
             <button
               onClick={handleClose}
               className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-3 transition-colors"

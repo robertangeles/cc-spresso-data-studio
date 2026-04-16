@@ -23,14 +23,7 @@ interface PromptFormData {
   isActive: boolean;
 }
 
-const CATEGORIES = [
-  'system',
-  'content',
-  'chat',
-  'repurpose',
-  'analysis',
-  'other',
-];
+const CATEGORIES = ['system', 'content', 'chat', 'repurpose', 'analysis', 'other'];
 
 const CATEGORY_COLORS: Record<string, string> = {
   system: 'bg-blue-500/20 text-blue-400',
@@ -140,7 +133,7 @@ export function SystemPromptsPage() {
             <h3 className="text-lg font-semibold text-text-primary">System Prompts</h3>
           </div>
           <p className="text-sm text-text-secondary mt-1">
-            Manage platform-level AI prompts used by Spresso features.
+            Manage platform-level AI prompts used by Spresso Data Studio features.
           </p>
         </div>
         <button
@@ -175,9 +168,7 @@ export function SystemPromptsPage() {
             >
               {/* Top row: name + active badge */}
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-lg font-semibold text-text-primary truncate">
-                  {prompt.name}
-                </h4>
+                <h4 className="text-lg font-semibold text-text-primary truncate">{prompt.name}</h4>
                 <span
                   className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                     prompt.isActive
@@ -288,7 +279,9 @@ export function SystemPromptsPage() {
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Description</label>
+                <label className="block text-sm font-medium text-text-secondary mb-1">
+                  Description
+                </label>
                 <input
                   type="text"
                   value={form.description}
@@ -300,7 +293,9 @@ export function SystemPromptsPage() {
 
               {/* Category */}
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Category</label>
+                <label className="block text-sm font-medium text-text-secondary mb-1">
+                  Category
+                </label>
                 <select
                   value={form.category}
                   onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
@@ -316,7 +311,9 @@ export function SystemPromptsPage() {
 
               {/* Body */}
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Prompt Body</label>
+                <label className="block text-sm font-medium text-text-secondary mb-1">
+                  Prompt Body
+                </label>
                 <textarea
                   value={form.body}
                   onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}

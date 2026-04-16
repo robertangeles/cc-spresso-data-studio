@@ -175,7 +175,7 @@ export function ProductShowcase() {
                 <div className="h-2.5 w-2.5 rounded-full bg-green-500/50" />
               </div>
               <span className="ml-3 text-[10px] text-text-tertiary font-mono">
-                spresso — content editor
+                data-studio — content editor
               </span>
             </div>
 

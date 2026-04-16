@@ -71,7 +71,7 @@ export function RegisterPage() {
             />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-text-primary">Spresso</h1>
-          <p className="mt-1 text-sm text-text-tertiary">Drop an idea. Walk away with content.</p>
+          <p className="mt-1 text-sm text-text-tertiary">Model once. Query everything.</p>
         </div>
 
         {/* Register card with animated border */}

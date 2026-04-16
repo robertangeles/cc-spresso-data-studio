@@ -872,6 +872,7 @@ const OAUTH_ENABLED_PLATFORMS = new Set([
   'pinterest',
   'twitter',
   'youtube',
+  'tiktok',
 ]);
 
 // Platforms that use credential-based auth (handle + app password)

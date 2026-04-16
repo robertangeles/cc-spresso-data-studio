@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ArrowRight, ChevronDown } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { PulsingGrid } from './PulsingGrid';
 
 // Data modelling output preview cards
@@ -32,10 +32,9 @@ const HERO_OUTPUTS = [
 
 interface HeroSectionProps {
   onGetStarted: () => void;
-  onScrollToHowItWorks?: () => void;
 }
 
-export function HeroSection({ onGetStarted, onScrollToHowItWorks }: HeroSectionProps) {
+export function HeroSection({ onGetStarted }: HeroSectionProps) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -98,13 +97,6 @@ export function HeroSection({ onGetStarted, onScrollToHowItWorks }: HeroSectionP
               >
                 Start modelling for free
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </button>
-              <button
-                onClick={onScrollToHowItWorks}
-                className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
-              >
-                See how it works
-                <ChevronDown className="h-4 w-4" />
               </button>
             </div>
           </div>

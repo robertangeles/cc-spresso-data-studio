@@ -95,7 +95,7 @@ export function PricingSection({ onGetStarted }: PricingSectionProps) {
             Pricing that grows with your workflow
           </h2>
           <p className="mt-4 text-lg text-text-secondary max-w-2xl mx-auto">
-            Start free and upgrade when Spresso becomes part of how you create content.
+            Start free and upgrade when Spresso becomes part of your data workflow.
           </p>
         </div>
 

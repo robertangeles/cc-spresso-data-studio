@@ -515,7 +515,7 @@ export function CopilotChat({
             placeholder={
               activePromptName
                 ? `Refine your ${activePromptName} output...`
-                : 'Tell Spresso what content to create...'
+                : 'Tell Spresso what to create...'
             }
             rows={3}
             disabled={busy}

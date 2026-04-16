@@ -27,12 +27,13 @@ export function FounderStorySection() {
 
           <blockquote className="relative z-10">
             <p className="text-lg md:text-xl text-primary leading-relaxed mb-8 italic">
-              I built Spresso after getting frustrated by how much manual effort it took to turn one
-              content idea into finished posts across multiple platforms. Spresso is designed to
-              reduce that repetitive work and give content-driven operators a more practical
-              workflow from one place.
+              I built Spresso after getting frustrated by how much manual effort it took to turn
+              source schemas into production-ready dimensional models. Spresso is designed to reduce
+              that repetitive work and give data teams a more practical workflow from one place.
             </p>
-            <footer className="text-secondary text-sm">&mdash; Rob, Founder of Spresso</footer>
+            <footer className="text-secondary text-sm">
+              &mdash; Rob, Founder of Spresso Data Studio
+            </footer>
           </blockquote>
         </div>
 

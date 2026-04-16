@@ -308,7 +308,7 @@ export function AICommandBar({
             placeholder={
               activePromptName
                 ? `Refine your ${activePromptName} output...`
-                : 'Tell Spresso what content to create...'
+                : 'Tell Spresso what to create...'
             }
             rows={1}
             disabled={isProcessing}

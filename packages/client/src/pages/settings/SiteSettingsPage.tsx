@@ -26,7 +26,10 @@ const SESSION_OPTIONS = [
 ];
 
 export function SiteSettingsPage() {
-  const [settings, setSettings] = useState<SiteSettings>({ sessionDuration: '4h', aiTimeoutSeconds: 180 });
+  const [settings, setSettings] = useState<SiteSettings>({
+    sessionDuration: '4h',
+    aiTimeoutSeconds: 180,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -75,26 +78,30 @@ export function SiteSettingsPage() {
     <div>
       <h3 className="text-lg font-semibold text-text-primary">Site Settings</h3>
       <p className="mt-1 text-sm text-text-secondary mb-6">
-        System-wide configuration for Spresso.
+        System-wide configuration for Spresso Data Studio.
       </p>
 
       <Card padding="lg">
         <h4 className="mb-4 font-medium text-text-primary">Security</h4>
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">Session Duration</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">
+              Session Duration
+            </label>
             <select
               value={settings.sessionDuration}
               onChange={(e) => setSettings({ ...settings, sessionDuration: e.target.value })}
               className="w-full max-w-xs rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
             >
               {SESSION_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
               ))}
             </select>
             <p className="mt-1 text-xs text-text-tertiary">
-              How long before users need to re-authenticate. Longer sessions are more convenient but less secure.
-              Changes take effect on next login.
+              How long before users need to re-authenticate. Longer sessions are more convenient but
+              less secure. Changes take effect on next login.
             </p>
           </div>
 
@@ -111,19 +118,26 @@ export function SiteSettingsPage() {
         <h4 className="mb-4 font-medium text-text-primary">AI Execution</h4>
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">AI Provider Timeout</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">
+              AI Provider Timeout
+            </label>
             <select
               value={settings.aiTimeoutSeconds}
-              onChange={(e) => setSettings({ ...settings, aiTimeoutSeconds: parseInt(e.target.value) })}
+              onChange={(e) =>
+                setSettings({ ...settings, aiTimeoutSeconds: parseInt(e.target.value) })
+              }
               className="w-full max-w-xs rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
             >
               {TIMEOUT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
               ))}
             </select>
             <p className="mt-1 text-xs text-text-tertiary">
-              Maximum time to wait for an AI model response per step. Increase for slower models (Qwen, Opus) or long-form content.
-              If a step times out, it retries once before failing.
+              Maximum time to wait for an AI model response per step. Increase for slower models
+              (Qwen, Opus) or long-form content. If a step times out, it retries once before
+              failing.
             </p>
           </div>
 

@@ -41,7 +41,7 @@ export function AuthSettingsPage() {
   const [emailConfig, setEmailConfig] = useState<EmailConfig>({
     apiKey: '',
     fromAddress: '',
-    fromName: 'Spresso',
+    fromName: 'Spresso Data Studio',
   });
   const [emailMaskedKey, setEmailMaskedKey] = useState('');
   const [emailSaving, setEmailSaving] = useState(false);
@@ -125,7 +125,7 @@ export function AuthSettingsPage() {
         setEmailConfig({
           apiKey: '',
           fromAddress: data.data.fromAddress ?? '',
-          fromName: data.data.fromName ?? 'Spresso',
+          fromName: data.data.fromName ?? 'Spresso Data Studio',
         });
         setEmailMaskedKey(data.data.maskedPass ?? data.data.maskedApiKey ?? '');
       }
