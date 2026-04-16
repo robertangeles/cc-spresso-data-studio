@@ -10,3 +10,4 @@ export * from './rules.types.js';
 export * from './content.types.js';
 export * from './community.types.js';
 export * from './project.types.js';
+export * from './organisation.types.js';

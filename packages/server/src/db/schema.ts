@@ -1438,10 +1438,16 @@ export const projects = pgTable(
     clientContacts: jsonb('client_contacts').notNull().default('[]'),
     startDate: date('start_date'),
     endDate: date('end_date'),
+    // Plain UUID — FK constraint to organisations added once that table is stable
+    organisationId: uuid('organisation_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('idx_projects_user_id').on(t.userId)],
+  (t) => [
+    index('idx_projects_user_id').on(t.userId),
+    // Index: list projects for an organisation
+    index('idx_projects_organisation_id').on(t.organisationId),
+  ],
 );
 
 // ============================================================
@@ -1492,12 +1498,18 @@ export const kanbanCards = pgTable(
     contentItemId: uuid('content_item_id').references(() => contentItems.id, {
       onDelete: 'set null',
     }),
+    // Assignee — nullable; set null on user delete
+    assigneeId: uuid('assignee_id').references(() => users.id, { onDelete: 'set null' }),
+    // Optional cover image (Cloudinary URL)
+    coverImageUrl: text('cover_image_url'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('idx_kanban_cards_column_id').on(t.columnId),
     index('idx_kanban_cards_project_id').on(t.projectId),
+    // Index: filter/list cards by assignee
+    index('idx_kanban_cards_assignee_id').on(t.assigneeId),
   ],
 );
 
@@ -1550,4 +1562,182 @@ export const kanbanCardAttachments = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('idx_kanban_card_attachments_card_id').on(t.cardId)],
+);
+
+// ============================================================
+// ORGANISATIONS (multi-tenant workspace grouping)
+// Normal form: 2NF — every non-key column depends only on PK
+// OLTP table
+// ============================================================
+
+export const organisations = pgTable(
+  'organisations',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: varchar('name', { length: 255 }).notNull(),
+    slug: varchar('slug', { length: 100 }).notNull().unique(),
+    description: text('description'),
+    logoUrl: text('logo_url'),
+    joinKey: varchar('join_key', { length: 20 }).notNull().unique(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: list organisations owned by a user
+    index('idx_organisations_owner_id').on(t.ownerId),
+    // Index: slug lookup for vanity URLs
+    index('idx_organisations_slug').on(t.slug),
+    // Index: join-key lookup for invite flow
+    index('idx_organisations_join_key').on(t.joinKey),
+  ],
+);
+
+// ============================================================
+// ORGANISATION MEMBERS (junction: user ↔ organisation with role)
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const organisationMembers = pgTable(
+  'organisation_members',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organisationId: uuid('organisation_id')
+      .notNull()
+      .references(() => organisations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // role: owner | admin | member
+    role: varchar('role', { length: 20 }).notNull().default('member'),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one membership record per user per organisation
+    uniqueIndex('idx_org_members_unique').on(t.organisationId, t.userId),
+    // Index: list members for an organisation
+    index('idx_org_members_org_id').on(t.organisationId),
+    // Index: list organisations for a user
+    index('idx_org_members_user_id').on(t.userId),
+  ],
+);
+
+// ============================================================
+// PROJECT MEMBERS (collaborators on a project)
+// Normal form: 2NF — every non-key column depends only on PK
+// OLTP table
+// ============================================================
+
+export const projectMembers = pgTable(
+  'project_members',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // owner | editor | viewer
+    role: varchar('role', { length: 20 }).notNull().default('member'),
+    addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one membership per user per project
+    uniqueIndex('idx_project_members_project_user').on(t.projectId, t.userId),
+    // Index: list members for a project
+    index('idx_project_members_project_id').on(t.projectId),
+    // Index: list projects a user belongs to
+    index('idx_project_members_user_id').on(t.userId),
+  ],
+);
+
+// ============================================================
+// CARD LABELS (per-project label palette)
+// Normal form: 2NF — every non-key column depends only on PK
+// OLTP table
+// ============================================================
+
+export const cardLabels = pgTable(
+  'card_labels',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 50 }).notNull(),
+    color: varchar('color', { length: 20 }).notNull(),
+  },
+  (t) => [
+    // Unique: label names scoped to a project
+    uniqueIndex('idx_card_labels_project_name').on(t.projectId, t.name),
+    // Index: list labels for a project
+    index('idx_card_labels_project_id').on(t.projectId),
+  ],
+);
+
+// ============================================================
+// CARD LABEL ASSIGNMENTS (junction: kanban_cards ↔ card_labels)
+// Normal form: 2NF — composite unique key
+// OLTP table
+// ============================================================
+
+export const cardLabelAssignments = pgTable(
+  'card_label_assignments',
+  {
+    cardId: uuid('card_id')
+      .notNull()
+      .references(() => kanbanCards.id, { onDelete: 'cascade' }),
+    labelId: uuid('label_id')
+      .notNull()
+      .references(() => cardLabels.id, { onDelete: 'cascade' }),
+  },
+  (t) => [
+    // Composite PK as unique constraint
+    uniqueIndex('idx_card_label_assignments_pk').on(t.cardId, t.labelId),
+    // Index: list labels assigned to a card
+    index('idx_card_label_assignments_card_id').on(t.cardId),
+    // Index: find all cards with a given label
+    index('idx_card_label_assignments_label_id').on(t.labelId),
+  ],
+);
+
+// ============================================================
+// PROJECT ACTIVITIES (immutable audit log of project events)
+// Normal form: 2NF (metadata JSONB is audit — acceptable per CLAUDE.md)
+// OLTP table
+// ============================================================
+
+export const projectActivities = pgTable(
+  'project_activities',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // e.g. 'card.created', 'card.moved', 'comment.added', 'attachment.added'
+    action: varchar('action', { length: 50 }).notNull(),
+    // e.g. 'card', 'column', 'comment', 'attachment', 'project'
+    entityType: varchar('entity_type', { length: 30 }).notNull(),
+    entityId: uuid('entity_id'),
+    // audit/contextual snapshot — JSONB acceptable per CLAUDE.md
+    metadata: jsonb('metadata').notNull().default('{}'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: paginated activity feed for a project
+    index('idx_project_activities_project_id').on(t.projectId),
+    // Index: time-range queries
+    index('idx_project_activities_created_at').on(t.createdAt),
+    // Index: lookup by actor
+    index('idx_project_activities_user_id').on(t.userId),
+    // Composite: efficient descending feed query (project_id + created_at)
+    index('idx_project_activities_project_created').on(t.projectId, t.createdAt),
+  ],
 );
