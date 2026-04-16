@@ -74,7 +74,9 @@ export function useProject(projectId: string) {
 
   const updateProject = async (updates: UpdateProjectDTO) => {
     const { data } = await api.put(`/projects/${projectId}`, updates);
-    setProject(data.data);
+    // Merge updated fields into existing project — the PUT response is a flat row
+    // without columns/cards, so replacing the whole project would lose board data.
+    setProject((prev) => (prev ? { ...prev, ...data.data } : data.data));
     return data.data as ProjectWithBoard;
   };
 
