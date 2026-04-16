@@ -133,15 +133,18 @@ const PLATFORMS: PlatformInfo[] = [
     name: 'TikTok',
     icon: '🎵',
     colorHex: '#22d3ee',
-    description: 'Requires TikTok for Developers app',
+    description: 'Requires TikTok for Developers app with Content Posting API access',
     authType: 'oauth',
     credentialKeys: ['TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET'],
     credentialLabels: ['Client Key', 'Client Secret'],
     setupSteps: [
       'Go to developers.tiktok.com and create an app',
+      'Add "Login Kit" and "Content Posting API" products',
+      'Set redirect URI to: {your-domain}/api/oauth/tiktok/callback',
+      'Submit for app review (required for video publishing)',
       'Enter Client Key and Client Secret below',
     ],
-    status: 'coming-soon',
+    status: 'ready',
   },
   {
     slug: 'pinterest',
@@ -350,12 +353,23 @@ export function SocialMediaSettingsPage() {
                           placeholder={`Enter ${activePlatform.credentialLabels[i]}...`}
                           className="w-full bg-surface-3 border border-border-subtle rounded-lg px-3 py-2 pr-10 text-text-primary text-sm focus:border-accent focus:ring-1 focus:ring-accent/30 focus:outline-none transition-colors placeholder:text-text-tertiary font-mono"
                         />
-                        {isSecret && !isSavedMask && (
+                        {isSecret && (
                           <button
                             type="button"
-                            onClick={() =>
-                              setVisibleKeys((prev) => ({ ...prev, [key]: !prev[key] }))
-                            }
+                            onClick={async () => {
+                              if (isSavedMask && !visibleKeys[key]) {
+                                // Fetch the real value from the backend
+                                try {
+                                  const { data } = await api.get(`/admin/settings/${key}/reveal`);
+                                  if (data.data?.value) {
+                                    setCredentials((prev) => ({ ...prev, [key]: data.data.value }));
+                                  }
+                                } catch {
+                                  /* stay masked */
+                                }
+                              }
+                              setVisibleKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+                            }}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary transition-colors"
                           >
                             {visibleKeys[key] ? (

@@ -71,7 +71,7 @@ export async function sendMessage(
 ) {
   try {
     if (!req.user) throw new UnauthorizedError('Authentication required');
-    const { content, model, systemPrompt } = req.body;
+    const { content, model, systemPrompt, imageUrls } = req.body;
     const result = await chatService.sendMessage(
       req.params.id,
       req.user.userId,
@@ -79,6 +79,7 @@ export async function sendMessage(
       model,
       systemPrompt,
       req.user.role,
+      imageUrls,
     );
     res.json({ success: true, data: result });
   } catch (err) {

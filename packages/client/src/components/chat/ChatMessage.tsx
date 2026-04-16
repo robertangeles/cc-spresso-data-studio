@@ -11,7 +11,27 @@ export function ChatMessage({ message }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
   const isImage = message.contentType === 'image_url' || message.contentType === 'image_base64';
+  const isMultimodal = message.contentType === 'multimodal';
   const isError = message.content.startsWith('Error:');
+
+  // Parse multimodal content
+  let multimodalText = '';
+  let multimodalImages: string[] = [];
+  let multimodalImageCount = 0;
+  if (isMultimodal) {
+    try {
+      const parsed = JSON.parse(message.content) as {
+        text?: string;
+        images?: string[];
+        imageCount?: number;
+      };
+      multimodalText = parsed.text ?? '';
+      multimodalImages = parsed.images ?? [];
+      multimodalImageCount = parsed.imageCount ?? multimodalImages.length;
+    } catch {
+      multimodalText = message.content;
+    }
+  }
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
@@ -23,18 +43,22 @@ export function ChatMessage({ message }: ChatMessageProps) {
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 animate-slide-up`}>
       <div className={`max-w-[80%] ${isUser ? 'order-2' : ''}`}>
         {/* Role label */}
-        <p className={`text-[10px] font-medium mb-1 ${isUser ? 'text-right' : ''} text-text-tertiary`}>
-          {isUser ? 'You' : message.model ?? 'Assistant'}
+        <p
+          className={`text-[10px] font-medium mb-1 ${isUser ? 'text-right' : ''} text-text-tertiary`}
+        >
+          {isUser ? 'You' : (message.model ?? 'Assistant')}
         </p>
 
         {/* Message bubble */}
-        <div className={`rounded-2xl px-4 py-3 ${
-          isUser
-            ? 'bg-accent text-text-inverse shadow-[0_2px_8px_rgba(255,214,10,0.15)]'
-            : isError
-              ? 'bg-status-error-dim border border-status-error/30 text-status-error'
-              : 'bg-surface-2 border border-border-subtle text-text-primary'
-        }`}>
+        <div
+          className={`rounded-2xl px-4 py-3 ${
+            isUser
+              ? 'bg-accent text-text-inverse shadow-[0_2px_8px_rgba(255,214,10,0.15)]'
+              : isError
+                ? 'bg-status-error-dim border border-status-error/30 text-status-error'
+                : 'bg-surface-2 border border-border-subtle text-text-primary'
+          }`}
+        >
           {isImage ? (
             <div>
               <img src={message.content} alt="Generated" className="max-h-96 rounded-lg" />
@@ -50,6 +74,26 @@ export function ChatMessage({ message }: ChatMessageProps) {
               >
                 Download Image
               </button>
+            </div>
+          ) : isMultimodal ? (
+            <div>
+              {multimodalImages.length > 0 ? (
+                <div className="flex gap-2 flex-wrap mb-2">
+                  {multimodalImages.map((url, i) => (
+                    <img
+                      key={i}
+                      src={url}
+                      alt="Attached"
+                      className="max-h-40 rounded-lg border border-white/10"
+                    />
+                  ))}
+                </div>
+              ) : multimodalImageCount > 0 ? (
+                <p className="text-xs text-text-tertiary italic mb-1">
+                  [{multimodalImageCount} image{multimodalImageCount > 1 ? 's' : ''} attached]
+                </p>
+              ) : null}
+              {multimodalText && <p className="text-sm whitespace-pre-wrap">{multimodalText}</p>}
             </div>
           ) : isUser ? (
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
@@ -69,7 +113,11 @@ export function ChatMessage({ message }: ChatMessageProps) {
               className="text-text-tertiary hover:text-text-secondary transition-colors"
               title="Copy"
             >
-              {copied ? <Check className="h-3.5 w-3.5 text-status-success" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-status-success" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
             </button>
             {message.tokens > 0 && (
               <span className="text-[10px] text-text-tertiary">{message.tokens} tokens</span>

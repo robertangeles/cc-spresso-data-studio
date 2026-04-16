@@ -1,5 +1,26 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Loader2, Wand2, PenTool, Check } from 'lucide-react';
+import { Send, Loader2, Wand2, PenTool, Check, Paperclip, X } from 'lucide-react';
+
+function compressAndConvert(file: File, maxWidth = 800, quality = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
 import { useConfiguredModels } from '../../hooks/useConfiguredModels';
 import { useThinkingMessage } from '../../lib/thinking-messages';
 import { getRandomGreeting } from '../../lib/greetings';
@@ -14,7 +35,7 @@ interface CopilotChatProps {
   isSending: boolean;
 
   // Send
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, imageUrls?: string[]) => void;
   isProcessing: boolean;
 
   // Prompt
@@ -204,8 +225,12 @@ export function CopilotChat({
   const { models: configuredModels } = useConfiguredModels();
   const [input, setInput] = useState('');
   const [appliedId, setAppliedId] = useState<string | null>(null);
+  const [attachedImages, setAttachedImages] = useState<File[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const thinkingMessage = useThinkingMessage(isSending);
   const { user } = useAuth();
   const greeting = useMemo(() => getRandomGreeting(), []);
@@ -227,12 +252,71 @@ export function CopilotChat({
     }
   }, [input]);
 
-  const handleSend = useCallback(() => {
-    if (!input.trim() || busy) return;
-    onSendMessage(input.trim());
+  const addImages = useCallback((files: File[]) => {
+    const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+    setAttachedImages((prev) => [...prev, ...imageFiles]);
+    setImagePreviewUrls((prev) => [...prev, ...imageFiles.map((f) => URL.createObjectURL(f))]);
+  }, []);
+
+  const removeImage = useCallback((index: number) => {
+    setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls((prev) => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const files = Array.from(e.clipboardData.files);
+      if (files.some((f) => f.type.startsWith('image/'))) {
+        e.preventDefault();
+        addImages(files);
+      }
+    },
+    [addImages],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+      addImages(Array.from(e.dataTransfer.files));
+    },
+    [addImages],
+  );
+
+  const handleSend = useCallback(async () => {
+    const hasText = input.trim().length > 0;
+    const hasImages = attachedImages.length > 0;
+    if ((!hasText && !hasImages) || busy) return;
+
+    let base64Images: string[] | undefined;
+    if (hasImages) {
+      base64Images = await Promise.all(attachedImages.map((f) => compressAndConvert(f)));
+    }
+
+    onSendMessage(input.trim(), base64Images);
     setInput('');
+    setAttachedImages([]);
+    imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    setImagePreviewUrls([]);
     if (inputRef.current) inputRef.current.style.height = 'auto';
-  }, [input, busy, onSendMessage]);
+  }, [input, attachedImages, imagePreviewUrls, busy, onSendMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -250,7 +334,7 @@ export function CopilotChat({
     [onApplyToEditor],
   );
 
-  const hasContent = input.trim().length > 0;
+  const hasContent = input.trim().length > 0 || attachedImages.length > 0;
   const hasMessages = messages.length > 0;
 
   return (
@@ -297,7 +381,48 @@ export function CopilotChat({
                       {msg.role === 'assistant' && (
                         <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent mr-2 align-middle" />
                       )}
-                      <span className="whitespace-pre-wrap inline">{msg.content}</span>
+                      {msg.contentType === 'multimodal' ? (
+                        (() => {
+                          try {
+                            const parsed = JSON.parse(msg.content) as {
+                              text?: string;
+                              images?: string[];
+                              imageCount?: number;
+                            };
+                            const images = parsed.images ?? [];
+                            const imageCount = parsed.imageCount ?? images.length;
+                            return (
+                              <>
+                                {images.length > 0 ? (
+                                  <div className="flex gap-1.5 flex-wrap mb-1.5">
+                                    {images.map((url, idx) => (
+                                      <img
+                                        key={idx}
+                                        src={url}
+                                        alt="Attached"
+                                        className="max-h-20 rounded-lg border border-white/10"
+                                      />
+                                    ))}
+                                  </div>
+                                ) : imageCount > 0 ? (
+                                  <span className="text-xs text-text-tertiary italic">
+                                    [{imageCount} image{imageCount > 1 ? 's' : ''} attached]{' '}
+                                  </span>
+                                ) : null}
+                                {parsed.text && (
+                                  <span className="whitespace-pre-wrap inline">{parsed.text}</span>
+                                )}
+                              </>
+                            );
+                          } catch {
+                            return (
+                              <span className="whitespace-pre-wrap inline">{msg.content}</span>
+                            );
+                          }
+                        })()
+                      ) : (
+                        <span className="whitespace-pre-wrap inline">{msg.content}</span>
+                      )}
                     </div>
                     {msg.role === 'assistant' && (
                       <div className="mt-1.5 flex items-center gap-1.5">
@@ -342,14 +467,51 @@ export function CopilotChat({
       </div>
 
       {/* ─── Input area (sticky bottom) — toolbar inside textarea container ─── */}
-      <div className="shrink-0 border-t border-border-subtle px-3 py-2.5 bg-surface-1/50 backdrop-blur-sm">
-        <div className="knight-rider-border rounded-lg border border-border-subtle bg-surface-2 focus-within:border-accent/40 transition-colors">
+      <div
+        className="shrink-0 border-t border-border-subtle px-3 py-2.5 bg-surface-1/50 backdrop-blur-sm"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <div
+          className={`knight-rider-border rounded-lg border bg-surface-2 focus-within:border-accent/40 transition-colors ${
+            isDragOver ? 'border-accent/60 ring-2 ring-accent/20' : 'border-border-subtle'
+          }`}
+        >
+          {isDragOver && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-accent/5 backdrop-blur-sm">
+              <p className="text-sm font-medium text-accent">Drop images here</p>
+            </div>
+          )}
+
+          {/* Image previews */}
+          {imagePreviewUrls.length > 0 && (
+            <div className="flex gap-2 px-3 pt-2.5 flex-wrap">
+              {imagePreviewUrls.map((url, i) => (
+                <div
+                  key={url}
+                  className="relative group rounded-lg overflow-hidden border border-border-subtle h-12 w-12 flex-shrink-0"
+                >
+                  <img src={url} alt={`Attached ${i + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    className="absolute top-0.5 right-0.5 rounded-full bg-black/70 p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Textarea */}
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={
               activePromptName
                 ? `Refine your ${activePromptName} output...`
@@ -358,6 +520,21 @@ export function CopilotChat({
             rows={3}
             disabled={busy}
             className="w-full resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary px-3 pt-2.5 pb-1 focus:outline-none disabled:opacity-50 min-h-[72px] max-h-[160px] leading-relaxed"
+          />
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) {
+                addImages(Array.from(e.target.files));
+                e.target.value = '';
+              }
+            }}
           />
 
           {/* Toolbar row inside the textarea container */}
@@ -378,6 +555,14 @@ export function CopilotChat({
               <span className="text-accent">
                 <Wand2 className="h-3.5 w-3.5" />
               </span>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded p-1 text-text-tertiary hover:text-text-secondary transition-colors"
+                title="Attach images"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+              </button>
             </div>
 
             <div className="flex items-center gap-2">

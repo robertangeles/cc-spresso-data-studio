@@ -742,6 +742,7 @@ export function ContentBuilderPage() {
                   accountsByChannel={accountsByChannel}
                   selectedAccounts={builder.selectedAccounts}
                   onToggleAccount={builder.toggleAccount}
+                  hasVideo={!!builder.videoUrl}
                 />
               </div>
             </div>
@@ -805,9 +806,9 @@ export function ContentBuilderPage() {
                 <CopilotChat
                   messages={chat.messages}
                   isSending={chat.isSending}
-                  onSendMessage={(text) => {
+                  onSendMessage={(text, imageUrls) => {
                     setIsCopilotActive(true);
-                    chat.sendMessage(text);
+                    chat.sendMessage(text, imageUrls ? { imageUrls } : undefined);
                   }}
                   isProcessing={builder.isProcessing}
                   activePromptId={builder.activePromptId}
@@ -839,6 +840,7 @@ export function ContentBuilderPage() {
                     accountsByChannel={accountsByChannel}
                     selectedAccounts={builder.selectedAccounts}
                     onToggleAccount={builder.toggleAccount}
+                    hasVideo={!!builder.videoUrl}
                   />
                 </div>
 

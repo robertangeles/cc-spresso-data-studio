@@ -9,15 +9,8 @@ export function ChatPage() {
   const [searchParams] = useSearchParams();
   const conversationId = searchParams.get('id');
 
-  const {
-    messages,
-    isSending,
-    model,
-    setModel,
-    loadConversation,
-    newChat,
-    sendMessage,
-  } = useChat();
+  const { messages, isSending, model, setModel, loadConversation, newChat, sendMessage } =
+    useChat();
 
   const [imageMode, setImageMode] = useState(false);
   const [researchMode, setResearchMode] = useState(false);
@@ -72,8 +65,8 @@ export function ChatPage() {
     setImageMode(!imageMode);
   };
 
-  const handleSend = (content: string) => {
-    sendMessage(content);
+  const handleSend = (content: string, imageUrls?: string[]) => {
+    sendMessage(content, imageUrls);
   };
 
   return (
@@ -92,9 +85,18 @@ export function ChatPage() {
               <div className="flex justify-start mb-4">
                 <div className="rounded-2xl border border-border-subtle bg-surface-2 px-4 py-3">
                   <div className="flex items-center gap-1.5">
-                    <div className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce-dots" style={{ animationDelay: '0ms' }} />
-                    <div className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce-dots" style={{ animationDelay: '200ms' }} />
-                    <div className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce-dots" style={{ animationDelay: '400ms' }} />
+                    <div
+                      className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce-dots"
+                      style={{ animationDelay: '0ms' }}
+                    />
+                    <div
+                      className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce-dots"
+                      style={{ animationDelay: '200ms' }}
+                    />
+                    <div
+                      className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce-dots"
+                      style={{ animationDelay: '400ms' }}
+                    />
                   </div>
                 </div>
               </div>

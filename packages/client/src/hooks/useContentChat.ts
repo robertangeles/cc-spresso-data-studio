@@ -5,6 +5,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  contentType?: string;
   createdAt: string;
 }
 
@@ -13,6 +14,8 @@ interface SendOptions {
   displayContent?: string;
   /** Override the system prompt for this message only */
   systemPromptOverride?: string | null;
+  /** Cloudinary URLs of attached images */
+  imageUrls?: string[];
 }
 
 export function useContentChat(systemPrompt?: string | null) {
@@ -35,7 +38,8 @@ export function useContentChat(systemPrompt?: string | null) {
 
   const sendMessage = useCallback(
     async (text: string, options?: SendOptions): Promise<string | null> => {
-      if (!text.trim() || isSending) return null;
+      const hasImages = options?.imageUrls && options.imageUrls.length > 0;
+      if ((!text.trim() && !hasImages) || isSending) return null;
 
       setIsSending(true);
 
@@ -46,7 +50,10 @@ export function useContentChat(systemPrompt?: string | null) {
       const tempUserMsg: ChatMessage = {
         id: `temp-${Date.now()}`,
         role: 'user',
-        content: threadContent,
+        content: hasImages
+          ? JSON.stringify({ text: threadContent, images: options!.imageUrls })
+          : threadContent,
+        contentType: hasImages ? 'multimodal' : 'text',
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, tempUserMsg]);
@@ -59,6 +66,7 @@ export function useContentChat(systemPrompt?: string | null) {
           model,
           systemPrompt: options?.systemPromptOverride ?? systemPrompt ?? undefined,
           metadata: { source: 'content-builder' },
+          ...(hasImages && { imageUrls: options.imageUrls }),
         });
 
         // Server returns { message: { id, content, ... }, usage: { ... } }

@@ -30,6 +30,7 @@ router.put('/settings/turnstile', adminController.updateTurnstileConfig);
 // Generic key-value settings (key in body)
 router.put('/settings', adminController.upsertSetting);
 // Single setting by key (key in URL)
+router.get('/settings/:key/reveal', adminController.revealSetting);
 router.get('/settings/:key', adminController.getSetting);
 router.put('/settings/:key', adminController.updateSetting);
 

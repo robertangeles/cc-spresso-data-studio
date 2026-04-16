@@ -6,7 +6,7 @@ import { withSessionGate } from './session-gate.service.js';
 import { NotFoundError } from '../utils/errors.js';
 import { stripThinkingBlocks } from './flow-executor.service.js';
 import { logger } from '../config/logger.js';
-import type { AICompletionRequest } from '@cc/shared';
+import type { AICompletionRequest, AIMessageContent } from '@cc/shared';
 
 export async function listConversations(userId: string) {
   return db.query.conversations.findMany({
@@ -66,6 +66,7 @@ export async function sendMessage(
   model?: string,
   systemPrompt?: string,
   role: string = 'Subscriber',
+  imageUrls?: string[],
 ) {
   // Verify ownership
   const conversation = await db.query.conversations.findFirst({
@@ -79,12 +80,13 @@ export async function sendMessage(
 
   const activeModel = model ?? conversation.model;
 
-  // Save user message
+  // Save user message — store metadata only for images (no base64 in DB)
+  const hasImages = imageUrls && imageUrls.length > 0;
   await db.insert(schema.messages).values({
     conversationId,
     role: 'user',
-    content,
-    contentType: 'text',
+    content: hasImages ? JSON.stringify({ text: content, imageCount: imageUrls.length }) : content,
+    contentType: hasImages ? 'multimodal' : 'text',
     model: null,
     tokens: 0,
   });
@@ -117,8 +119,36 @@ export async function sendMessage(
 
   // Include conversation history (last 20 messages to manage context)
   const recentHistory = history.slice(-20);
-  for (const msg of recentHistory) {
-    aiMessages.push({ role: msg.role as 'user' | 'assistant', content: msg.content });
+  const lastMsgIndex = recentHistory.length - 1;
+  for (let i = 0; i < recentHistory.length; i++) {
+    const msg = recentHistory[i];
+    const isLastUserMsg = i === lastMsgIndex && msg.role === 'user';
+
+    if (msg.contentType === 'multimodal') {
+      try {
+        const parsed = JSON.parse(msg.content) as { text?: string; imageCount?: number };
+
+        if (isLastUserMsg && hasImages) {
+          // Current message: inject the actual base64 images
+          const parts: AIMessageContent = [];
+          if (parsed.text) parts.push({ type: 'text', text: parsed.text });
+          for (const dataUri of imageUrls!) {
+            parts.push({ type: 'image_url', image_url: { url: dataUri } });
+          }
+          aiMessages.push({ role: 'user', content: parts });
+        } else {
+          // Historical message: send text only with placeholder
+          const text = parsed.text || '';
+          const count = parsed.imageCount ?? 0;
+          const placeholder = count > 0 ? `\n[${count} image(s) were attached]` : '';
+          aiMessages.push({ role: msg.role as 'user' | 'assistant', content: text + placeholder });
+        }
+      } catch {
+        aiMessages.push({ role: msg.role as 'user' | 'assistant', content: msg.content });
+      }
+    } else {
+      aiMessages.push({ role: msg.role as 'user' | 'assistant', content: msg.content });
+    }
   }
 
   // Call AI

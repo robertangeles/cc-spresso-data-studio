@@ -17,9 +17,13 @@ export interface AIModelConfig {
   costPer1kOutput?: number;
 }
 
+export type AIMessageContent =
+  | string
+  | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>;
+
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: AIMessageContent;
 }
 
 export interface AICompletionRequest {

@@ -20,8 +20,22 @@ export class OpenRouterProvider implements IAIProvider {
   }
 
   async complete(request: AICompletionRequest): Promise<AICompletionResponse> {
+    // Log multimodal message structure (without base64 data)
+    const hasMultimodal = request.messages.some((m) => Array.isArray(m.content));
     logger.info(
-      { model: request.model, messageCount: request.messages.length },
+      {
+        model: request.model,
+        messageCount: request.messages.length,
+        hasMultimodal,
+        ...(hasMultimodal && {
+          multimodalStructure: request.messages
+            .filter((m) => Array.isArray(m.content))
+            .map((m) => ({
+              role: m.role,
+              parts: (m.content as Array<{ type: string }>).map((p) => p.type),
+            })),
+        }),
+      },
       'OpenRouter API call',
     );
 
@@ -154,6 +168,10 @@ export class OpenRouterProvider implements IAIProvider {
 
     const choice = data.choices?.[0];
     if (!choice) {
+      logger.error(
+        { rawResponse: JSON.stringify(rawJson).slice(0, 2000) },
+        'OpenRouter empty response — no choices',
+      );
       throw new Error('OpenRouter returned an empty response — no choices in the completion.');
     }
 

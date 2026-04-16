@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Wand2 } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, Loader2, Wand2, Paperclip, X } from 'lucide-react';
+import { api } from '../../lib/api';
 import { useConfiguredModels } from '../../hooks/useConfiguredModels';
 import { PromptBadge } from './PromptBadge';
 import type { Prompt } from '../../hooks/usePrompts';
 
 interface AICommandBarProps {
-  onCommand: (instruction: string) => void;
+  onCommand: (instruction: string, imageUrls?: string[]) => void;
   isProcessing: boolean;
   isSending?: boolean;
   model: string;
@@ -46,7 +47,12 @@ export function AICommandBar({
 }: AICommandBarProps) {
   const { models: configuredModels } = useConfiguredModels();
   const [input, setInput] = useState('');
+  const [attachedImages, setAttachedImages] = useState<File[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize the textarea (single line default, expands on Shift+Enter)
   useEffect(() => {
@@ -57,11 +63,87 @@ export function AICommandBar({
     }
   }, [input]);
 
-  const handleSend = () => {
-    if (!input.trim() || isProcessing) return;
-    onCommand(input.trim());
-    // Don't clear input — keep it visible so user can see what they sent
-    // It clears when they start typing something new or on publish
+  const addImages = useCallback((files: File[]) => {
+    const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+    setAttachedImages((prev) => [...prev, ...imageFiles]);
+    const urls = imageFiles.map((f) => URL.createObjectURL(f));
+    setImagePreviewUrls((prev) => [...prev, ...urls]);
+  }, []);
+
+  const removeImage = useCallback((index: number) => {
+    setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls((prev) => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const files = Array.from(e.clipboardData.files);
+      if (files.some((f) => f.type.startsWith('image/'))) {
+        e.preventDefault();
+        addImages(files);
+      }
+    },
+    [addImages],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+      addImages(Array.from(e.dataTransfer.files));
+    },
+    [addImages],
+  );
+
+  const handleSend = async () => {
+    const hasText = input.trim().length > 0;
+    const hasImages = attachedImages.length > 0;
+    if ((!hasText && !hasImages) || isProcessing || isUploading) return;
+
+    let uploadedUrls: string[] | undefined;
+
+    if (hasImages) {
+      setIsUploading(true);
+      try {
+        uploadedUrls = await Promise.all(
+          attachedImages.map(async (file) => {
+            const formData = new FormData();
+            formData.append('image', file);
+            const { data } = await api.post('/upload/image', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            return data.data.url as string;
+          }),
+        );
+      } catch (err) {
+        console.error('Image upload failed:', err);
+        setIsUploading(false);
+        return;
+      }
+      setIsUploading(false);
+    }
+
+    onCommand(input.trim(), uploadedUrls);
+    setAttachedImages([]);
+    imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    setImagePreviewUrls([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -71,7 +153,7 @@ export function AICommandBar({
     }
   };
 
-  const hasContent = input.trim().length > 0;
+  const hasContent = input.trim().length > 0 || attachedImages.length > 0;
 
   return (
     <div className="space-y-2">
@@ -110,7 +192,19 @@ export function AICommandBar({
       `}</style>
 
       {/* Input card */}
-      <div className="kr-cmd-idle relative bg-surface-1 backdrop-blur-sm rounded-xl border border-accent/20 shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all">
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`kr-cmd-idle relative bg-surface-1 backdrop-blur-sm rounded-xl border shadow-[0_0_10px_rgba(255,214,10,0.05)] hover:border-accent/30 hover:shadow-[0_0_15px_rgba(255,214,10,0.08)] transition-all ${
+          isDragOver ? 'border-accent/60 ring-2 ring-accent/20' : 'border-accent/20'
+        }`}
+      >
+        {isDragOver && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-accent/5 backdrop-blur-sm">
+            <p className="text-sm font-medium text-accent">Drop images here</p>
+          </div>
+        )}
         {/* Toolbar row */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
           <div className="flex items-center gap-2">
@@ -129,6 +223,14 @@ export function AICommandBar({
             <span className="text-accent">
               <Wand2 className="h-4 w-4" />
             </span>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-lg p-1 text-text-tertiary hover:text-text-secondary transition-colors"
+              title="Attach images"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -171,11 +273,38 @@ export function AICommandBar({
 
         {/* Textarea */}
         <div className="px-3 py-2">
+          {/* Image previews */}
+          {imagePreviewUrls.length > 0 && (
+            <div className="flex gap-2 mb-2 flex-wrap">
+              {imagePreviewUrls.map((url, i) => (
+                <div
+                  key={url}
+                  className="relative group rounded-lg overflow-hidden border border-border-subtle h-14 w-14 flex-shrink-0"
+                >
+                  <img src={url} alt={`Attached ${i + 1}`} className="h-full w-full object-cover" />
+                  {isUploading ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                      <Loader2 className="h-3 w-3 text-accent animate-spin" />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => removeImage(i)}
+                      className="absolute top-0.5 right-0.5 rounded-full bg-black/70 p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={
               activePromptName
                 ? `Refine your ${activePromptName} output...`
@@ -184,6 +313,19 @@ export function AICommandBar({
             rows={1}
             disabled={isProcessing}
             className="w-full resize-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:opacity-50 min-h-[24px] max-h-[120px] leading-6"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) {
+                addImages(Array.from(e.target.files));
+                e.target.value = '';
+              }
+            }}
           />
           <p className="text-[10px] text-text-tertiary/50 text-right">
             Enter to send · Shift+Enter for newline

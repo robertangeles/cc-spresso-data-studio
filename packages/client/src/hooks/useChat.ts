@@ -68,8 +68,9 @@ export function useChat() {
 
   // Send a message
   const sendMessage = useCallback(
-    async (content: string) => {
-      if (!content.trim()) return;
+    async (content: string, imageUrls?: string[]) => {
+      const hasImages = imageUrls && imageUrls.length > 0;
+      if (!content.trim() && !hasImages) return;
 
       let conversationId = activeConversation?.id;
 
@@ -89,8 +90,8 @@ export function useChat() {
         id: `temp-${Date.now()}`,
         conversationId: conversationId!,
         role: 'user',
-        content,
-        contentType: 'text',
+        content: hasImages ? JSON.stringify({ text: content, images: imageUrls }) : content,
+        contentType: hasImages ? 'multimodal' : 'text',
         model: null,
         tokens: 0,
         createdAt: new Date().toISOString(),
@@ -102,6 +103,7 @@ export function useChat() {
         const { data } = await api.post(`/chat/conversations/${conversationId}/messages`, {
           content,
           model,
+          ...(hasImages && { imageUrls }),
         });
 
         const assistantMsg = data.data.message as Message;

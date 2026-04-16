@@ -68,6 +68,24 @@ export async function getDatabaseUrl(
   }
 }
 
+export async function revealSetting(
+  req: Request,
+  res: Response<ApiResponse<unknown>>,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const setting = await adminService.getSetting(req.params.key);
+    if (!setting) {
+      res.json({ success: true, data: null });
+      return;
+    }
+    res.json({ success: true, data: { key: setting.key, value: setting.value } });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getSetting(
   req: Request,
   res: Response<ApiResponse<unknown>>,
@@ -209,13 +227,11 @@ export async function syncModelCatalog(
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const apiKey = await adminService.getOpenRouterApiKey();
     if (!apiKey) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          data: { added: 0, updated: 0 },
-          message: 'OpenRouter API key not configured',
-        });
+      res.status(400).json({
+        success: false,
+        data: { added: 0, updated: 0 },
+        message: 'OpenRouter API key not configured',
+      });
       return;
     }
     const result = await catalogService.syncModelCatalog(apiKey);
@@ -251,13 +267,11 @@ export async function toggleCatalogModel(
     const modelId = decodeURIComponent(req.params.modelId);
     const { enabled } = req.body;
     if (typeof enabled !== 'boolean') {
-      res
-        .status(400)
-        .json({
-          success: false,
-          data: null as unknown as OpenRouterCatalogModel,
-          message: 'enabled (boolean) is required',
-        });
+      res.status(400).json({
+        success: false,
+        data: null as unknown as OpenRouterCatalogModel,
+        message: 'enabled (boolean) is required',
+      });
       return;
     }
     const model = await catalogService.toggleModelEnabled(modelId, enabled);
@@ -276,13 +290,11 @@ export async function batchToggleCatalogModels(
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const { modelIds, enabled } = req.body;
     if (!Array.isArray(modelIds) || typeof enabled !== 'boolean') {
-      res
-        .status(400)
-        .json({
-          success: false,
-          data: null,
-          message: 'modelIds (string[]) and enabled (boolean) are required',
-        });
+      res.status(400).json({
+        success: false,
+        data: null,
+        message: 'modelIds (string[]) and enabled (boolean) are required',
+      });
       return;
     }
     await catalogService.batchToggleModels(modelIds, enabled);
