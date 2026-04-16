@@ -20,6 +20,9 @@ interface SocialAccount {
   isConnected: boolean;
 }
 
+/** Platforms that require a video to be attached before they can be selected */
+const VIDEO_REQUIRED_PLATFORMS = new Set(['tiktok']);
+
 interface PlatformSelectorProps {
   channels: Channel[];
   selectedIds: string[];
@@ -33,6 +36,8 @@ interface PlatformSelectorProps {
   selectedAccounts?: Record<string, string[]>;
   /** Toggle a specific account within a channel */
   onToggleAccount?: (channelId: string, accountId: string) => void;
+  /** Whether a video is attached to the content — gates video-required platforms */
+  hasVideo?: boolean;
 }
 
 function formatCharLimit(limit: number | undefined | null): string {
@@ -162,9 +167,11 @@ export function PlatformSelector({
   accountsByChannel = {},
   selectedAccounts = {},
   onToggleAccount,
+  hasVideo = false,
 }: PlatformSelectorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showConnectHint, setShowConnectHint] = useState(false);
+  const [videoHintSlug, setVideoHintSlug] = useState<string | null>(null);
 
   const selectedChannels = channels.filter((ch) => selectedIds.includes(ch.id));
 
@@ -190,16 +197,26 @@ export function PlatformSelector({
           const accounts = accountsByChannel[ch.id] ?? [];
           const showSubPicker = isSelected && accounts.length >= 2;
           const selectedForChannel = selectedAccounts[ch.id] ?? [];
+          const needsVideo = VIDEO_REQUIRED_PLATFORMS.has(ch.slug) && !hasVideo;
 
           return (
             <div key={ch.id}>
               <button
                 type="button"
-                onClick={() => onToggle(ch.id)}
+                onClick={() => {
+                  if (needsVideo) {
+                    setVideoHintSlug(videoHintSlug === ch.slug ? null : ch.slug);
+                    return;
+                  }
+                  setVideoHintSlug(null);
+                  onToggle(ch.id);
+                }}
                 className={`relative w-full flex items-center gap-3 rounded-xl p-2.5 transition-all duration-200 ease-spring cursor-pointer group ${
-                  isSelected
-                    ? `bg-gradient-to-r ${color.cardBg} ${color.border} border ${color.glow}`
-                    : `bg-surface-2/20 border border-transparent hover:bg-gradient-to-r hover:${color.cardBg} hover:border-border-subtle hover:shadow-md active:scale-[0.97]`
+                  needsVideo
+                    ? 'bg-surface-2/10 border border-transparent opacity-50 cursor-not-allowed'
+                    : isSelected
+                      ? `bg-gradient-to-r ${color.cardBg} ${color.border} border ${color.glow}`
+                      : `bg-surface-2/20 border border-transparent hover:bg-gradient-to-r hover:${color.cardBg} hover:border-border-subtle hover:shadow-md active:scale-[0.97]`
                 }`}
               >
                 {/* Platform icon */}
@@ -277,6 +294,15 @@ export function PlatformSelector({
                       </button>
                     );
                   })}
+                </div>
+              )}
+
+              {/* Video required hint — shown when clicking a video-only platform without video */}
+              {videoHintSlug === ch.slug && needsVideo && (
+                <div className="ml-2 mt-1 rounded-lg bg-cyan-400/[0.08] border border-cyan-400/20 px-3 py-1.5 animate-slide-up">
+                  <p className="text-[10px] text-cyan-300 leading-relaxed">
+                    Attach a video to post to {ch.name}
+                  </p>
                 </div>
               )}
             </div>
@@ -372,57 +398,63 @@ export function PlatformSelector({
                 connectedPlatforms.includes(ch.slug) || ALWAYS_CONNECTED.includes(ch.slug);
               const color = getColor(ch.slug);
               const limit = formatCharLimit(ch.config?.charLimit as number | undefined | null);
+              const needsVideo = VIDEO_REQUIRED_PLATFORMS.has(ch.slug) && !hasVideo;
 
               return (
-                <button
-                  key={ch.id}
-                  type="button"
-                  onClick={() => {
-                    onToggle(ch.id);
-                    // Show connect hint when selecting an unconnected social platform
-                    if (
-                      !isSelected &&
-                      !connectedPlatforms.includes(ch.slug) &&
-                      !ALWAYS_CONNECTED.includes(ch.slug)
-                    ) {
-                      setShowConnectHint(true);
-                    }
-                  }}
-                  className={`relative flex flex-col items-center gap-1.5 rounded-xl p-3 transition-all duration-200 ease-spring cursor-pointer group ${
-                    isSelected
-                      ? `bg-gradient-to-b ${color.cardBg} ${color.border} border ${color.glow} scale-[1.03]`
-                      : `bg-surface-2/30 border border-transparent hover:bg-gradient-to-b hover:${color.cardBg} hover:border-border-subtle hover:scale-[1.06] hover:-translate-y-1 hover:shadow-lg active:scale-95`
-                  }`}
-                >
-                  {/* Selected checkmark */}
-                  {isSelected && (
-                    <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-green-500 shadow-md">
-                      <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
-                    </span>
-                  )}
-
-                  {/* Platform icon — large, bounces on hover */}
-                  <span
-                    className={`text-2xl leading-none transition-transform duration-200 ${isSelected ? 'scale-110' : 'group-hover:scale-125 group-hover:-translate-y-1'}`}
+                <div key={ch.id} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (needsVideo) return;
+                      onToggle(ch.id);
+                      // Show connect hint when selecting an unconnected social platform
+                      if (
+                        !isSelected &&
+                        !connectedPlatforms.includes(ch.slug) &&
+                        !ALWAYS_CONNECTED.includes(ch.slug)
+                      ) {
+                        setShowConnectHint(true);
+                      }
+                    }}
+                    title={needsVideo ? `Attach a video to post to ${ch.name}` : undefined}
+                    className={`relative w-full flex flex-col items-center gap-1.5 rounded-xl p-3 transition-all duration-200 ease-spring cursor-pointer group ${
+                      needsVideo
+                        ? 'bg-surface-2/10 border border-transparent opacity-40 cursor-not-allowed'
+                        : isSelected
+                          ? `bg-gradient-to-b ${color.cardBg} ${color.border} border ${color.glow} scale-[1.03]`
+                          : `bg-surface-2/30 border border-transparent hover:bg-gradient-to-b hover:${color.cardBg} hover:border-border-subtle hover:scale-[1.06] hover:-translate-y-1 hover:shadow-lg active:scale-95`
+                    }`}
                   >
-                    {ch.icon}
-                  </span>
+                    {/* Selected checkmark */}
+                    {isSelected && (
+                      <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-green-500 shadow-md">
+                        <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
+                      </span>
+                    )}
 
-                  {/* Platform name */}
-                  <span
-                    className={`text-xs font-medium transition-all duration-200 ${isSelected ? color.text : `text-text-secondary group-hover:${color.text}`}`}
-                  >
-                    {ch.name}
-                  </span>
-
-                  {/* Connection status + char limit */}
-                  <div className="flex items-center gap-1.5">
+                    {/* Platform icon — large, bounces on hover */}
                     <span
-                      className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-text-tertiary/30'}`}
-                    />
-                    <span className="text-[9px] text-text-tertiary">{limit}</span>
-                  </div>
-                </button>
+                      className={`text-2xl leading-none transition-transform duration-200 ${isSelected ? 'scale-110' : 'group-hover:scale-125 group-hover:-translate-y-1'}`}
+                    >
+                      {ch.icon}
+                    </span>
+
+                    {/* Platform name */}
+                    <span
+                      className={`text-xs font-medium transition-all duration-200 ${isSelected ? color.text : `text-text-secondary group-hover:${color.text}`}`}
+                    >
+                      {ch.name}
+                    </span>
+
+                    {/* Connection status + char limit */}
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-text-tertiary/30'}`}
+                      />
+                      <span className="text-[9px] text-text-tertiary">{limit}</span>
+                    </div>
+                  </button>
+                </div>
               );
             })}
           </div>

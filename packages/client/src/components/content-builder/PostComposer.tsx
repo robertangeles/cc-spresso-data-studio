@@ -34,6 +34,17 @@ interface PostComposerProps {
   youtubePrivacy?: string;
   onYoutubePrivacyChange?: (privacy: string) => void;
   videoUrl?: string | null;
+  // TikTok per-post fields
+  tiktokPrivacy?: string;
+  onTiktokPrivacyChange?: (privacy: string) => void;
+  tiktokAllowComment?: boolean;
+  onTiktokAllowCommentChange?: (allow: boolean) => void;
+  tiktokAllowReuse?: boolean;
+  onTiktokAllowReuseChange?: (allow: boolean) => void;
+  tiktokBrandedContent?: boolean;
+  onTiktokBrandedContentChange?: (branded: boolean) => void;
+  tiktokAiGenerated?: boolean;
+  onTiktokAiGeneratedChange?: (aigc: boolean) => void;
 }
 
 /** Slugs that typically use a title field */
@@ -172,6 +183,16 @@ export function PostComposer({
   youtubePrivacy = 'public',
   onYoutubePrivacyChange,
   videoUrl,
+  tiktokPrivacy = 'PUBLIC_TO_EVERYONE',
+  onTiktokPrivacyChange,
+  tiktokAllowComment = true,
+  onTiktokAllowCommentChange,
+  tiktokAllowReuse = true,
+  onTiktokAllowReuseChange,
+  tiktokBrandedContent = false,
+  onTiktokBrandedContentChange,
+  tiktokAiGenerated = false,
+  onTiktokAiGeneratedChange,
 }: PostComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMainTab = activeTab === null;
@@ -295,6 +316,23 @@ export function PostComposer({
           onTagsChange={onYoutubeTagsChange}
           privacy={youtubePrivacy}
           onPrivacyChange={onYoutubePrivacyChange}
+          hasVideo={!!videoUrl}
+        />
+      )}
+
+      {/* TikTok-specific fields */}
+      {activeChannel?.slug === 'tiktok' && (
+        <TikTokFields
+          privacy={tiktokPrivacy}
+          onPrivacyChange={onTiktokPrivacyChange}
+          allowComment={tiktokAllowComment}
+          onAllowCommentChange={onTiktokAllowCommentChange}
+          allowReuse={tiktokAllowReuse}
+          onAllowReuseChange={onTiktokAllowReuseChange}
+          brandedContent={tiktokBrandedContent}
+          onBrandedContentChange={onTiktokBrandedContentChange}
+          aiGenerated={tiktokAiGenerated}
+          onAiGeneratedChange={onTiktokAiGeneratedChange}
           hasVideo={!!videoUrl}
         />
       )}
@@ -523,6 +561,134 @@ function YouTubeFields({
           className="flex-1 rounded-md border border-border-default bg-surface-3 px-2 py-1 text-xs text-text-primary
                      placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
         />
+      </div>
+    </div>
+  );
+}
+
+// ─── TikTok-specific fields (mirrors TikTok Web Studio settings) ─────────────
+
+function TikTokFields({
+  privacy = 'PUBLIC_TO_EVERYONE',
+  onPrivacyChange,
+  allowComment = true,
+  onAllowCommentChange,
+  allowReuse = true,
+  onAllowReuseChange,
+  brandedContent = false,
+  onBrandedContentChange,
+  aiGenerated = false,
+  onAiGeneratedChange,
+  hasVideo,
+}: {
+  privacy?: string;
+  onPrivacyChange?: (privacy: string) => void;
+  allowComment?: boolean;
+  onAllowCommentChange?: (allow: boolean) => void;
+  allowReuse?: boolean;
+  onAllowReuseChange?: (allow: boolean) => void;
+  brandedContent?: boolean;
+  onBrandedContentChange?: (branded: boolean) => void;
+  aiGenerated?: boolean;
+  onAiGeneratedChange?: (aigc: boolean) => void;
+  hasVideo: boolean;
+}) {
+  return (
+    <div className="mb-3 space-y-2.5 rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-3">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-cyan-400">
+        <span>🎵</span>
+        <span>TikTok Settings</span>
+      </div>
+
+      {!hasVideo && (
+        <div className="flex items-center gap-1.5 text-[11px] text-amber-400">
+          <AlertTriangle className="h-3 w-3" />
+          <span>Attach a video to publish to TikTok</span>
+        </div>
+      )}
+
+      {/* Who can watch */}
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-text-secondary whitespace-nowrap">Who can watch</label>
+        <select
+          value={privacy}
+          onChange={(e) => onPrivacyChange?.(e.target.value)}
+          className="flex-1 rounded-md border border-border-default bg-surface-3 px-2 py-1 text-xs text-text-primary
+                     focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/30"
+        >
+          <option value="PUBLIC_TO_EVERYONE">Everyone</option>
+          <option value="MUTUAL_FOLLOW_FRIENDS">Friends</option>
+          <option value="FOLLOWER_OF_CREATOR">Followers</option>
+          <option value="SELF_ONLY">Only me</option>
+        </select>
+      </div>
+
+      {/* Allow users to */}
+      <div className="space-y-1.5">
+        <label className="text-xs text-text-secondary">Allow users to</label>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allowComment}
+              onChange={(e) => onAllowCommentChange?.(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-border-default bg-surface-3 text-cyan-400 focus:ring-cyan-400/30"
+            />
+            <span className="text-xs text-text-primary">Comment</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allowReuse}
+              onChange={(e) => onAllowReuseChange?.(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-border-default bg-surface-3 text-cyan-400 focus:ring-cyan-400/30"
+            />
+            <span className="text-xs text-text-primary">Reuse of content</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Disclose post content */}
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={brandedContent}
+          onChange={(e) => onBrandedContentChange?.(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-border-default bg-surface-3 text-cyan-400 focus:ring-cyan-400/30"
+        />
+        <div>
+          <span className="text-xs text-text-primary">Disclose post content</span>
+          <p className="text-[10px] text-text-tertiary">
+            Let others know this promotes a brand, product or service
+          </p>
+        </div>
+      </label>
+
+      {/* AI-generated content */}
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={aiGenerated}
+          onChange={(e) => onAiGeneratedChange?.(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-border-default bg-surface-3 text-cyan-400 focus:ring-cyan-400/30"
+        />
+        <div>
+          <span className="text-xs text-text-primary">AI-generated content</span>
+          <p className="text-[10px] text-text-tertiary">Add this label for transparency</p>
+        </div>
+      </label>
+
+      {/* Cross-post toggles (Coming Soon) */}
+      <div className="mt-2 pt-2 border-t border-cyan-400/10">
+        <p className="text-[10px] text-text-tertiary mb-1.5">Also post to</p>
+        <div className="flex gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 text-[10px] text-pink-400">
+            📸 Reels <span className="text-text-tertiary ml-0.5">Soon</span>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-600/10 border border-red-600/20 px-2 py-0.5 text-[10px] text-red-400">
+            ▶ Shorts <span className="text-text-tertiary ml-0.5">Soon</span>
+          </span>
+        </div>
       </div>
     </div>
   );
