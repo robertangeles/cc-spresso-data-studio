@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   PanelRightClose,
   PanelRightOpen,
@@ -11,9 +12,13 @@ import {
   Pencil,
   Check,
   X,
+  Building2,
+  ChevronDown,
 } from 'lucide-react';
-import type { ProjectWithBoard, UpdateProjectDTO, ProjectStatus } from '@cc/shared';
+import type { ProjectWithBoard, UpdateProjectDTO, ProjectStatus, Client } from '@cc/shared';
 import { ActivityLog } from './ActivityLog';
+import { useOrganisation } from '../../hooks/useOrganisation';
+import { api } from '../../lib/api';
 
 interface ProjectSidebarProps {
   project: ProjectWithBoard;
@@ -135,6 +140,166 @@ function InlineText({
     </button>
   );
 }
+
+// ── Client Picker ──────────────────────────────────────────────────────────
+
+interface ClientPickerProps {
+  currentClientId: string | null;
+  currentClientName: string | null;
+  onSelect: (clientId: string | null, clientName: string | null) => Promise<void>;
+}
+
+function ClientPicker({ currentClientId, currentClientName, onSelect }: ClientPickerProps) {
+  const { currentOrg } = useOrganisation();
+  const navigate = useNavigate();
+  const [, setSearchParams] = useSearchParams();
+  const [open, setOpen] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load clients when dropdown opens
+  useEffect(() => {
+    if (!open || !currentOrg?.id) return;
+    setLoadingClients(true);
+    api
+      .get('/clients', { params: { orgId: currentOrg.id } })
+      .then(({ data }) => setClients(data.data ?? []))
+      .catch(() => setClients([]))
+      .finally(() => setLoadingClients(false));
+  }, [open, currentOrg?.id]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleSelect = async (clientId: string | null, clientName: string | null) => {
+    setSaving(true);
+    setOpen(false);
+    try {
+      await onSelect(clientId, clientName);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const navigateToClient = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Navigate to projects page with clients tab
+    navigate('/projects');
+    setTimeout(() => setSearchParams({ tab: 'clients' }), 50);
+  };
+
+  if (!currentOrg) {
+    return (
+      <p className="text-xs text-text-tertiary italic">Join an organisation to manage clients</p>
+    );
+  }
+
+  const primaryContact = null; // could be enriched later
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={saving}
+        className={`group flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-sm transition-all ${
+          currentClientId
+            ? 'border-accent/20 bg-accent/5 text-text-primary hover:border-accent/40'
+            : 'border-border-subtle bg-surface-2/50 text-text-tertiary hover:border-accent/20 hover:text-text-secondary'
+        }`}
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Building2
+            className={`h-3.5 w-3.5 shrink-0 ${currentClientId ? 'text-accent' : 'text-text-tertiary'}`}
+          />
+          <span className="truncate">
+            {saving ? 'Saving...' : (currentClientName ?? 'No client assigned')}
+          </span>
+        </div>
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 text-text-tertiary transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* Navigate to client detail */}
+      {currentClientId && (
+        <button
+          type="button"
+          onClick={navigateToClient}
+          className="mt-1 text-[10px] text-accent hover:underline"
+        >
+          View client details →
+        </button>
+      )}
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-border-subtle bg-surface-1 shadow-dark-lg backdrop-blur-glass overflow-hidden animate-slide-up">
+          {loadingClients ? (
+            <div className="flex justify-center py-4">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+            </div>
+          ) : (
+            <div className="max-h-48 overflow-y-auto py-1">
+              {/* No client option */}
+              <button
+                type="button"
+                onClick={() => void handleSelect(null, null)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-surface-3/60 ${
+                  !currentClientId ? 'text-accent' : 'text-text-secondary'
+                }`}
+              >
+                <X className="h-3.5 w-3.5 text-text-tertiary" />
+                No client
+              </button>
+
+              {clients.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-text-tertiary">No clients in this org yet</p>
+              ) : (
+                clients.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => void handleSelect(c.id, c.name)}
+                    className={`w-full flex items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-3/60 ${
+                      c.id === currentClientId ? 'bg-accent/5' : ''
+                    }`}
+                  >
+                    <Building2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-text-tertiary" />
+                    <div className="min-w-0">
+                      <p
+                        className={`text-sm font-medium truncate ${c.id === currentClientId ? 'text-accent' : 'text-text-primary'}`}
+                      >
+                        {c.name}
+                      </p>
+                      {c.industry && <p className="text-[10px] text-text-tertiary">{c.industry}</p>}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Show primary contact of selected client — placeholder for future enrichment */}
+      {primaryContact}
+    </div>
+  );
+}
+
+// ── ProjectSidebar ─────────────────────────────────────────────────────────
 
 export function ProjectSidebar({ project, onUpdate }: ProjectSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -270,16 +435,18 @@ export function ProjectSidebar({ project, onUpdate }: ProjectSidebarProps) {
         </div>
       )}
 
-      {/* Editable client name */}
+      {/* Client picker */}
       {onUpdate && (
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5">
             Client
           </p>
-          <InlineText
-            value={project.clientName ?? ''}
-            placeholder="Client name..."
-            onSave={(val) => handleSave({ clientName: val || null })}
+          <ClientPicker
+            currentClientId={project.clientId ?? null}
+            currentClientName={project.clientName ?? null}
+            onSelect={async (_clientId, clientName) => {
+              await handleSave({ clientName: clientName ?? null });
+            }}
           />
         </div>
       )}
