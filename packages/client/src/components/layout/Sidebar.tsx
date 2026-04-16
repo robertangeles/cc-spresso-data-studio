@@ -16,13 +16,11 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
-  Building2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSubscription } from '../../context/SubscriptionContext';
-import { useOrganisation } from '../../hooks/useOrganisation';
 import { CreditCounter } from '../CreditCounter';
 import { CreditForecast } from '../billing/CreditForecast';
 import { api } from '../../lib/api';
@@ -40,14 +38,12 @@ const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/content', label: 'Data Studio', icon: PenTool },
   { to: '/content/library', label: 'Content Library', icon: Library },
   { to: '/community', label: 'The Brew', icon: Users },
-  { to: '/organisation', label: 'Organisation', icon: Building2 },
 ];
 
 export function Sidebar() {
   const { user, logout, sessionStatus } = useAuth();
   const { plan, subscription, canUpgrade, canDowngrade, pendingDowngrade, openPlanSwitcher } =
     useSubscription();
-  const { currentOrg } = useOrganisation();
   const navigate = useNavigate();
   const location = useLocation();
   const [showMenu, setShowMenu] = useState(false);
@@ -217,14 +213,7 @@ export function Sidebar() {
             }
           >
             <item.icon className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 flex-1">
-              {item.label}
-              {item.to === '/organisation' && currentOrg && (
-                <span className="block truncate text-[10px] font-normal text-text-tertiary leading-tight">
-                  {currentOrg.name}
-                </span>
-              )}
-            </span>
+            <span className="min-w-0 flex-1">{item.label}</span>
           </NavLink>
         ))}
       </nav>

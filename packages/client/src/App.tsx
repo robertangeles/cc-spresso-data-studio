@@ -39,7 +39,7 @@ import { PricingPage } from './pages/PricingPage';
 import { BillingPage } from './pages/settings/BillingPage';
 import { EmailTemplatePage } from './pages/settings/EmailTemplatePage';
 import { CommunityPage } from './pages/CommunityPage';
-import { OrganisationPage } from './pages/OrganisationPage';
+
 import { CommunitySettingsPage } from './pages/settings/CommunitySettingsPage';
 import { PagesSettingsPage } from './pages/settings/PagesSettingsPage';
 import { SubscriptionProvider } from './context/SubscriptionContext';
@@ -89,7 +89,7 @@ export function App() {
                   <Route path="/content/library" element={<ContentLibraryPage />} />
                   <Route path="/community" element={<CommunityPage />} />
                   <Route path="/community/*" element={<CommunityPage />} />
-                  <Route path="/organisation" element={<OrganisationPage />} />
+
                   <Route path="/content/calendar" element={<Navigate to="/content" replace />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route element={<AdminRoute />}>

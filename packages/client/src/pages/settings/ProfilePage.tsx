@@ -10,13 +10,14 @@ import { Modal } from '../../components/ui/Modal';
 import { AvatarUpload } from '../../components/ui/AvatarUpload';
 import { api, getAccessToken } from '../../lib/api';
 import type { CreateRuleDTO } from '@cc/shared';
+import { OrganisationPage } from '../OrganisationPage';
 
-type Tab = 'info' | 'rules' | 'brand' | 'billing' | 'preferences' | 'social';
+type Tab = 'info' | 'rules' | 'billing' | 'preferences' | 'social' | 'organisation';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'info', label: 'Profile' },
+  { key: 'organisation', label: 'Organisation' },
   { key: 'rules', label: 'Rules Engine' },
-  { key: 'brand', label: 'Brand Kit' },
   { key: 'billing', label: 'Billing' },
   { key: 'preferences', label: 'Preferences' },
   { key: 'social', label: 'Social Accounts' },
@@ -33,17 +34,7 @@ const SOCIAL_PLATFORMS = [
   { id: 'twitter', name: 'Twitter / X', icon: '\u{1D54F}', color: 'bg-black' },
   { id: 'linkedin', name: 'LinkedIn', icon: 'in', color: 'bg-blue-700' },
   { id: 'facebook', name: 'Facebook', icon: 'f', color: 'bg-blue-600' },
-  {
-    id: 'instagram',
-    name: 'Instagram',
-    icon: '\uD83D\uDCF7',
-    color: 'bg-gradient-to-r from-purple-500 to-pink-500',
-  },
-  { id: 'tiktok', name: 'TikTok', icon: '\u266A', color: 'bg-black' },
-  { id: 'threads', name: 'Threads', icon: '@', color: 'bg-black' },
-  { id: 'pinterest', name: 'Pinterest', icon: 'P', color: 'bg-red-600' },
   { id: 'bluesky', name: 'Bluesky', icon: '\uD83E\uDD8B', color: 'bg-blue-500' },
-  { id: 'youtube', name: 'YouTube', icon: '\u25B6', color: 'bg-red-600' },
 ];
 
 export function ProfilePage() {
@@ -99,12 +90,12 @@ export function ProfilePage() {
         />
       )}
       {activeTab === 'rules' && <RulesEngineTab />}
-      {activeTab === 'brand' && <BrandKitTab profile={profile} updateProfile={updateProfile} />}
       {activeTab === 'billing' && <UserBillingTab />}
       {activeTab === 'preferences' && (
         <PreferencesTab profile={profile} updateProfile={updateProfile} />
       )}
       {activeTab === 'social' && <SocialAccountsTab />}
+      {activeTab === 'organisation' && <OrganisationPage />}
     </div>
   );
 }
@@ -452,152 +443,6 @@ function RulesEngineTab() {
       >
         <p>Delete this rule? This cannot be undone.</p>
       </Modal>
-    </div>
-  );
-}
-
-// --- Brand Kit Tab ---
-
-function BrandKitTab({
-  profile,
-  updateProfile,
-}: {
-  profile: ReturnType<typeof useProfile>['profile'];
-  updateProfile: ReturnType<typeof useProfile>['updateProfile'];
-}) {
-  const [brandName, setBrandName] = useState(profile?.brandName ?? '');
-  const [brandVoice, setBrandVoice] = useState(profile?.brandVoice ?? '');
-  const [targetAudience, setTargetAudience] = useState(profile?.targetAudience ?? '');
-  const [keyMessaging, setKeyMessaging] = useState(profile?.keyMessaging ?? '');
-  const [taxId, setTaxId] = useState(profile?.taxId ?? '');
-  const [taxIdType, setTaxIdType] = useState(profile?.taxIdType ?? '');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const handleSave = async () => {
-    setSaving(true);
-    await updateProfile({
-      brandName,
-      brandVoice,
-      targetAudience,
-      keyMessaging,
-      taxId: taxId || undefined,
-      taxIdType: taxIdType || undefined,
-    });
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="mb-4 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
-        <p className="text-sm text-blue-400">
-          Your Brand Kit helps AI understand your brand voice and audience. This context is
-          available to all skills and workflows.
-        </p>
-      </div>
-
-      <Card padding="lg">
-        <div className="space-y-4">
-          <Input
-            label="Brand Name"
-            value={brandName}
-            onChange={(e) => setBrandName(e.target.value)}
-            placeholder="Your brand or business name"
-          />
-          <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">
-              Brand Voice & Tone
-            </label>
-            <textarea
-              value={brandVoice}
-              onChange={(e) => setBrandVoice(e.target.value)}
-              placeholder="Describe how your brand communicates. Example: 'Direct, conversational, no jargon. Think Paul Graham meets Seth Godin. We challenge conventional wisdom with evidence.'"
-              rows={4}
-              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">
-              Target Audience
-            </label>
-            <textarea
-              value={targetAudience}
-              onChange={(e) => setTargetAudience(e.target.value)}
-              placeholder="Who are you creating content for? Example: 'COOs, CIOs, and Chief Transformation Officers at mid-to-large enterprises. Upper-mid to senior level, asset-heavy industries.'"
-              rows={3}
-              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-text-secondary">
-              Key Messaging
-            </label>
-            <textarea
-              value={keyMessaging}
-              onChange={(e) => setKeyMessaging(e.target.value)}
-              placeholder="Core messages, value propositions, or themes that should come through in your content."
-              rows={4}
-              className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
-            />
-          </div>
-
-          {/* Tax / Billing Identity */}
-          <div className="mt-6 pt-6 border-t border-white/5">
-            <h4 className="text-sm font-semibold text-text-primary mb-1">Billing Identity</h4>
-            <p className="text-xs text-text-tertiary mb-4">
-              Your business name and tax number will appear on all invoices. If no brand name is
-              set, your account name will be used.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-text-secondary">
-                  Tax ID Type
-                </label>
-                <select
-                  value={taxIdType}
-                  onChange={(e) => setTaxIdType(e.target.value)}
-                  className="w-full rounded-lg border border-border-default bg-surface-3 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
-                >
-                  <option value="">Select type...</option>
-                  <option value="au_abn">AU ABN</option>
-                  <option value="au_arn">AU ARN</option>
-                  <option value="eu_vat">EU VAT</option>
-                  <option value="gb_vat">GB VAT</option>
-                  <option value="us_ein">US EIN</option>
-                  <option value="nz_gst">NZ GST</option>
-                  <option value="sg_gst">SG GST</option>
-                  <option value="in_gst">IN GST</option>
-                  <option value="ca_bn">CA BN</option>
-                  <option value="jp_cn">JP CN</option>
-                  <option value="kr_brn">KR BRN</option>
-                  <option value="hk_br">HK BR</option>
-                </select>
-              </div>
-              <Input
-                label="Tax ID Number"
-                value={taxId}
-                onChange={(e) => setTaxId(e.target.value)}
-                placeholder={
-                  taxIdType === 'au_abn'
-                    ? '12 345 678 901'
-                    : taxIdType === 'eu_vat'
-                      ? 'DE123456789'
-                      : 'Enter your tax ID'
-                }
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Brand Kit'}
-            </Button>
-            {saved && <span className="text-sm text-status-success">Saved</span>}
-          </div>
-        </div>
-      </Card>
     </div>
   );
 }
