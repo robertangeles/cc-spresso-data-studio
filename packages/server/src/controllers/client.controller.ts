@@ -24,9 +24,11 @@ export async function listClients(req: Request, res: Response, next: NextFunctio
 export async function createClient(req: Request, res: Response, next: NextFunction) {
   try {
     if (!req.user) throw new UnauthorizedError();
-    const { orgId } = req.body as { orgId?: string };
+    const orgId =
+      (req.body as { orgId?: string; organisationId?: string }).orgId ??
+      (req.body as { organisationId?: string }).organisationId;
     if (!orgId) {
-      res.status(400).json({ success: false, error: 'orgId is required.' });
+      res.status(400).json({ success: false, error: 'organisationId is required.' });
       return;
     }
     const client = await clientService.createClient(orgId, req.user.userId, req.body);
