@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import type { ReactNode } from 'react';
 import type { User, SessionStatus } from '@cc/shared';
 import axios from 'axios';
@@ -42,6 +43,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Guard against React StrictMode double-fire which causes two concurrent
   // refresh calls — the second would fail if token rotation already revoked the old token.
   useEffect(() => {
+    // Skip session restore on OAuth callback routes. The callback page will
+    // authenticate via its own flow and calling /auth/refresh here races with
+    // it — an old JWT (e.g. pre-verification) would overwrite fresh user state.
+    if (window.location.pathname.startsWith('/auth/google/callback')) {
+      setIsLoading(false);
+      return;
+    }
+
     let cancelled = false;
     const restoreSession = async () => {
       try {
@@ -102,7 +111,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithGoogle = useCallback(async (code: string) => {
     const { data } = await api.post('/auth/google/callback', { code });
     setAccessToken(data.data.accessToken);
-    setUser(data.data.user);
+    // Clear stale org selection from a previous session — a different user's
+    // orgId would cause org-scoped requests to 401 and bounce us to login.
+    try {
+      window.localStorage.removeItem('spresso_current_org_id');
+    } catch {
+      /* noop */
+    }
+    // flushSync forces the user state to commit before we return, so the
+    // caller's navigate() doesn't race ProtectedRoute rendering with user=null.
+    flushSync(() => {
+      setUser(data.data.user);
+    });
   }, []);
 
   const register = useCallback(

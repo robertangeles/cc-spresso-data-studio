@@ -513,6 +513,14 @@ export function OrganisationPage() {
               onChangeRole={updateMemberRole}
               onRemove={removeMember}
             />
+          ) : !currentOrg ? (
+            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+              <Users className="h-6 w-6 text-text-tertiary/50 mb-2" />
+              <p className="text-sm text-text-secondary">No organisation yet</p>
+              <p className="text-xs text-text-tertiary mt-1">
+                Create one or join with a team key to get started.
+              </p>
+            </div>
           ) : (
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />

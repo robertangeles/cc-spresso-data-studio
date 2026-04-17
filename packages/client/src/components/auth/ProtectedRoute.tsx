@@ -16,7 +16,6 @@ export function ProtectedRoute() {
     return <Navigate to="/" replace />;
   }
 
-  // Gate unverified users to the verification page
   if (!user.isEmailVerified) {
     return <Navigate to="/verify-email" replace />;
   }

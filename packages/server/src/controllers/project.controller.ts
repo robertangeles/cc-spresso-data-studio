@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import * as projectService from '../services/project.service.js';
 import * as activityService from '../services/project-activity.service.js';
 import * as projectChatService from '../services/project-chat.service.js';
-import { UnauthorizedError } from '../utils/errors.js';
+import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
 
 // ---------------------------------------------------------------------------
 // Projects
@@ -533,6 +533,9 @@ export async function listChatMessages(req: Request, res: Response, next: NextFu
     const before = req.query.before as string | undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
 
+    const hasAccess = await projectChatService.isProjectMember(projectId, req.user.userId);
+    if (!hasAccess) throw new ForbiddenError('You do not have access to this project chat');
+
     const result = await projectChatService.getMessages(
       projectId,
       { before, limit },
@@ -548,6 +551,10 @@ export async function getChatUnreadCount(req: Request, res: Response, next: Next
   try {
     if (!req.user) throw new UnauthorizedError();
     const { projectId } = req.params;
+
+    const hasAccess = await projectChatService.isProjectMember(projectId, req.user.userId);
+    if (!hasAccess) throw new ForbiddenError('You do not have access to this project chat');
+
     const count = await projectChatService.getUnreadCount(projectId, req.user.userId);
     res.json({ success: true, data: { unreadCount: count } });
   } catch (err) {

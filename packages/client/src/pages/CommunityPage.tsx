@@ -12,7 +12,6 @@ import {
   joinChannel,
 } from '../hooks/useCommunity';
 import { useDMConversations, useDMMessages, createDMConversation } from '../hooks/useDMs';
-import { getAccessToken } from '../lib/api';
 import { ChannelSidebar } from '../components/community/ChannelSidebar';
 import { MessageArea } from '../components/community/MessageArea';
 import { MemberPanel } from '../components/community/MemberPanel';
@@ -32,7 +31,7 @@ export function CommunityPage() {
   const { user } = useAuth();
 
   // Socket
-  const { socket, isConnected, onlineUsers, connect, disconnect } = useCommunitySocket();
+  const { socket, isConnected, onlineUsers } = useCommunitySocket();
 
   // Data hooks
   const { channels, loading: channelsLoading } = useChannels();
@@ -87,16 +86,7 @@ export function CommunityPage() {
   // Is current user an admin (role-based check)
   const isAdmin = user?.role === 'Administrator';
 
-  // ── Connect socket on mount ────────────────────────────────
-  useEffect(() => {
-    const token = getAccessToken();
-    if (token) {
-      connect(token);
-    }
-    return () => {
-      disconnect();
-    };
-  }, [connect, disconnect]);
+  // Socket connection is handled globally by <SocketConnector /> in App.tsx.
 
   // ── Route parsing ──────────────────────────────────────────
   useEffect(() => {

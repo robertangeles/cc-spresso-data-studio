@@ -1,6 +1,6 @@
 import { eq, and, desc, asc, sql, max } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
-import { NotFoundError, ForbiddenError } from '../utils/errors.js';
+import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from '../utils/errors.js';
 import { logActivity } from './project-activity.service.js';
 import { uploadImage } from './cloudinary.service.js';
 
@@ -8,15 +8,84 @@ import { uploadImage } from './cloudinary.service.js';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function verifyProjectOwnership(projectId: string, userId: string) {
+/**
+ * Returns the project if the caller is allowed to READ it (view details,
+ * list members, see the kanban board).
+ *
+ * Allowed when the caller is:
+ *  - the project creator, or
+ *  - a row in `project_members` for this project (any role), or
+ *  - an `owner` or `admin` of the project's organisation.
+ *
+ * Throws NotFoundError if missing, ForbiddenError otherwise.
+ */
+async function verifyProjectAccess(projectId: string, userId: string) {
   const project = await db.query.projects.findFirst({
     where: eq(schema.projects.id, projectId),
   });
 
   if (!project) throw new NotFoundError('Project');
-  if (project.userId !== userId) throw new ForbiddenError('You do not have access to this project');
+  if (project.userId === userId) return project;
 
-  return project;
+  // Check explicit project membership
+  const pm = await db.query.projectMembers.findFirst({
+    where: and(
+      eq(schema.projectMembers.projectId, projectId),
+      eq(schema.projectMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+  if (pm) return project;
+
+  // Check org admin/owner escalation
+  if (project.organisationId) {
+    const orgMember = await db.query.organisationMembers.findFirst({
+      where: and(
+        eq(schema.organisationMembers.organisationId, project.organisationId),
+        eq(schema.organisationMembers.userId, userId),
+      ),
+      columns: { role: true },
+    });
+    if (orgMember && (orgMember.role === 'owner' || orgMember.role === 'admin')) {
+      return project;
+    }
+  }
+
+  throw new ForbiddenError('You do not have access to this project');
+}
+
+/**
+ * Returns the project if the caller is allowed to manage it (mutate cards,
+ * members, settings, delete).
+ *
+ * Allowed when the caller is:
+ *  - the project creator (`project.userId`), or
+ *  - an `owner` or `admin` of the project's organisation.
+ *
+ * Throws NotFoundError if the project doesn't exist, ForbiddenError otherwise.
+ */
+async function verifyProjectManageAccess(projectId: string, userId: string) {
+  const project = await db.query.projects.findFirst({
+    where: eq(schema.projects.id, projectId),
+  });
+
+  if (!project) throw new NotFoundError('Project');
+  if (project.userId === userId) return project;
+
+  if (project.organisationId) {
+    const orgMember = await db.query.organisationMembers.findFirst({
+      where: and(
+        eq(schema.organisationMembers.organisationId, project.organisationId),
+        eq(schema.organisationMembers.userId, userId),
+      ),
+      columns: { role: true },
+    });
+    if (orgMember && (orgMember.role === 'owner' || orgMember.role === 'admin')) {
+      return project;
+    }
+  }
+
+  throw new ForbiddenError('You do not have permission to manage this project');
 }
 
 async function verifyColumnOwnership(columnId: string, userId: string) {
@@ -61,6 +130,40 @@ async function verifyCardOwnership(cardId: string, userId: string) {
 // ---------------------------------------------------------------------------
 
 export async function listProjects(userId: string) {
+  // A user can see a project when any of these is true:
+  //  - they created it (projects.user_id = userId)
+  //  - they are an explicit project_members row
+  //  - they are owner/admin of the project's organisation
+  //
+  // Orgs the user belongs to as owner/admin:
+  const privilegedOrgs = await db
+    .select({ organisationId: schema.organisationMembers.organisationId })
+    .from(schema.organisationMembers)
+    .where(
+      and(
+        eq(schema.organisationMembers.userId, userId),
+        sql`${schema.organisationMembers.role} IN ('owner', 'admin')`,
+      ),
+    );
+  const privilegedOrgIds = privilegedOrgs.map((o) => o.organisationId);
+
+  // Project ids where user is an explicit project member
+  const memberProjects = await db
+    .select({ projectId: schema.projectMembers.projectId })
+    .from(schema.projectMembers)
+    .where(eq(schema.projectMembers.userId, userId));
+  const memberProjectIds = memberProjects.map((m) => m.projectId);
+
+  // Build the WHERE clause dynamically — any of the three conditions
+  const conditions = [eq(schema.projects.userId, userId)];
+  if (memberProjectIds.length > 0) {
+    conditions.push(sql`${schema.projects.id} IN ${memberProjectIds}`);
+  }
+  if (privilegedOrgIds.length > 0) {
+    conditions.push(sql`${schema.projects.organisationId} IN ${privilegedOrgIds}`);
+  }
+  const whereExpr = conditions.length === 1 ? conditions[0] : sql.join(conditions, sql` OR `);
+
   const projectRows = await db
     .select({
       id: schema.projects.id,
@@ -83,7 +186,7 @@ export async function listProjects(userId: string) {
     .from(schema.projects)
     .leftJoin(schema.kanbanCards, eq(schema.kanbanCards.projectId, schema.projects.id))
     .leftJoin(schema.kanbanColumns, eq(schema.kanbanCards.columnId, schema.kanbanColumns.id))
-    .where(eq(schema.projects.userId, userId))
+    .where(whereExpr)
     .groupBy(schema.projects.id)
     .orderBy(desc(schema.projects.updatedAt));
 
@@ -135,6 +238,14 @@ export async function createProject(
       })),
     );
 
+    // Creator is always a project member with 'owner' role so they appear
+    // in assignment UIs and member lists (not just via projects.userId).
+    await tx.insert(schema.projectMembers).values({
+      projectId: proj.id,
+      userId,
+      role: 'owner',
+    });
+
     return proj;
   });
 
@@ -146,7 +257,7 @@ export async function createProject(
 }
 
 export async function getProject(projectId: string, userId: string) {
-  const project = await verifyProjectOwnership(projectId, userId);
+  const project = await verifyProjectAccess(projectId, userId);
 
   const columns = await db.query.kanbanColumns.findMany({
     where: eq(schema.kanbanColumns.projectId, projectId),
@@ -191,7 +302,7 @@ export async function updateProject(
     endDate?: string | null;
   },
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const [updated] = await db
     .update(schema.projects)
@@ -203,7 +314,7 @@ export async function updateProject(
 }
 
 export async function deleteProject(projectId: string, userId: string) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   await db
     .delete(schema.projects)
@@ -219,7 +330,7 @@ export async function addColumn(
   userId: string,
   data: { name: string; color?: string },
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const [maxResult] = await db
     .select({ maxOrder: max(schema.kanbanColumns.sortOrder) })
@@ -264,7 +375,7 @@ export async function deleteColumn(columnId: string, userId: string) {
 }
 
 export async function reorderColumns(projectId: string, userId: string, columnIds: string[]) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   await db.transaction(async (tx) => {
     for (let i = 0; i < columnIds.length; i++) {
@@ -301,7 +412,7 @@ export async function createCard(
     coverImageUrl?: string;
   },
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const [maxResult] = await db
     .select({ maxOrder: max(schema.kanbanCards.sortOrder) })
@@ -402,7 +513,7 @@ export async function reorderCards(
   cardIds: string[],
   columnId: string,
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   await db.transaction(async (tx) => {
     for (let i = 0; i < cardIds.length; i++) {
@@ -421,7 +532,7 @@ export async function reorderCards(
 // ---------------------------------------------------------------------------
 
 export async function listComments(projectId: string, userId: string, cardId: string) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const comments = await db
     .select({
@@ -448,7 +559,7 @@ export async function addComment(
   cardId: string,
   content: string,
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const [comment] = await db
     .insert(schema.kanbanCardComments)
@@ -474,7 +585,7 @@ export async function updateComment(
   commentId: string,
   content: string,
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   // Verify the comment exists and belongs to this user
   const existing = await db.query.kanbanCardComments.findFirst({
@@ -499,7 +610,7 @@ export async function updateComment(
 }
 
 export async function deleteComment(projectId: string, userId: string, commentId: string) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const existing = await db.query.kanbanCardComments.findFirst({
     where: eq(schema.kanbanCardComments.id, commentId),
@@ -516,7 +627,7 @@ export async function deleteComment(projectId: string, userId: string, commentId
 // ---------------------------------------------------------------------------
 
 export async function listAttachments(projectId: string, userId: string, cardId: string) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const attachments = await db.query.kanbanCardAttachments.findMany({
     where: eq(schema.kanbanCardAttachments.cardId, cardId),
@@ -532,7 +643,7 @@ export async function addAttachment(
   cardId: string,
   data: { type: string; url: string; fileName?: string; fileSize?: number; mimeType?: string },
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const [attachment] = await db
     .insert(schema.kanbanCardAttachments)
@@ -557,7 +668,7 @@ export async function addAttachment(
 }
 
 export async function deleteAttachment(projectId: string, userId: string, attachmentId: string) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const existing = await db.query.kanbanCardAttachments.findFirst({
     where: eq(schema.kanbanCardAttachments.id, attachmentId),
@@ -587,7 +698,7 @@ export async function uploadCardAttachment(
     mimetype: string;
   },
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   // Verify the card belongs to this project
   const card = await db.query.kanbanCards.findFirst({
@@ -634,7 +745,14 @@ export async function uploadCardAttachment(
 // ---------------------------------------------------------------------------
 
 export async function listProjectMembers(projectId: string, userId: string) {
-  await verifyProjectOwnership(projectId, userId);
+  const project = await verifyProjectAccess(projectId, userId);
+
+  // Self-heal: legacy projects created before creator was auto-added.
+  // Idempotent via the unique (projectId, userId) constraint.
+  await db
+    .insert(schema.projectMembers)
+    .values({ projectId, userId: project.userId, role: 'owner' })
+    .onConflictDoNothing();
 
   const members = await db
     .select({
@@ -661,7 +779,7 @@ export async function addProjectMember(
   userId: string,
   data: { userId: string; role: string },
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  const project = await verifyProjectManageAccess(projectId, userId);
 
   // Validate target user exists
   const targetUser = await db.query.users.findFirst({
@@ -670,7 +788,39 @@ export async function addProjectMember(
   });
   if (!targetUser) throw new NotFoundError('User');
 
-  const [member] = await db
+  // Enforce: target user must be a member of the project's organisation.
+  // Guards against direct API calls bypassing the UI's org-scoped picker.
+  if (!project.organisationId) {
+    throw new ValidationError({
+      projectId: ['Project has no organisation — cannot assign members'],
+    });
+  }
+  const orgMembership = await db.query.organisationMembers.findFirst({
+    where: and(
+      eq(schema.organisationMembers.organisationId, project.organisationId),
+      eq(schema.organisationMembers.userId, data.userId),
+    ),
+    columns: { userId: true },
+  });
+  if (!orgMembership) {
+    throw new ValidationError({
+      userId: ["User is not a member of this project's organisation"],
+    });
+  }
+
+  // Reject cleanly if already a project member (unique constraint would 500)
+  const existing = await db.query.projectMembers.findFirst({
+    where: and(
+      eq(schema.projectMembers.projectId, projectId),
+      eq(schema.projectMembers.userId, data.userId),
+    ),
+    columns: { id: true },
+  });
+  if (existing) {
+    throw new ConflictError('User is already a member of this project');
+  }
+
+  const [inserted] = await db
     .insert(schema.projectMembers)
     .values({
       projectId,
@@ -678,6 +828,24 @@ export async function addProjectMember(
       role: data.role ?? 'member',
     })
     .returning();
+
+  // Return the same enriched shape as listProjectMembers so the client can
+  // render it directly (userName, userEmail, userAvatar).
+  const [member] = await db
+    .select({
+      id: schema.projectMembers.id,
+      projectId: schema.projectMembers.projectId,
+      userId: schema.projectMembers.userId,
+      userName: schema.users.name,
+      userEmail: schema.users.email,
+      userAvatar: schema.userProfiles.avatarUrl,
+      role: schema.projectMembers.role,
+      addedAt: schema.projectMembers.addedAt,
+    })
+    .from(schema.projectMembers)
+    .innerJoin(schema.users, eq(schema.projectMembers.userId, schema.users.id))
+    .leftJoin(schema.userProfiles, eq(schema.projectMembers.userId, schema.userProfiles.userId))
+    .where(eq(schema.projectMembers.id, inserted.id));
 
   return member;
 }
@@ -688,7 +856,7 @@ export async function updateProjectMemberRole(
   targetUserId: string,
   role: string,
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const existing = await db.query.projectMembers.findFirst({
     where: and(
@@ -713,7 +881,7 @@ export async function updateProjectMemberRole(
 }
 
 export async function removeProjectMember(projectId: string, userId: string, targetUserId: string) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const existing = await db.query.projectMembers.findFirst({
     where: and(
@@ -738,7 +906,7 @@ export async function removeProjectMember(projectId: string, userId: string, tar
 // ---------------------------------------------------------------------------
 
 export async function listLabels(projectId: string, userId: string) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   return db.query.cardLabels.findMany({
     where: eq(schema.cardLabels.projectId, projectId),
@@ -751,7 +919,7 @@ export async function createLabel(
   userId: string,
   data: { name: string; color: string },
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   if (!data.name?.trim()) throw new Error('Label name is required');
   if (!data.color?.trim()) throw new Error('Label color is required');
@@ -770,7 +938,7 @@ export async function updateLabel(
   labelId: string,
   data: { name?: string; color?: string },
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const existing = await db.query.cardLabels.findFirst({
     where: and(eq(schema.cardLabels.id, labelId), eq(schema.cardLabels.projectId, projectId)),
@@ -790,7 +958,7 @@ export async function updateLabel(
 }
 
 export async function deleteLabel(projectId: string, userId: string, labelId: string) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   const existing = await db.query.cardLabels.findFirst({
     where: and(eq(schema.cardLabels.id, labelId), eq(schema.cardLabels.projectId, projectId)),
@@ -806,7 +974,7 @@ export async function assignLabel(
   cardId: string,
   labelId: string,
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   // Verify card and label both belong to this project
   const [card, label] = await Promise.all([
@@ -835,7 +1003,7 @@ export async function removeCardLabel(
   cardId: string,
   labelId: string,
 ) {
-  await verifyProjectOwnership(projectId, userId);
+  await verifyProjectManageAccess(projectId, userId);
 
   await db
     .delete(schema.cardLabelAssignments)

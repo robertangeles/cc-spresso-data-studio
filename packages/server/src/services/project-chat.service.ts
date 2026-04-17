@@ -6,6 +6,8 @@ import {
   projectMessageReactions,
   projectReadStatus,
   projectMembers,
+  projects,
+  organisationMembers,
   users,
   userProfiles,
 } from '../db/schema.js';
@@ -120,12 +122,39 @@ async function getReactionGroups(
 
 // ── Membership Check ────────────────────────────────────────
 
+/**
+ * True if the user has chat access to the project. Mirrors verifyProjectAccess
+ * in project.service.ts: creator OR explicit project_members row OR
+ * org owner/admin on the project's organisation.
+ */
 export async function isProjectMember(projectId: string, userId: string): Promise<boolean> {
-  const [member] = await db
+  const project = await db.query.projects.findFirst({
+    where: eq(projects.id, projectId),
+    columns: { id: true, userId: true, organisationId: true },
+  });
+  if (!project) return false;
+  if (project.userId === userId) return true;
+
+  const [pm] = await db
     .select({ id: projectMembers.id })
     .from(projectMembers)
     .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
-  return !!member;
+  if (pm) return true;
+
+  if (project.organisationId) {
+    const [orgRow] = await db
+      .select({ role: organisationMembers.role })
+      .from(organisationMembers)
+      .where(
+        and(
+          eq(organisationMembers.organisationId, project.organisationId),
+          eq(organisationMembers.userId, userId),
+        ),
+      );
+    if (orgRow && (orgRow.role === 'owner' || orgRow.role === 'admin')) return true;
+  }
+
+  return false;
 }
 
 // ── Messages ────────────────────────────────────────────────

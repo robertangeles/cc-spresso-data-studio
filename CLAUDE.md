@@ -11,15 +11,15 @@ Project Rules for Claude Code Project: Spresso
 
 # Project Overview
 
-Spresso is a content operations platform built for creators, consultants, founders, and small teams who are tired of juggling disconnected tools just to stay visible online.
+Spresso Data Studio is a data modelling and architecture platform built for data modellers and data architects. It is grounded in DMBOK and designed to close the gap between how data modelling is taught and how it gets done in practice.
 
-It combines the strategic clarity of a launch engine with the speed of a content repurposing system, giving users one place to plan, create, transform, schedule, and distribute content across multiple channels. Instead of forcing people to choose between "what should I say?" and "how do I get this everywhere?", Spresso handles both.
+Most data modelling work is still scattered. Models live in one tool, documentation lives somewhere else, governance decisions get buried in email threads, and business stakeholders never see the output in a form they understand. Spresso brings these things into a single, structured environment without forcing a new methodology on teams who already have one.
 
-At its core, Spresso helps users turn a single idea into a complete content system. A long-form post, voice note, article, webinar, or product insight can be transformed into short-form posts, email copy, promotional snippets, captions, hooks, launch sequences, and platform-specific variations. It is designed to reduce the friction between ideation and execution, so content no longer gets stuck in drafts, scattered notes, or half-finished campaigns.
+The platform supports the full modelling lifecycle. Users work across conceptual through physical model layers, aligning outputs to DMBOK knowledge areas and generating documentation for both technical and non-technical audiences. It includes tooling for naming standards, data lineage, metadata management, and model governance. The work stays traceable and defensible.
 
-Where many tools focus only on publishing, Spresso is built around momentum. It does not just help users post more. It helps them move from idea to audience with intention. That means supporting the full workflow: content planning, repurposing, messaging refinement, campaign coordination, publishing cadence, and launch support. The result is a system that treats content as an asset, not a one-time activity.
+Spresso is built around the reality of how modellers work. That means supporting the messy middle. In practice, modellers spend as much time reverse engineering existing databases as they do building new ones. Inherited models need documentation. Business rules need translating into structured artefacts. Most environments were never designed in one go, and Spresso accounts for it.
 
-Spresso is especially useful for people building a brand, launching an offer, growing a newsletter, promoting a service, or maintaining a consistent presence without hiring a full content team. It gives users a way to create once, adapt intelligently, and distribute with purpose.
+The target user is not a beginner. Spresso is built for experienced practitioners who want tooling that respects their expertise and accelerates their output, not something they have to fight against or simplify their thinking for.
 
 ---
 

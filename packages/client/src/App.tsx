@@ -44,6 +44,7 @@ import { CommunityPage } from './pages/CommunityPage';
 import { CommunitySettingsPage } from './pages/settings/CommunitySettingsPage';
 import { PagesSettingsPage } from './pages/settings/PagesSettingsPage';
 import { SubscriptionProvider } from './context/SubscriptionContext';
+import { SocketConnector } from './components/SocketConnector';
 // ContentCalendarPage removed — calendar is now inline in Content Builder
 
 import { useSubscription } from './context/SubscriptionContext';
@@ -60,6 +61,7 @@ export function App() {
       <AuthProvider>
         <SubscriptionProvider>
           <ToastProvider>
+            <SocketConnector />
             <UpgradeModal />
             <UpgradeCelebration />
             <GlobalPlanSwitcher />

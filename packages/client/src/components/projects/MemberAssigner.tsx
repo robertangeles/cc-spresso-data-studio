@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus, Check, X, Crown, Eye, Pencil, UserPlus } from 'lucide-react';
+import { Check, X, Crown, Eye, Pencil, UserPlus } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useOrganisation } from '../../hooks/useOrganisation';
 import { PresenceIndicator } from '../community/PresenceIndicator';
@@ -9,6 +9,8 @@ interface MemberAssignerProps {
   projectId: string;
   members: ProjectMember[];
   onMembersChange: (members: ProjectMember[]) => void;
+  /** When false, UI renders read-only: avatar stack only, no picker dropdown. */
+  canManage?: boolean;
 }
 
 const ROLE_CONFIG: Record<ProjectMemberRole, { icon: typeof Crown; label: string; color: string }> =
@@ -28,7 +30,12 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-export function MemberAssigner({ projectId, members, onMembersChange }: MemberAssignerProps) {
+export function MemberAssigner({
+  projectId,
+  members,
+  onMembersChange,
+  canManage = true,
+}: MemberAssignerProps) {
   const { orgDetail } = useOrganisation();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
@@ -58,8 +65,9 @@ export function MemberAssigner({ projectId, members, onMembersChange }: MemberAs
           role: 'member',
         });
         onMembersChange([...members, data.data]);
-      } catch {
-        // Silently fail — the API handles validation
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to add project member:', err);
       } finally {
         setSaving(null);
       }
@@ -73,8 +81,9 @@ export function MemberAssigner({ projectId, members, onMembersChange }: MemberAs
       try {
         await api.delete(`/projects/${projectId}/members/${userId}`);
         onMembersChange(members.filter((m) => m.userId !== userId));
-      } catch {
-        // Silently fail
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to remove project member:', err);
       } finally {
         setSaving(null);
       }
@@ -86,20 +95,22 @@ export function MemberAssigner({ projectId, members, onMembersChange }: MemberAs
   const visibleMembers = members.slice(0, 5);
   const overflowCount = members.length - 5;
 
-  return (
-    <div className="relative" ref={dropdownRef}>
-      {/* Avatar stack trigger */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="group flex items-center gap-1"
-        title="Manage members"
+  // Read-only avatar stack — non-managers just see who's on the project
+  if (!canManage) {
+    if (members.length === 0) return null;
+    return (
+      <div
+        className="flex items-center gap-2"
+        title={`${members.length} member${members.length === 1 ? '' : 's'}`}
       >
+        <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-text-tertiary/70 hidden md:inline whitespace-nowrap">
+          Team Members
+        </span>
         <div className="flex -space-x-2">
           {visibleMembers.map((m) => (
             <div
               key={m.userId}
-              className="h-7 w-7 rounded-full border-2 border-surface-1 bg-surface-3 flex items-center justify-center text-[10px] font-bold text-text-secondary overflow-hidden transition-transform group-hover:scale-105"
+              className="h-7 w-7 rounded-full border-2 border-surface-1 bg-surface-3 flex items-center justify-center text-[10px] font-bold text-text-secondary overflow-hidden"
               title={`${m.userName} (${m.role})`}
             >
               {m.userAvatar ? (
@@ -115,9 +126,54 @@ export function MemberAssigner({ projectId, members, onMembersChange }: MemberAs
             </div>
           )}
         </div>
-        <div className="ml-1 p-1 rounded-md text-text-tertiary opacity-0 group-hover:opacity-100 hover:bg-surface-3 transition-all">
-          <Plus className="h-3.5 w-3.5" />
-        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex items-center gap-2" ref={dropdownRef}>
+      <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-text-tertiary/70 hidden md:inline whitespace-nowrap">
+        Team Members
+      </span>
+      {/* Avatar stack + always-visible text trigger */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="group flex items-center gap-2"
+        title="Manage project members"
+      >
+        {members.length > 0 && (
+          <div className="flex -space-x-2">
+            {visibleMembers.map((m) => (
+              <div
+                key={m.userId}
+                className="h-7 w-7 rounded-full border-2 border-surface-1 bg-surface-3 flex items-center justify-center text-[10px] font-bold text-text-secondary overflow-hidden transition-transform group-hover:scale-105"
+                title={`${m.userName} (${m.role})`}
+              >
+                {m.userAvatar ? (
+                  <img src={m.userAvatar} alt={m.userName} className="h-full w-full object-cover" />
+                ) : (
+                  getInitials(m.userName)
+                )}
+              </div>
+            ))}
+            {overflowCount > 0 && (
+              <div className="h-7 w-7 rounded-full border-2 border-surface-1 bg-accent/20 flex items-center justify-center text-[10px] font-bold text-accent">
+                +{overflowCount}
+              </div>
+            )}
+          </div>
+        )}
+        <span
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all ${
+            members.length === 0
+              ? 'border-accent/30 bg-accent/10 text-accent hover:border-accent/60 hover:bg-accent/15'
+              : 'border-border-subtle bg-surface-2/50 text-text-secondary group-hover:text-accent group-hover:border-accent/30'
+          }`}
+        >
+          <UserPlus className="h-3 w-3" />
+          {members.length === 0 ? 'Add Members' : 'Manage'}
+        </span>
       </button>
 
       {/* Dropdown */}

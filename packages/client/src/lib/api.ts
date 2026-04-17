@@ -80,8 +80,19 @@ api.interceptors.response.use(
         setAccessToken(null);
         // Clear stale refresh cookie so it doesn't keep failing
         axios.post(`${apiBaseUrl}/auth/logout`, {}, { withCredentials: true }).catch(() => {});
-        const publicPaths = ['/login', '/register', '/verify', '/pricing', '/privacy', '/terms'];
-        const isPublic = publicPaths.some((p) => window.location.pathname.startsWith(p));
+        const publicPaths = [
+          '/',
+          '/login',
+          '/register',
+          '/verify',
+          '/pricing',
+          '/privacy',
+          '/terms',
+          '/auth/google/callback',
+        ];
+        const pathname = window.location.pathname;
+        const isPublic =
+          pathname === '/' || publicPaths.some((p) => p !== '/' && pathname.startsWith(p));
         if (!isPublic) {
           window.location.href = '/login';
         }

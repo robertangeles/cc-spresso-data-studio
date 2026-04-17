@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api } from '../lib/api';
+import { useAuth } from './AuthContext';
 
 export interface Plan {
   id: string;
@@ -134,20 +135,38 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Only poll billing endpoints when authenticated. Unauthenticated requests
+  // return 401, which triggers the api interceptor's refresh-failure path
+  // and hard-redirects to /login — this would otherwise interrupt the OAuth
+  // callback before it can complete.
+  const { user } = useAuth();
+  const subscriptionRef = useRef(state.subscription);
+  subscriptionRef.current = state.subscription;
+
   useEffect(() => {
+    if (!user) {
+      setState((prev) => ({
+        ...prev,
+        plan: null,
+        subscription: null,
+        pendingDowngrade: null,
+        isLoading: false,
+      }));
+      return;
+    }
     refreshSubscription();
-    // Retry after 3s in case auth token wasn't ready on first attempt
     const retryTimer = setTimeout(() => {
-      if (!state.subscription) {
+      if (!subscriptionRef.current) {
         refreshSubscription();
       }
     }, 3000);
     return () => clearTimeout(retryTimer);
-  }, [refreshSubscription, state.subscription]);
+  }, [user, refreshSubscription]);
 
   // Refresh on window focus (debounced — max once every 5s)
   const lastRefreshRef = useRef(0);
   useEffect(() => {
+    if (!user) return;
     const onFocus = () => {
       const now = Date.now();
       if (now - lastRefreshRef.current > 5000) {
@@ -157,7 +176,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [refreshSubscription]);
+  }, [user, refreshSubscription]);
 
   const getCostForAction = useCallback(
     (actionType: string, isPremium = false): number => {

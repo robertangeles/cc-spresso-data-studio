@@ -1,0 +1,37 @@
+{
+  "date": "2026-04-17",
+  "url": "http://localhost:5176",
+  "scope": "focused: projects + profile.organisation + oauth callback",
+  "healthScore": 97,
+  "issues": [
+    {
+      "id": "ISSUE-004",
+      "title": "Duplicate project names allowed with no disambiguation on the card",
+      "severity": "low",
+      "category": "ux"
+    }
+  ],
+  "resolved": [
+    {
+      "id": "ISSUE-002",
+      "title": "404 cascade on /projects/:bogus-uuid",
+      "fix": "split ProjectDetailPage into shell + inner; child hooks only mount when project exists",
+      "verified": "before=8 console errors + cascading 404s; after=2 errors, 0 cascading 404s"
+    },
+    {
+      "id": "ISSUE-003",
+      "title": "OAuth callback no-code spinner",
+      "status": "false positive - error banner renders correctly, verified in screenshot"
+    }
+  ],
+  "categoryScores": {
+    "console": 90,
+    "links": 100,
+    "visual": 100,
+    "functional": 95,
+    "ux": 85,
+    "performance": 100,
+    "content": 100,
+    "accessibility": 80
+  }
+}

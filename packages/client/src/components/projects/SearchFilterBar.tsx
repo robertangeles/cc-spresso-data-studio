@@ -53,7 +53,7 @@ export function SearchFilterBar({ projectId, filters, onChange }: SearchFilterBa
   };
 
   return (
-    <div className="flex items-center gap-2 flex-wrap mb-4">
+    <div className="flex items-center gap-2 flex-wrap">
       {/* Search input */}
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-tertiary pointer-events-none" />

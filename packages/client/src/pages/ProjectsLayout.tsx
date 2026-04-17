@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { useProjects } from '../hooks/useProjects';
+import { useOrganisation } from '../hooks/useOrganisation';
 import { ClientsPage } from './ClientsPage';
 import type { CreateProjectDTO } from '@cc/shared';
 
@@ -21,6 +22,7 @@ export function ProjectsLayout() {
     : ((searchParams.get('tab') as ActiveTab) ?? 'projects');
 
   const { createProject } = useProjects();
+  const { currentOrg } = useOrganisation();
 
   // Project create modal
   const [showCreate, setShowCreate] = useState(false);
@@ -71,6 +73,7 @@ export function ProjectsLayout() {
       ...(formClientName.trim() && { clientName: formClientName.trim() }),
       ...(formStartDate && { startDate: formStartDate }),
       ...(formEndDate && { endDate: formEndDate }),
+      ...(currentOrg?.id && { organisationId: currentOrg.id }),
     };
 
     const project = await createProject(dto);
