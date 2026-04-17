@@ -1844,3 +1844,116 @@ export const clientContracts = pgTable(
     index('idx_client_contracts_client_id').on(t.clientId),
   ],
 );
+
+// ============================================================
+// PROJECT CHAT MESSAGES
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const projectMessages = pgTable(
+  'project_messages',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    content: text('content').notNull(),
+    parentId: uuid('parent_id'),
+    isEdited: boolean('is_edited').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: list messages by project
+    index('idx_project_messages_project_id').on(t.projectId),
+    // Index: paginated message history by project + time
+    index('idx_project_messages_project_created').on(t.projectId, t.createdAt),
+    // Index: thread replies
+    index('idx_project_messages_parent_id').on(t.parentId),
+    // Index: messages by user
+    index('idx_project_messages_user_id').on(t.userId),
+  ],
+);
+
+// ============================================================
+// PROJECT CHAT MESSAGE ATTACHMENTS
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const projectMessageAttachments = pgTable(
+  'project_message_attachments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => projectMessages.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 20 }).notNull(),
+    url: text('url').notNull(),
+    fileName: varchar('file_name', { length: 255 }),
+    fileSize: integer('file_size'),
+    mimeType: varchar('mime_type', { length: 100 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: fetch attachments for a message
+    index('idx_project_msg_attachments_message_id').on(t.messageId),
+  ],
+);
+
+// ============================================================
+// PROJECT CHAT REACTIONS
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const projectMessageReactions = pgTable(
+  'project_message_reactions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => projectMessages.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    emoji: varchar('emoji', { length: 32 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one reaction per user per emoji per message
+    uniqueIndex('idx_project_msg_reactions_unique').on(t.messageId, t.userId, t.emoji),
+    // Index: fetch reactions for a message
+    index('idx_project_msg_reactions_message_id').on(t.messageId),
+  ],
+);
+
+// ============================================================
+// PROJECT CHAT READ STATUS
+// Normal form: 2NF
+// OLTP table
+// ============================================================
+
+export const projectReadStatus = pgTable(
+  'project_read_status',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lastReadAt: timestamp('last_read_at', { withTimezone: true }).notNull().defaultNow(),
+    lastMessageId: uuid('last_message_id'),
+  },
+  (t) => [
+    // Primary key: one read status per user per project
+    uniqueIndex('idx_project_read_status_pk').on(t.projectId, t.userId),
+    // Index: user's read status across projects
+    index('idx_project_read_status_user_id').on(t.userId),
+  ],
+);

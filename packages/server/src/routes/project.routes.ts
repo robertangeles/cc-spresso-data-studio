@@ -88,6 +88,10 @@ router.delete('/:projectId/labels/:labelId', projectController.deleteLabel);
 router.post('/:projectId/cards/:cardId/labels', projectController.assignLabel);
 router.delete('/:projectId/cards/:cardId/labels/:labelId', projectController.removeCardLabel);
 
+// --- Chat Messages (REST fallback for initial load + pagination) ---
+router.get('/:projectId/chat/messages', projectController.listChatMessages);
+router.get('/:projectId/chat/unread', projectController.getChatUnreadCount);
+
 // --- Activity Log ---
 router.get('/:projectId/activities', projectController.listActivities);
 router.get('/:projectId/cards/:cardId/activities', projectController.listCardActivities);

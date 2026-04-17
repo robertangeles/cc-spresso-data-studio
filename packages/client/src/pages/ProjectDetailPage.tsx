@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Settings2 } from 'lucide-react';
 import { useProject } from '../hooks/useProjects';
+import { useProjectChat } from '../hooks/useProjectChat';
 import { KanbanBoard } from '../components/projects/KanbanBoard';
-import { ProjectSidebar } from '../components/projects/ProjectSidebar';
+import { ProjectHeader } from '../components/projects/ProjectHeader';
+import { ProjectChatSidebar } from '../components/projects/ProjectChatSidebar';
+import { ProjectSettingsPanel } from '../components/projects/ProjectSettingsPanel';
 import { KanbanCardModal } from '../components/projects/KanbanCardModal';
 import { SearchFilterBar, type FilterState } from '../components/projects/SearchFilterBar';
-import type { KanbanCard, UpdateCardDTO, KanbanColumn } from '@cc/shared';
+import { api } from '../lib/api';
+import type { KanbanCard, UpdateCardDTO, KanbanColumn, ProjectMember } from '@cc/shared';
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -33,6 +36,41 @@ export function ProjectDetailPage() {
     assigneeId: null,
     labelId: null,
   });
+
+  // Chat state
+  const [chatOpen, setChatOpen] = useState(false);
+  const chat = useProjectChat(projectId);
+
+  // Settings panel
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Project members
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    api
+      .get(`/projects/${projectId}/members`)
+      .then(({ data }) => setMembers(data.data ?? []))
+      .catch(() => setMembers([]));
+  }, [projectId]);
+
+  // Mark read when chat is opened
+  useEffect(() => {
+    if (chatOpen) {
+      chat.markRead();
+    }
+  }, [chatOpen, chat.messages.length]);
+
+  const handleMembersChange = useCallback((newMembers: ProjectMember[]) => {
+    setMembers(newMembers);
+  }, []);
+
+  const handleDeleteProject = useCallback(async () => {
+    if (!projectId) return;
+    await api.delete(`/projects/${projectId}`);
+    navigate('/projects');
+  }, [projectId, navigate]);
 
   const applyFilters = (cols: KanbanColumn[]): KanbanColumn[] => {
     const hasFilters =
@@ -79,40 +117,21 @@ export function ProjectDetailPage() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 shrink-0">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-lg font-bold tracking-tight text-text-primary">{project.name}</h1>
-            {project.clientName && (
-              <p className="text-xs text-text-tertiary">{project.clientName}</p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Status badge */}
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-              project.status === 'active'
-                ? 'bg-emerald-500/15 text-emerald-400'
-                : project.status === 'completed'
-                  ? 'bg-blue-500/15 text-blue-400'
-                  : 'bg-slate-500/15 text-slate-400'
-            }`}
-          >
-            {project.status}
-          </span>
-          <button
-            type="button"
-            className="p-2 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-surface-3 transition-colors"
-            title="Project settings"
-          >
-            <Settings2 className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+      {/* Compact Project Header */}
+      <ProjectHeader
+        project={project}
+        members={members}
+        onUpdate={async (u) => {
+          await updateProject(u);
+        }}
+        onMembersChange={handleMembersChange}
+        onToggleChat={() => setChatOpen((v) => !v)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        chatOpen={chatOpen}
+        unreadCount={chat.unreadCount}
+      />
 
-      {/* Board + Sidebar */}
+      {/* Board + Chat Sidebar */}
       <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
         {/* Kanban Board */}
         <div className="flex-1 min-w-0 overflow-x-auto flex flex-col">
@@ -152,13 +171,24 @@ export function ProjectDetailPage() {
           </div>
         </div>
 
-        {/* Project Sidebar */}
-        <ProjectSidebar
-          project={project}
-          onUpdate={async (u) => {
-            await updateProject(u);
-          }}
-        />
+        {/* Project Chat Sidebar (collapsible) */}
+        {chatOpen && (
+          <ProjectChatSidebar
+            messages={chat.messages}
+            isLoading={chat.isLoading}
+            hasMore={chat.hasMore}
+            typingUsers={chat.typingUsers}
+            memberCount={members.length}
+            onSend={chat.sendMessage}
+            onEdit={chat.editMessage}
+            onDelete={chat.deleteMessage}
+            onReact={chat.addReaction}
+            onLoadMore={chat.loadMore}
+            onClose={() => setChatOpen(false)}
+            onTypingStart={chat.onTypingStart}
+            onTypingStop={chat.onTypingStop}
+          />
+        )}
       </div>
 
       {/* Card detail modal */}
@@ -178,6 +208,17 @@ export function ProjectDetailPage() {
             setSelectedCard(null);
           }
         }}
+      />
+
+      {/* Settings Slide-Over */}
+      <ProjectSettingsPanel
+        project={project}
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onUpdate={async (u) => {
+          await updateProject(u);
+        }}
+        onDelete={handleDeleteProject}
       />
     </div>
   );

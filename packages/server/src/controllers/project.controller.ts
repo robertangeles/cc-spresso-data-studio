@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as projectService from '../services/project.service.js';
 import * as activityService from '../services/project-activity.service.js';
+import * as projectChatService from '../services/project-chat.service.js';
 import { UnauthorizedError } from '../utils/errors.js';
 
 // ---------------------------------------------------------------------------
@@ -516,6 +517,39 @@ export async function listCardActivities(req: Request, res: Response, next: Next
       { limit, offset },
     );
     res.json({ success: true, data: activities });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chat Messages (REST fallback)
+// ---------------------------------------------------------------------------
+
+export async function listChatMessages(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError();
+    const { projectId } = req.params;
+    const before = req.query.before as string | undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+
+    const result = await projectChatService.getMessages(
+      projectId,
+      { before, limit },
+      req.user.userId,
+    );
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getChatUnreadCount(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError();
+    const { projectId } = req.params;
+    const count = await projectChatService.getUnreadCount(projectId, req.user.userId);
+    res.json({ success: true, data: { unreadCount: count } });
   } catch (err) {
     next(err);
   }

@@ -4,6 +4,7 @@ import { verifyAccessToken } from '../utils/jwt.js';
 import { config } from '../config/index.js';
 import { logger } from '../config/logger.js';
 import { registerCommunitySocketHandlers } from './community.socket.js';
+import { registerProjectSocketHandlers } from './project.socket.js';
 
 // In-memory presence tracking: userId → Set of socketIds
 const onlineUsers = new Map<string, Set<string>>();
@@ -85,6 +86,9 @@ export function initSocketIO(httpServer: HTTPServer): SocketIOServer {
 
     // Register community event handlers
     registerCommunitySocketHandlers(io!, socket);
+
+    // Register project chat event handlers
+    registerProjectSocketHandlers(io!, socket);
 
     socket.on('disconnect', () => {
       const sockets = onlineUsers.get(userId);
