@@ -364,7 +364,7 @@ export function ProjectChatSidebar({
     if (!isLoading && messages.length > 0) {
       messagesEndRef.current?.scrollIntoView();
     }
-  }, [isLoading]);
+  }, [isLoading, messages.length]);
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;

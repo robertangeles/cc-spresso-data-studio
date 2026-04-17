@@ -56,11 +56,12 @@ export function ProjectDetailPage() {
   }, [projectId]);
 
   // Mark read when chat is opened
+  const { markRead, messages: chatMessages } = chat;
   useEffect(() => {
     if (chatOpen) {
-      chat.markRead();
+      markRead();
     }
-  }, [chatOpen, chat.messages.length]);
+  }, [chatOpen, chatMessages.length, markRead]);
 
   const handleMembersChange = useCallback((newMembers: ProjectMember[]) => {
     setMembers(newMembers);
