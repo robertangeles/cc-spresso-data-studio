@@ -2,7 +2,7 @@ import { createServer } from 'http';
 import { app } from './app.js';
 import { config } from './config/index.js';
 import { logger } from './config/logger.js';
-import { verifyConnection } from './db/index.js';
+import { verifyConnection, ensureModelStudioBootstrap } from './db/index.js';
 import { seedBuiltinSkills } from './services/skills/seed.js';
 import { seedAIProviders, seedRoles } from './services/admin.service.js';
 import { providerRegistry } from './services/ai/provider.registry.js';
@@ -18,6 +18,7 @@ import { seedPages } from './services/pages.service.js';
 
 async function start() {
   await verifyConnection();
+  await ensureModelStudioBootstrap();
   await seedBuiltinSkills();
   await seedRoles();
   await seedAIProviders();

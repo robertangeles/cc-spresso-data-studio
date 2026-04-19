@@ -38,6 +38,7 @@ import { aiGenerationRoutes } from './ai-generation.routes.js';
 import { projectRoutes } from './project.routes.js';
 import { organisationRoutes } from './organisation.routes.js';
 import { clientRoutes } from './client.routes.js';
+import { modelStudioRoutes } from './model-studio.routes.js';
 
 const router = Router();
 
@@ -86,6 +87,7 @@ router.use('/pages', pagesRoutes);
 router.use('/projects', projectRoutes);
 router.use('/organisations', organisationRoutes);
 router.use('/clients', clientRoutes);
+router.use('/model-studio', modelStudioRoutes);
 
 // Connected-platforms lookup (used by Content Builder for status dots + hint banner)
 router.get('/oauth/connected', authenticate, async (req, res, next) => {

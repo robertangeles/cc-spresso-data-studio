@@ -2,21 +2,42 @@ import type { Request, Response, NextFunction } from 'express';
 import type { ZodSchema } from 'zod';
 import { ValidationError } from '../utils/errors.js';
 
-export function validate(schema: ZodSchema) {
+type ReqSource = 'body' | 'params' | 'query';
+
+function collectIssues(
+  error: { issues: Array<{ path: (string | number)[]; message: string }> },
+  prefix = '',
+): Record<string, string[]> {
+  const details: Record<string, string[]> = {};
+  for (const issue of error.issues) {
+    const key = prefix + issue.path.join('.');
+    if (!details[key]) details[key] = [];
+    details[key].push(issue.message);
+  }
+  return details;
+}
+
+function runValidator(schema: ZodSchema, source: ReqSource) {
   return (req: Request, _res: Response, next: NextFunction) => {
-    const result = schema.safeParse(req.body);
-
+    const result = schema.safeParse(req[source]);
     if (!result.success) {
-      const details: Record<string, string[]> = {};
-      for (const issue of result.error.issues) {
-        const key = issue.path.join('.');
-        if (!details[key]) details[key] = [];
-        details[key].push(issue.message);
-      }
-      throw new ValidationError(details);
+      throw new ValidationError(collectIssues(result.error, source === 'body' ? '' : `${source}.`));
     }
-
-    req.body = result.data;
+    // Only rewrite body — params/query are read-only on the Express request
+    // in TS land and rewriting them causes downstream type confusion.
+    if (source === 'body') req.body = result.data;
     next();
   };
+}
+
+export function validate(schema: ZodSchema) {
+  return runValidator(schema, 'body');
+}
+
+export function validateParams(schema: ZodSchema) {
+  return runValidator(schema, 'params');
+}
+
+export function validateQuery(schema: ZodSchema) {
+  return runValidator(schema, 'query');
 }
