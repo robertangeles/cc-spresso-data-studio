@@ -5,6 +5,7 @@ import * as oauthService from '../services/oauth/oauth.service.js';
 import { authRoutes } from './auth.routes.js';
 import { flowRoutes } from './flow.routes.js';
 import { adminRoutes } from './admin.routes.js';
+import { navigationRoutes } from './navigation.routes.js';
 import { skillRoutes } from './skill.routes.js';
 import { executionRoutes, executionStreamRoutes } from './execution.routes.js';
 import { contentRoutes } from './content.routes.js';
@@ -52,6 +53,7 @@ router.use('/auth', authRoutes);
 router.use('/flows', executionStreamRoutes); // SSE — must be before authenticated routes
 router.use('/flows', flowRoutes);
 router.use('/admin', adminRoutes);
+router.use('/navigation-config', navigationRoutes);
 router.use('/skills', skillRoutes);
 router.use('/flows', executionRoutes);
 router.use('/content', contentRoutes);

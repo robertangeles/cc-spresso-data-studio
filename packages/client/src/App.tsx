@@ -30,6 +30,7 @@ import { AuthSettingsPage } from './pages/settings/AuthSettingsPage';
 import { GoogleCallbackPage } from './pages/GoogleCallbackPage';
 import { ContentLibraryPage } from './pages/ContentLibraryPage';
 import { ContentBuilderPage } from './pages/ContentBuilderPage';
+import { ModelStudioPage } from './pages/ModelStudioPage';
 import { ChatPage } from './pages/ChatPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { VerifyTokenPage } from './pages/VerifyTokenPage';
@@ -43,6 +44,7 @@ import { CommunityPage } from './pages/CommunityPage';
 
 import { CommunitySettingsPage } from './pages/settings/CommunitySettingsPage';
 import { PagesSettingsPage } from './pages/settings/PagesSettingsPage';
+import { NavigationSettingsPage } from './pages/settings/NavigationSettingsPage';
 import { SubscriptionProvider } from './context/SubscriptionContext';
 import { SocketConnector } from './components/SocketConnector';
 // ContentCalendarPage removed — calendar is now inline in Content Builder
@@ -91,6 +93,7 @@ export function App() {
                   <Route path="/skills/create" element={<SkillCreatorPage />} />
                   <Route path="/skills/:id/edit" element={<SkillCreatorPage />} />
                   <Route path="/content" element={<ContentBuilderPage />} />
+                  <Route path="/model-studio" element={<ModelStudioPage />} />
                   <Route path="/content/library" element={<ContentLibraryPage />} />
                   <Route path="/community" element={<CommunityPage />} />
                   <Route path="/community/*" element={<CommunityPage />} />
@@ -116,6 +119,7 @@ export function App() {
                       <Route path="admin/email-templates" element={<EmailTemplatePage />} />
                       <Route path="admin/community" element={<CommunitySettingsPage />} />
                       <Route path="admin/pages" element={<PagesSettingsPage />} />
+                      <Route path="admin/navigation" element={<NavigationSettingsPage />} />
                     </Route>
                   </Route>
                 </Route>

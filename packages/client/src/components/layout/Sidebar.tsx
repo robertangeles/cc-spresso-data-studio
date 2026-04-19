@@ -4,23 +4,17 @@ import {
   Database,
   Plus,
   MessageSquare,
-  FolderKanban,
-  Workflow,
-  Zap,
-  PenTool,
-  Library,
-  Users,
   Settings,
   User,
   LogOut,
   Trash2,
   ChevronDown,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSubscription } from '../../context/SubscriptionContext';
+import { useSidebarConfig } from '../../hooks/useSidebarConfig';
 import { CreditCounter } from '../CreditCounter';
 import { CreditForecast } from '../billing/CreditForecast';
 import { api } from '../../lib/api';
@@ -31,17 +25,9 @@ interface Conversation {
   updatedAt: string;
 }
 
-const contentOpsItems: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: '/projects', label: 'Projects', icon: FolderKanban },
-  { to: '/skills', label: 'Skills', icon: Zap },
-  { to: '/flows', label: 'Workflows', icon: Workflow },
-  { to: '/content', label: 'Data Studio', icon: PenTool },
-  { to: '/content/library', label: 'Content Library', icon: Library },
-  { to: '/community', label: 'The Brew', icon: Users },
-];
-
 export function Sidebar() {
   const { user, logout, sessionStatus } = useAuth();
+  const { resolved: navItems } = useSidebarConfig();
   const { plan, subscription, canUpgrade, canDowngrade, pendingDowngrade, openPlanSwitcher } =
     useSubscription();
   const navigate = useNavigate();
@@ -200,22 +186,24 @@ export function Sidebar() {
 
       {/* Nav links */}
       <nav className="flex-1 space-y-0.5 px-3">
-        {contentOpsItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200 ease-spring ${
-                isActive
-                  ? 'bg-accent-dim text-accent border-l-2 border-accent'
-                  : 'text-text-secondary hover:bg-surface-3 hover:text-text-primary border-l-2 border-transparent'
-              }`
-            }
-          >
-            <item.icon className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 flex-1">{item.label}</span>
-          </NavLink>
-        ))}
+        {navItems
+          .filter((item) => item.visible)
+          .map((item) => (
+            <NavLink
+              key={item.key}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200 ease-spring ${
+                  isActive
+                    ? 'bg-accent-dim text-accent border-l-2 border-accent'
+                    : 'text-text-secondary hover:bg-surface-3 hover:text-text-primary border-l-2 border-transparent'
+                }`
+              }
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1">{item.label}</span>
+            </NavLink>
+          ))}
       </nav>
 
       {/* Session counter — visible only for metered (free) users */}

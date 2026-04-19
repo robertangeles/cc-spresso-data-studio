@@ -25,6 +25,7 @@ const settingsNav = [
       { to: '/settings/admin/email-templates', label: 'Email Templates' },
       { to: '/settings/admin/community', label: 'The Brew' },
       { to: '/settings/admin/pages', label: 'Pages' },
+      { to: '/settings/admin/navigation', label: 'Navigation' },
     ],
   },
 ];
