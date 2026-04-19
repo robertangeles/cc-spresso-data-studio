@@ -52,9 +52,10 @@ test.describe('Model Studio — create flow', () => {
     const modelId = detailUrl.match(/\/model-studio\/([0-9a-f-]{36})/)?.[1];
     expect(modelId, 'detail URL should include a UUID').toBeTruthy();
 
-    // Detail page should show the model name + the Step-3 canvas placeholder
+    // Detail page should show the model name + the React Flow canvas
+    // (Step 4 replaced the Step-3 placeholder text with the live canvas).
     await expect(page.getByRole('heading', { name: testName })).toBeVisible();
-    await expect(page.getByText(/canvas coming in step 3/i)).toBeVisible();
+    await expect(page.locator('[data-testid="rf__wrapper"]')).toBeVisible({ timeout: 10_000 });
 
     // Reload → state persists (server is authoritative)
     await page.reload();

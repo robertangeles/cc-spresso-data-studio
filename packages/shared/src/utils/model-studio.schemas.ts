@@ -149,3 +149,117 @@ export const canvasStatePutSchema = z
   })
   .strict();
 export type CanvasStatePut = z.infer<typeof canvasStatePutSchema>;
+
+// ============================================================
+// Entities (data_model_entities table) — Step 4
+//
+// Naming rules:
+//   - Conceptual / logical layers: name is free-form (1–128 chars).
+//   - Physical layer: name MUST be a SQL-safe identifier
+//     (`/^[A-Za-z_][A-Za-z0-9_]*$/`). Enforced as a hard reject so a
+//     malformed identifier can never reach DDL generation.
+//
+// `businessName` is the human-readable label and is free-form on every
+// layer (so the canvas can render "Customer Order" while the physical
+// table is `customer_order`).
+// ============================================================
+
+const PHYSICAL_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const entityNameSchema = z
+  .string()
+  .trim()
+  .min(1, 'Name must not be empty')
+  .max(128, 'Name must be 128 characters or fewer');
+
+const businessNameSchema = z
+  .string()
+  .trim()
+  .min(1, 'Business name must not be empty')
+  .max(255, 'Business name must be 255 characters or fewer');
+
+export const entityCreateSchema = z
+  .object({
+    name: entityNameSchema,
+    businessName: businessNameSchema.optional().nullable(),
+    description: z
+      .string()
+      .max(10_000, 'Description must be 10,000 characters or fewer')
+      .optional()
+      .nullable(),
+    layer: LAYER,
+    entityType: ENTITY_TYPE.optional().default('standard'),
+    metadata: metadataSchema.optional(),
+    tags: tagsSchema.optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.layer === 'physical' && !PHYSICAL_IDENTIFIER.test(v.name)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['name'],
+        message:
+          'Physical-layer names must start with a letter or underscore and contain only letters, digits, and underscores.',
+      });
+    }
+  });
+export type EntityCreate = z.infer<typeof entityCreateSchema>;
+
+export const entityUpdateSchema = z
+  .object({
+    name: entityNameSchema.optional(),
+    businessName: businessNameSchema.nullable().optional(),
+    description: z.string().max(10_000).nullable().optional(),
+    layer: LAYER.optional(),
+    entityType: ENTITY_TYPE.optional(),
+    metadata: metadataSchema.optional(),
+    tags: tagsSchema.optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, {
+    message: 'At least one field must be provided',
+  });
+export type EntityUpdate = z.infer<typeof entityUpdateSchema>;
+
+export const entityIdParamsSchema = z.object({
+  id: uuidParam,
+  entityId: uuidParam,
+});
+export type EntityIdParams = z.infer<typeof entityIdParamsSchema>;
+
+export const entityListQuerySchema = z
+  .object({
+    layer: LAYER.optional(),
+    limit: z.coerce.number().int().positive().max(500).optional().default(200),
+    offset: z.coerce.number().int().min(0).optional().default(0),
+  })
+  .strict();
+export type EntityListQuery = z.infer<typeof entityListQuerySchema>;
+
+/** Cascade flag for deletes that hit dependent rows.
+ *  GET /entities/:eid returns a dependents preview; DELETE without
+ *  ?confirm=cascade returns 409 + the dependents list when any exist. */
+export const entityDeleteQuerySchema = z
+  .object({
+    confirm: z.enum(['cascade']).optional(),
+  })
+  .strict();
+export type EntityDeleteQuery = z.infer<typeof entityDeleteQuerySchema>;
+
+// ============================================================
+// Naming-lint (D6) — server is authoritative; client mirrors for
+// inline amber underlines. Severity:
+//   - violation: blocks DDL / invalid identifier (hard).
+//   - warning : reserved-word style smell (soft).
+// ============================================================
+
+export const NAMING_LINT_SEVERITY = z.enum(['violation', 'warning']);
+export type NamingLintSeverity = z.infer<typeof NAMING_LINT_SEVERITY>;
+
+export const namingLintRuleSchema = z.object({
+  rule: z.string(),
+  severity: NAMING_LINT_SEVERITY,
+  message: z.string(),
+  /** Suggested replacement (e.g. snake_case rewrite). Optional. */
+  suggestion: z.string().optional(),
+});
+export type NamingLintRule = z.infer<typeof namingLintRuleSchema>;

@@ -10,6 +10,17 @@ const api = axios.create({
 
 let accessToken: string | null = null;
 
+// E2E hook: Playwright tests inject a freshly-minted access token via
+// window.__E2E_ACCESS_TOKEN__ before navigation so the page can skip the
+// 401-then-refresh dance (the refresh path rotates cookies and corrupts
+// cross-test state). Production never sets this — the read is a no-op.
+if (typeof window !== 'undefined') {
+  const injected = (window as unknown as { __E2E_ACCESS_TOKEN__?: string }).__E2E_ACCESS_TOKEN__;
+  if (typeof injected === 'string' && injected.length > 0) {
+    accessToken = injected;
+  }
+}
+
 export function setAccessToken(token: string | null) {
   accessToken = token;
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -6,30 +6,34 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  applyNodeChanges,
   useReactFlow,
+  type Node,
+  type NodeChange,
+  type NodeMouseHandler,
   type Viewport,
 } from '@xyflow/react';
 import type { Layer } from '@cc/shared';
 import { useCanvasState } from '../../hooks/useCanvasState';
+import { useEntities, type EntitySummary } from '../../hooks/useEntities';
+import { EntityNode, type EntityNodeData } from './EntityNode';
+import { EntityDetailPanel } from './EntityDetailPanel';
 import '@xyflow/react/dist/style.css';
 
 /**
- * Step 3 canvas foundation.
+ * Step 4 canvas — entities are now first-class citizens.
  *
- *  - Empty React Flow v12 canvas (pan + zoom + scroll zoom).
- *  - Controls: zoom in/out, fit-view, interactive toggle.
- *  - Minimap (D7) — layer-colour-aware stub: nodes are absent at Step 3
- *    so the minimap mostly shows the viewport frame. Colour scheme
- *    kicks in when entities land (Step 4).
- *  - Persistence: useCanvasState loads on mount, saves on viewport
- *    change (500 ms debounce). Node positions will be added to the
- *    save path in Step 4 once nodes exist.
- *
- * Rob's mental model for "Canvas is Step 3":
- *  At Step 3 complete the user sees a pannable/zoomable canvas with a
- *  visible grid, controls in the corner, and a minimap. The "your
- *  model is saved" message stays as a centred overlay nudging the
- *  user toward Step 4 (entities).
+ * Behaviour:
+ *  - Loads entities for the current (model, layer).
+ *  - Each entity renders as a custom EntityNode (with naming-lint
+ *    underline + layer badge).
+ *  - Double-click on empty canvas → creates a new entity at the cursor
+ *    position. The entity opens in the detail panel focused on the
+ *    name field so the user can rename immediately.
+ *  - Single-click an entity → opens / re-uses the right-side detail
+ *    panel for editing, auto-describe (D5), and cascade-aware delete.
+ *  - Node positions persist via the existing canvas-state hook
+ *    (debounced 500ms). Viewport persistence is unchanged from Step 3.
  */
 
 interface Props {
@@ -45,39 +49,145 @@ export function ModelStudioCanvas(props: Props) {
   );
 }
 
+const NODE_TYPES = { entity: EntityNode };
+
+// Always snake-safe so the physical-layer Zod check never blocks creation.
+const DEFAULT_ENTITY_NAME = 'new_entity';
+
 function InnerCanvas({ modelId, layer }: Props) {
-  const { state, isLoading, error, save } = useCanvasState(modelId, layer);
+  const canvas = useCanvasState(modelId, layer);
+  const ent = useEntities(modelId);
   const rf = useReactFlow();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Apply persisted viewport once loaded.
   useEffect(() => {
-    if (isLoading) return;
-    const v = state.viewport ?? { x: 0, y: 0, zoom: 1 };
+    if (canvas.isLoading) return;
+    const v = canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 };
     rf.setViewport({ x: v.x, y: v.y, zoom: v.zoom });
-  }, [isLoading, state.viewport, rf]);
+  }, [canvas.isLoading, canvas.state.viewport, rf]);
 
-  // Persist viewport when the user finishes panning/zooming.
-  // React Flow v12 calls this `onMoveEnd`; the handler receives the
-  // originating event + the final Viewport.
+  // Build React Flow nodes from entities + persisted positions.
+  const nodes: Node<EntityNodeData>[] = useMemo(() => {
+    const visible = ent.entities.filter((e) => e.layer === layer);
+    return visible.map((e) => {
+      const pos = canvas.state.nodePositions[e.id] ?? { x: 0, y: 0 };
+      return {
+        id: e.id,
+        type: 'entity',
+        position: pos,
+        selected: e.id === selectedId,
+        data: {
+          name: e.name,
+          businessName: e.businessName,
+          layer: e.layer,
+          lint: e.lint,
+        },
+      };
+    });
+  }, [ent.entities, layer, canvas.state.nodePositions, selectedId]);
+
+  // Track local node movements and persist when the user releases.
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<Node<EntityNodeData>>[]) => {
+      const next = applyNodeChanges(changes, nodes);
+      const nextPositions: Record<string, { x: number; y: number }> = {};
+      for (const n of next) nextPositions[n.id] = { x: n.position.x, y: n.position.y };
+
+      const hasMove = changes.some((c) => c.type === 'position');
+      if (!hasMove) return;
+      canvas.save({
+        nodePositions: nextPositions,
+        viewport: canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 },
+      });
+    },
+    [canvas, nodes],
+  );
+
   const handleMoveEnd = useCallback(
     (_e: unknown, v: Viewport) => {
-      save({
-        nodePositions: state.nodePositions,
+      canvas.save({
+        nodePositions: canvas.state.nodePositions,
         viewport: { x: v.x, y: v.y, zoom: v.zoom },
       });
     },
-    [save, state.nodePositions],
+    [canvas],
   );
 
-  // No nodes yet at Step 3 — Step 4 wires entities through.
-  const nodes = useMemo(() => [], []);
-  const edges = useMemo(() => [], []);
+  // Double-click empty canvas → create entity at cursor (S4-E1).
+  const handlePaneDoubleClick = useCallback(
+    async (event: React.MouseEvent) => {
+      const flowPos = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      try {
+        const created = await ent.create({
+          name: DEFAULT_ENTITY_NAME,
+          layer,
+          entityType: 'standard',
+        });
+        canvas.save({
+          nodePositions: { ...canvas.state.nodePositions, [created.id]: flowPos },
+          viewport: canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 },
+        });
+        setSelectedId(created.id);
+      } catch {
+        // Errors surface via ent.error; nothing else to do here.
+      }
+    },
+    [rf, ent, layer, canvas],
+  );
+
+  const handleNodeClick: NodeMouseHandler<Node<EntityNodeData>> = useCallback((_evt, node) => {
+    setSelectedId(node.id);
+  }, []);
+
+  const selectedEntity: EntitySummary | null = useMemo(
+    () => ent.entities.find((e) => e.id === selectedId) ?? null,
+    [ent.entities, selectedId],
+  );
+
+  const updateSelected = useCallback(
+    async (patch: { name?: string; businessName?: string | null; description?: string | null }) => {
+      if (!selectedId) return;
+      await ent.update(selectedId, patch);
+    },
+    [ent, selectedId],
+  );
+
+  const autoDescribeSelected = useCallback(async () => {
+    if (!selectedId) return { description: '' };
+    const r = await ent.autoDescribe(selectedId);
+    return { description: r.description };
+  }, [ent, selectedId]);
+
+  const deleteSelected = useCallback(
+    async (cascade: boolean) => {
+      if (!selectedId) return;
+      await ent.remove(selectedId, { cascade });
+      // Drop the cached position so a recreated UUID never inherits it.
+      const rest = { ...canvas.state.nodePositions };
+      delete rest[selectedId];
+      canvas.save({
+        nodePositions: rest,
+        viewport: canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 },
+      });
+      setSelectedId(null);
+    },
+    [ent, selectedId, canvas],
+  );
+
+  const empty = !canvas.isLoading && ent.entities.filter((e) => e.layer === layer).length === 0;
 
   return (
     <div className="relative h-full w-full">
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={[]}
+        nodeTypes={NODE_TYPES}
+        onNodesChange={handleNodesChange}
+        onNodeClick={handleNodeClick}
+        onPaneClick={() => setSelectedId(null)}
+        onPaneContextMenu={(e) => e.preventDefault()}
+        onDoubleClick={handlePaneDoubleClick}
         minZoom={0.1}
         maxZoom={3}
         onMoveEnd={handleMoveEnd}
@@ -85,6 +195,9 @@ function InnerCanvas({ modelId, layer }: Props) {
         deleteKeyCode={null}
         panOnScroll
         zoomOnScroll
+        // Double-click is OUR create-entity gesture; turn off React Flow's
+        // zoom-on-doubleclick or it eats the event before we see it.
+        zoomOnDoubleClick={false}
         selectionOnDrag
         colorMode="dark"
       >
@@ -105,30 +218,43 @@ function InnerCanvas({ modelId, layer }: Props) {
           ariaLabel="Canvas minimap"
           position="bottom-left"
           maskColor="rgba(0, 0, 0, 0.6)"
-          nodeColor="#FFD60A"
+          nodeColor={(n) => {
+            const lyr = (n.data as EntityNodeData | undefined)?.layer;
+            if (lyr === 'physical') return '#FCD34D';
+            if (lyr === 'logical') return '#34D399';
+            return '#60A5FA';
+          }}
           nodeStrokeColor="rgba(255, 214, 10, 0.4)"
           className="!bg-surface-2/70 !backdrop-blur !border !border-white/10 !rounded-lg"
         />
       </ReactFlow>
 
-      {/* Step-3 nudge overlay — shows until the model has nodes. */}
-      {!isLoading && (
+      {empty && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
-          <div className="pointer-events-auto max-w-md rounded-2xl border border-white/5 bg-surface-2/60 backdrop-blur-xl p-5 text-center shadow-[0_0_24px_rgba(255,214,10,0.12)]">
-            <p className="text-sm font-medium text-text-primary">Canvas is live</p>
+          {/* No `pointer-events-auto` on the card — the entire empty
+              state is a hint and must let the canvas receive the
+              double-click that creates the first entity. */}
+          <div className="max-w-md rounded-2xl border border-white/5 bg-surface-2/60 backdrop-blur-xl p-5 text-center shadow-[0_0_24px_rgba(255,214,10,0.12)]">
+            <p className="text-sm font-medium text-text-primary">Empty {layer} layer</p>
             <p className="mt-1 text-xs text-text-secondary">
-              Pan with the mouse, zoom with scroll, and the viewport you leave here will be restored
-              on reload.
-              <br />
-              Adding entities unlocks in Step 4.
+              Double-click anywhere on the canvas to drop your first entity. You can rename it,
+              auto-describe it, and switch layers from the header.
             </p>
           </div>
         </div>
       )}
 
-      {error && (
+      <EntityDetailPanel
+        entity={selectedEntity}
+        onClose={() => setSelectedId(null)}
+        onUpdate={updateSelected}
+        onAutoDescribe={autoDescribeSelected}
+        onDelete={deleteSelected}
+      />
+
+      {(canvas.error || ent.error) && (
         <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-md bg-red-500/80 text-white text-[11px] px-2.5 py-1 shadow-lg">
-          {error}
+          {canvas.error || ent.error}
         </div>
       )}
     </div>
