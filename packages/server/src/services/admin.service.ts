@@ -304,22 +304,43 @@ export async function getDatabaseStatus(): Promise<DatabaseStatus> {
 export async function getTableInfo(): Promise<TableInfo[]> {
   const client = await pool.connect();
   try {
-    const result = await client.query(`
+    // Size + column count come from catalog (instant). Row counts come from
+    // a real COUNT(*) per table rather than pg_stat_user_tables.n_live_tup
+    // (which is an autovacuum-updated estimate and can be minutes stale —
+    // users clicked Refresh expecting accurate numbers).
+    const meta = await client.query(`
       SELECT
-        t.relname AS name,
-        COALESCE(t.n_live_tup, 0)::int AS row_count,
+        c.relname AS name,
         pg_total_relation_size(c.oid)::bigint AS size_bytes,
         pg_size_pretty(pg_total_relation_size(c.oid)) AS size_pretty,
-        (SELECT count(*)::int FROM information_schema.columns col WHERE col.table_name = t.relname AND col.table_schema = 'public') AS column_count
-      FROM pg_stat_user_tables t
-      JOIN pg_class c ON c.relname = t.relname
-      JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
-      ORDER BY t.relname
+        (SELECT count(*)::int FROM information_schema.columns col
+          WHERE col.table_name = c.relname AND col.table_schema = 'public') AS column_count
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind = 'r'
+      ORDER BY c.relname
     `);
 
-    return result.rows.map((row) => ({
+    // Count rows per table, parallel. Each table name is a Postgres identifier,
+    // so we validate with a regex before interpolating (no SQL injection).
+    const safeName = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+    const counts = await Promise.all(
+      meta.rows.map(async (row) => {
+        const name = row.name as string;
+        if (!safeName.test(name)) return [name, 0] as const;
+        try {
+          const r = await client.query(`SELECT COUNT(*)::int AS n FROM "${name}"`);
+          return [name, r.rows[0].n as number] as const;
+        } catch {
+          return [name, 0] as const;
+        }
+      }),
+    );
+    const byName = new Map(counts);
+
+    return meta.rows.map((row) => ({
       name: row.name,
-      rowCount: row.row_count,
+      rowCount: byName.get(row.name) ?? 0,
       sizeBytes: Number(row.size_bytes),
       sizePretty: row.size_pretty,
       columnCount: row.column_count,
