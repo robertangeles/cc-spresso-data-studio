@@ -15,10 +15,22 @@ the project memory at `project_model_studio_state.md` — use it.
       naming-lint groundwork (D6). Shipped on `main` as `fd110b4` (2026-04-19).
 - [x] **Step 4.5** — Origin-direction choice at model creation
       (greenfield vs existing-system). Shipped same merge.
-- [ ] **Step 5** — Attribute CRUD + synthetic data drawer (D9) +
-      naming-lint applied to attributes. Wire `enqueueEmbedding()` for
-      attributes. Extend `lintIdentifier()` with attribute-specific
-      rules (data-type aware, e.g. `*_id` → suggest `uuid`).
+- [x] **Step 5** — Attribute CRUD + synthetic data drawer (D9) +
+      naming-lint applied to attributes. Backend merged via commit
+      `1e6b3fb` (attribute service + controller + 7 routes +
+      `model-studio-synthetic-data` prompt seed + 16 integration tests).
+      `lintAttribute()` sibling to `lintIdentifier()` adds `*_id → uuid`
+      warning, `VARCHAR` without length warning, `NUMERIC` scale >
+      precision violation. Frontend merged separately: `useAttributes`
+      hook, `AttributesPanel` with dnd-kit drag-reorder, PK/FK/NN/UQ
+      pill toggles, `EntityNode` splits PKs above a divider + non-PKs
+      below, `SyntheticDataDrawer` slides up from canvas bottom with
+      "SYNTHETIC — NOT REAL" badge + formula-injection-safe copy-to-
+      clipboard (`packages/client/src/lib/csvSafe.ts`). Ephemeral
+      synthetic results (no row storage) with a `recordChange`
+      audit breadcrumb. Attributes lazy-load per-entity on
+      panel-open; a model-wide batch endpoint is a deferred
+      follow-up (see new entry below).
 - [ ] **Step 6** — Relationships + IE + IDEF1X notation rendering +
       notation switcher (currently inert in the canvas header).
 - [ ] **Step 7** — Layer switching + crossfade animation (D3) +
@@ -55,6 +67,21 @@ the project memory at `project_model_studio_state.md` — use it.
       route on `main`). See `tasks/lessons.md` #27 for the writeup.
       Currently marked `.fixme` in
       [packages/client/tests/e2e/model-studio-entities.spec.ts](packages/client/tests/e2e/model-studio-entities.spec.ts).
+- [ ] **Step 5 E2E tests** (S5-E1..E4 + optional S5-E5). Backend
+      and frontend are in; Playwright specs were deferred past manual
+      acceptance. Use network-wait (not `waitForTimeout`) per lessons.md
+      #27 to avoid the S4-E3/E4/E6 suite-flakiness trap. Attribute
+      flows: inline add, drag-reorder persists, PKs render above the
+      divider on the canvas node, synthetic drawer opens with "SYNTHETIC
+      — NOT REAL" badge.
+- [ ] **Model-wide attribute batch endpoint**
+      (`GET /api/model-studio/models/:id/attributes`). Today the
+      canvas loads attributes per-entity on panel-open, which means
+      PK indicators appear on a node only after the user opens its
+      panel. A single model-wide batch call on canvas mount would
+      preload every node's attributes so PKs render immediately
+      after refresh. Server service method + route + client hook
+      change. Est. 30 min.
 - [ ] **Convert remaining seed scripts to use `runOnce()`** for
       consistency. Today only `migrateModelIds` is guarded; the
       various `seed*` calls in `start()` (`seedRoles`, `seedAIProviders`,

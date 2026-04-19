@@ -16,8 +16,10 @@ import {
 import type { Layer } from '@cc/shared';
 import { useCanvasState } from '../../hooks/useCanvasState';
 import { useEntities, type EntitySummary } from '../../hooks/useEntities';
+import { useAttributes, type SyntheticDataResult } from '../../hooks/useAttributes';
 import { EntityNode, type EntityNodeData } from './EntityNode';
 import { EntityDetailPanel } from './EntityDetailPanel';
+import { SyntheticDataDrawer } from './SyntheticDataDrawer';
 import '@xyflow/react/dist/style.css';
 
 /**
@@ -57,8 +59,16 @@ const DEFAULT_ENTITY_NAME = 'new_entity';
 function InnerCanvas({ modelId, layer }: Props) {
   const canvas = useCanvasState(modelId, layer);
   const ent = useEntities(modelId);
+  const attrs = useAttributes(modelId);
   const rf = useReactFlow();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // D9 drawer state lives at the canvas level because the drawer
+  // occupies the canvas viewport, not the panel.
+  const [syntheticOpen, setSyntheticOpen] = useState(false);
+  const [syntheticResult, setSyntheticResult] = useState<SyntheticDataResult | null>(null);
+  const [syntheticLoading, setSyntheticLoading] = useState(false);
+  const [syntheticError, setSyntheticError] = useState<string | null>(null);
 
   // Apply persisted viewport once loaded.
   useEffect(() => {
@@ -67,11 +77,22 @@ function InnerCanvas({ modelId, layer }: Props) {
     rf.setViewport({ x: v.x, y: v.y, zoom: v.zoom });
   }, [canvas.isLoading, canvas.state.viewport, rf]);
 
+  // Lazy-load attributes when an entity is selected. First-time
+  // selection triggers a fetch; subsequent selections use the cached
+  // map. The node immediately receives what we have (possibly []) so
+  // the canvas doesn't flicker while the request is in flight.
+  useEffect(() => {
+    if (!selectedId) return;
+    if (attrs.attributesByEntity[selectedId] !== undefined) return;
+    void attrs.load(selectedId);
+  }, [selectedId, attrs]);
+
   // Build React Flow nodes from entities + persisted positions.
   const nodes: Node<EntityNodeData>[] = useMemo(() => {
     const visible = ent.entities.filter((e) => e.layer === layer);
     return visible.map((e) => {
       const pos = canvas.state.nodePositions[e.id] ?? { x: 0, y: 0 };
+      const entityAttrs = attrs.attributesByEntity[e.id];
       return {
         id: e.id,
         type: 'entity',
@@ -82,10 +103,17 @@ function InnerCanvas({ modelId, layer }: Props) {
           businessName: e.businessName,
           layer: e.layer,
           lint: e.lint,
+          attributes: entityAttrs?.map((a) => ({
+            id: a.id,
+            name: a.name,
+            dataType: a.dataType,
+            isPrimaryKey: a.isPrimaryKey,
+            ordinalPosition: a.ordinalPosition,
+          })),
         },
       };
     });
-  }, [ent.entities, layer, canvas.state.nodePositions, selectedId]);
+  }, [ent.entities, layer, canvas.state.nodePositions, selectedId, attrs.attributesByEntity]);
 
   // Track local node movements and persist when the user releases.
   const handleNodesChange = useCallback(
@@ -175,6 +203,56 @@ function InnerCanvas({ modelId, layer }: Props) {
     [ent, selectedId, canvas],
   );
 
+  // --- Attribute handlers scoped to the currently-selected entity ---
+
+  const attributeCreate = useCallback(
+    (dto: Parameters<typeof attrs.create>[1]) => {
+      if (!selectedId) return Promise.reject(new Error('No entity selected'));
+      return attrs.create(selectedId, dto);
+    },
+    [attrs, selectedId],
+  );
+
+  const attributeUpdate = useCallback(
+    (attrId: string, patch: Parameters<typeof attrs.update>[2]) => {
+      if (!selectedId) return Promise.reject(new Error('No entity selected'));
+      return attrs.update(selectedId, attrId, patch);
+    },
+    [attrs, selectedId],
+  );
+
+  const attributeDelete = useCallback(
+    async (attrId: string) => {
+      if (!selectedId) return;
+      await attrs.remove(selectedId, attrId);
+    },
+    [attrs, selectedId],
+  );
+
+  const attributeReorder = useCallback(
+    async (orderedIds: string[]) => {
+      if (!selectedId) return;
+      await attrs.reorder(selectedId, orderedIds);
+    },
+    [attrs, selectedId],
+  );
+
+  const generateSyntheticForSelected = useCallback(async () => {
+    if (!selectedId) return;
+    setSyntheticOpen(true);
+    setSyntheticLoading(true);
+    setSyntheticError(null);
+    setSyntheticResult(null);
+    try {
+      const res = await attrs.generateSyntheticData(selectedId, 10);
+      setSyntheticResult(res);
+    } catch (e) {
+      setSyntheticError(e instanceof Error ? e.message : 'Synthetic data generation failed');
+    } finally {
+      setSyntheticLoading(false);
+    }
+  }, [attrs, selectedId]);
+
   const empty = !canvas.isLoading && ent.entities.filter((e) => e.layer === layer).length === 0;
 
   return (
@@ -246,15 +324,33 @@ function InnerCanvas({ modelId, layer }: Props) {
 
       <EntityDetailPanel
         entity={selectedEntity}
+        attributes={attrs.getFor(selectedId)}
+        attributesBusy={attrs.isLoading}
         onClose={() => setSelectedId(null)}
         onUpdate={updateSelected}
         onAutoDescribe={autoDescribeSelected}
         onDelete={deleteSelected}
+        onAttributeCreate={attributeCreate}
+        onAttributeUpdate={attributeUpdate}
+        onAttributeDelete={attributeDelete}
+        onAttributeReorder={attributeReorder}
+        onGenerateSynthetic={generateSyntheticForSelected}
       />
 
-      {(canvas.error || ent.error) && (
+      <SyntheticDataDrawer
+        open={syntheticOpen}
+        entityName={selectedEntity?.name ?? null}
+        result={syntheticResult}
+        isLoading={syntheticLoading}
+        error={syntheticError}
+        panelOpen={selectedEntity !== null}
+        onClose={() => setSyntheticOpen(false)}
+        onRegenerate={generateSyntheticForSelected}
+      />
+
+      {(canvas.error || ent.error || attrs.error) && (
         <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-md bg-red-500/80 text-white text-[11px] px-2.5 py-1 shadow-lg">
-          {canvas.error || ent.error}
+          {canvas.error || ent.error || attrs.error}
         </div>
       )}
     </div>

@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Trash2, X } from 'lucide-react';
-import { lintIdentifier, type Layer, type NamingLintRule } from '@cc/shared';
+import { Database, Sparkles, Trash2, X } from 'lucide-react';
+import {
+  lintIdentifier,
+  type AttributeCreate,
+  type AttributeUpdate,
+  type Layer,
+  type NamingLintRule,
+} from '@cc/shared';
 import type { EntitySummary } from '../../hooks/useEntities';
+import type { AttributeSummary } from '../../hooks/useAttributes';
+import { AttributesPanel } from './AttributesPanel';
 
 /**
  * Step 4 — Entity detail panel.
@@ -25,6 +33,10 @@ import type { EntitySummary } from '../../hooks/useEntities';
 
 export interface EntityDetailPanelProps {
   entity: EntitySummary | null;
+  /** Attributes for the currently-selected entity. Populated by the
+   *  canvas via useAttributes.load() whenever an entity is selected. */
+  attributes: AttributeSummary[];
+  attributesBusy: boolean;
   onClose: () => void;
   onUpdate: (patch: {
     name?: string;
@@ -36,6 +48,11 @@ export interface EntityDetailPanelProps {
    *  change (the entity id stays the same). */
   onAutoDescribe: () => Promise<{ description: string }>;
   onDelete: (cascade: boolean) => Promise<void>;
+  onAttributeCreate: (dto: AttributeCreate) => Promise<AttributeSummary>;
+  onAttributeUpdate: (attrId: string, patch: AttributeUpdate) => Promise<AttributeSummary>;
+  onAttributeDelete: (attrId: string) => Promise<void>;
+  onAttributeReorder: (orderedIds: string[]) => Promise<void>;
+  onGenerateSynthetic: () => void;
 }
 
 function inputClass(violation?: NamingLintRule) {
@@ -51,10 +68,17 @@ function inputClass(violation?: NamingLintRule) {
 
 export function EntityDetailPanel({
   entity,
+  attributes,
+  attributesBusy,
   onClose,
   onUpdate,
   onAutoDescribe,
   onDelete,
+  onAttributeCreate,
+  onAttributeUpdate,
+  onAttributeDelete,
+  onAttributeReorder,
+  onGenerateSynthetic,
 }: EntityDetailPanelProps) {
   const [draft, setDraft] = useState({ name: '', businessName: '', description: '' });
   const [autoBusy, setAutoBusy] = useState(false);
@@ -243,6 +267,36 @@ export function EntityDetailPanel({
               {autoError}
             </p>
           )}
+        </div>
+
+        <div className="pt-3 border-t border-white/5">
+          <AttributesPanel
+            attributes={attributes}
+            layer={entity.layer as Layer}
+            isBusy={attributesBusy}
+            onCreate={onAttributeCreate}
+            onUpdate={onAttributeUpdate}
+            onDelete={onAttributeDelete}
+            onReorder={onAttributeReorder}
+          />
+        </div>
+
+        <div className="pt-3 border-t border-white/5">
+          <button
+            type="button"
+            data-testid="synthetic-data-button"
+            onClick={onGenerateSynthetic}
+            disabled={attributes.length === 0}
+            title={
+              attributes.length === 0
+                ? 'Add at least one attribute before generating synthetic data'
+                : 'Generate 10 fake-but-plausible preview rows'
+            }
+            className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-gradient-to-r from-accent/10 to-amber-500/10 px-2.5 py-1.5 text-xs text-accent hover:from-accent/20 hover:to-amber-500/20 disabled:opacity-50"
+          >
+            <Database className="h-3.5 w-3.5" />
+            Synthetic data
+          </button>
         </div>
 
         <div className="pt-3 border-t border-white/5">

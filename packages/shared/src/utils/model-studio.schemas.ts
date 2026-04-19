@@ -312,7 +312,10 @@ export const attributeCreateSchema = z
     tags: tagsSchema.optional(),
   })
   .strict();
-export type AttributeCreate = z.infer<typeof attributeCreateSchema>;
+/** Input shape (pre-default) so callers can omit boolean flags that
+ *  the schema supplies defaults for. The service always sees the
+ *  parsed output with defaults applied. */
+export type AttributeCreate = z.input<typeof attributeCreateSchema>;
 
 export const attributeUpdateSchema = z
   .object({
