@@ -12,6 +12,12 @@ import {
   entityIdParamsSchema,
   entityListQuerySchema,
   entityDeleteQuerySchema,
+  attributeCreateSchema,
+  attributeUpdateSchema,
+  attributeIdParamsSchema,
+  attributeReorderSchema,
+  attributeDeleteQuerySchema,
+  syntheticDataRequestSchema,
 } from '@cc/shared';
 import { authenticate, requireRole } from '../middleware/auth.middleware.js';
 import { validate, validateParams, validateQuery } from '../middleware/validate.middleware.js';
@@ -21,6 +27,7 @@ import * as modelStudioService from '../services/model-studio.service.js';
 import * as modelController from '../controllers/model-studio-model.controller.js';
 import * as canvasController from '../controllers/model-studio-canvas.controller.js';
 import * as entityController from '../controllers/model-studio-entity.controller.js';
+import * as attributeController from '../controllers/model-studio-attribute.controller.js';
 
 /**
  * Model Studio — Step 1 routes.
@@ -150,6 +157,54 @@ router.post(
   '/models/:id/entities/:entityId/auto-describe',
   validateParams(entityIdParamsSchema),
   entityController.autoDescribe,
+);
+
+// ============================================================
+// Attributes — Step 5
+// Nested under an entity. Ordering is via a dedicated /reorder
+// endpoint rather than per-row PATCH to keep the semantics atomic
+// and the change_log clean.
+// ============================================================
+
+router.get(
+  '/models/:id/entities/:entityId/attributes',
+  validateParams(entityIdParamsSchema),
+  attributeController.list,
+);
+router.post(
+  '/models/:id/entities/:entityId/attributes',
+  validateParams(entityIdParamsSchema),
+  validate(attributeCreateSchema),
+  attributeController.create,
+);
+router.post(
+  '/models/:id/entities/:entityId/attributes/reorder',
+  validateParams(entityIdParamsSchema),
+  validate(attributeReorderSchema),
+  attributeController.reorder,
+);
+router.post(
+  '/models/:id/entities/:entityId/synthetic-data',
+  validateParams(entityIdParamsSchema),
+  validate(syntheticDataRequestSchema),
+  attributeController.syntheticData,
+);
+router.get(
+  '/models/:id/entities/:entityId/attributes/:attributeId',
+  validateParams(attributeIdParamsSchema),
+  attributeController.getOne,
+);
+router.patch(
+  '/models/:id/entities/:entityId/attributes/:attributeId',
+  validateParams(attributeIdParamsSchema),
+  validate(attributeUpdateSchema),
+  attributeController.update,
+);
+router.delete(
+  '/models/:id/entities/:entityId/attributes/:attributeId',
+  validateParams(attributeIdParamsSchema),
+  validateQuery(attributeDeleteQuerySchema),
+  attributeController.remove,
 );
 
 export { router as modelStudioRoutes };

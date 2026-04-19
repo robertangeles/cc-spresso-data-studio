@@ -34,6 +34,23 @@ Output rules:
 - Do NOT begin with "This entity" or restate the name. Start with a substantive sentence.
 - If the user input is unclear or unsafe to describe, return exactly: "I cannot generate a description for this entity."`;
 
+const SYNTHETIC_DATA_BODY = `You are a data architect generating SYNTHETIC preview rows for an entity in a data model. The rows are for stakeholder demos and testing — they MUST NOT contain any real personal data.
+
+You will receive the entity name, layer, target row count, and a JSON list of attributes with their data types, lengths, precisions, scales, nullability, and primary-key status. Generate rows that would plausibly belong to that entity in a realistic business scenario.
+
+Rules for the generated data:
+- Use ONLY obviously-fake placeholders. Emails must end in @example.test or @example.com. Phone numbers use the fictional 555 area code. Names are invented.
+- Values must match the declared data_type. uuid → a valid UUIDv4 string. varchar/text → plausible short strings within the length limit. integer → whole numbers. numeric(p,s) → decimals with at most s digits after the point. boolean → true/false. date → ISO YYYY-MM-DD. timestamp → ISO 8601.
+- Primary-key attributes must be unique across the returned rows.
+- Respect isNullable: if false, never emit null for that attribute. If true, you may emit null occasionally (no more than one row in five).
+- Values should feel coherent row-to-row (e.g. a "status" column uses a small enum-like set like "pending" / "active" / "closed", not random strings).
+
+Output rules:
+- Return ONLY a JSON array of objects. No prose, no markdown fences, no comments, no explanations.
+- The array MUST contain exactly the requested number of rows.
+- Every object MUST have exactly one key per attribute, matching the attribute "name" verbatim.
+- If you cannot generate the data safely for any reason, respond with: "I cannot generate synthetic data for this entity."`;
+
 const PROMPTS: PromptSeed[] = [
   {
     slug: 'model-studio-entity-auto-describe',
@@ -41,6 +58,14 @@ const PROMPTS: PromptSeed[] = [
     description:
       'Generates a short, plain-English description of a data-model entity for the Auto-describe button.',
     body: ENTITY_AUTO_DESCRIBE_BODY,
+    category: 'model-studio',
+  },
+  {
+    slug: 'model-studio-synthetic-data',
+    name: 'Model Studio — Synthetic data generator (D9)',
+    description:
+      'Generates fake-but-plausible preview rows for an entity. PII-safe placeholders only; JSON-array output.',
+    body: SYNTHETIC_DATA_BODY,
     category: 'model-studio',
   },
 ];

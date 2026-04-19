@@ -260,6 +260,115 @@ export const entityDeleteQuerySchema = z
 export type EntityDeleteQuery = z.infer<typeof entityDeleteQuerySchema>;
 
 // ============================================================
+// Attributes (data_model_attributes table) — Step 5
+//
+// Attributes belong to an entity and inherit the entity's layer. The
+// schema validates only scalar shapes here — layer-dependent checks
+// (e.g. snake_case on physical) run server-side after the entity is
+// fetched for auth/ordinal calculation, so we don't duplicate the
+// entity lookup on the client and we avoid requiring the client to
+// echo the parent's layer in every request.
+// ============================================================
+
+const attributeNameSchema = z
+  .string()
+  .trim()
+  .min(1, 'Name must not be empty')
+  .max(128, 'Name must be 128 characters or fewer');
+
+const attributeBusinessNameSchema = z
+  .string()
+  .trim()
+  .min(1, 'Business name must not be empty')
+  .max(255, 'Business name must be 255 characters or fewer');
+
+const dataTypeSchema = z
+  .string()
+  .trim()
+  .min(1, 'Data type must not be empty')
+  .max(64, 'Data type must be 64 characters or fewer');
+
+const defaultValueSchema = z.string().max(1000, 'Default value must be 1,000 characters or fewer');
+
+export const attributeCreateSchema = z
+  .object({
+    name: attributeNameSchema,
+    businessName: attributeBusinessNameSchema.optional().nullable(),
+    description: z
+      .string()
+      .max(10_000, 'Description must be 10,000 characters or fewer')
+      .optional()
+      .nullable(),
+    dataType: dataTypeSchema.optional().nullable(),
+    length: z.number().int().positive().max(1_000_000).optional().nullable(),
+    precision: z.number().int().positive().max(1000).optional().nullable(),
+    scale: z.number().int().min(0).max(1000).optional().nullable(),
+    isNullable: z.boolean().optional().default(true),
+    isPrimaryKey: z.boolean().optional().default(false),
+    isForeignKey: z.boolean().optional().default(false),
+    isUnique: z.boolean().optional().default(false),
+    defaultValue: defaultValueSchema.optional().nullable(),
+    metadata: metadataSchema.optional(),
+    tags: tagsSchema.optional(),
+  })
+  .strict();
+export type AttributeCreate = z.infer<typeof attributeCreateSchema>;
+
+export const attributeUpdateSchema = z
+  .object({
+    name: attributeNameSchema.optional(),
+    businessName: attributeBusinessNameSchema.nullable().optional(),
+    description: z.string().max(10_000).nullable().optional(),
+    dataType: dataTypeSchema.nullable().optional(),
+    length: z.number().int().positive().max(1_000_000).nullable().optional(),
+    precision: z.number().int().positive().max(1000).nullable().optional(),
+    scale: z.number().int().min(0).max(1000).nullable().optional(),
+    isNullable: z.boolean().optional(),
+    isPrimaryKey: z.boolean().optional(),
+    isForeignKey: z.boolean().optional(),
+    isUnique: z.boolean().optional(),
+    defaultValue: defaultValueSchema.nullable().optional(),
+    metadata: metadataSchema.optional(),
+    tags: tagsSchema.optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, {
+    message: 'At least one field must be provided',
+  });
+export type AttributeUpdate = z.infer<typeof attributeUpdateSchema>;
+
+/** Reorder body is a plain ordered list of attribute IDs; server
+ *  dense-rewrites ordinal_position to 1..N in the supplied order. */
+export const attributeReorderSchema = z
+  .object({
+    ids: z.array(uuidParam).min(1, 'At least one attribute id required').max(500),
+  })
+  .strict();
+export type AttributeReorder = z.infer<typeof attributeReorderSchema>;
+
+export const attributeIdParamsSchema = z.object({
+  id: uuidParam,
+  entityId: uuidParam,
+  attributeId: uuidParam,
+});
+export type AttributeIdParams = z.infer<typeof attributeIdParamsSchema>;
+
+export const attributeDeleteQuerySchema = z
+  .object({
+    confirm: z.enum(['cascade']).optional(),
+  })
+  .strict();
+export type AttributeDeleteQuery = z.infer<typeof attributeDeleteQuerySchema>;
+
+/** Synthetic data request (D9). Count is clamped; default 10 rows. */
+export const syntheticDataRequestSchema = z
+  .object({
+    count: z.number().int().min(1).max(25).optional().default(10),
+  })
+  .strict();
+export type SyntheticDataRequest = z.infer<typeof syntheticDataRequestSchema>;
+
+// ============================================================
 // Naming-lint (D6) — server is authoritative; client mirrors for
 // inline amber underlines. Severity:
 //   - violation: blocks DDL / invalid identifier (hard).
