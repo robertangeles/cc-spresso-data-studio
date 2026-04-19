@@ -175,6 +175,11 @@ export async function listProjects(userId: string) {
       clientContacts: schema.projects.clientContacts,
       startDate: schema.projects.startDate,
       endDate: schema.projects.endDate,
+      // organisationId + clientId are needed by Model Studio's create dialog
+      // to scope projects by org. Purely additive — no existing caller will
+      // break by receiving extra fields.
+      organisationId: schema.projects.organisationId,
+      clientId: schema.projects.clientId,
       createdAt: schema.projects.createdAt,
       updatedAt: schema.projects.updatedAt,
       totalCards: sql<number>`coalesce(count(${schema.kanbanCards.id}), 0)`.as('total_cards'),

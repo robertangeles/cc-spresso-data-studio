@@ -31,6 +31,7 @@ import { GoogleCallbackPage } from './pages/GoogleCallbackPage';
 import { ContentLibraryPage } from './pages/ContentLibraryPage';
 import { ContentBuilderPage } from './pages/ContentBuilderPage';
 import { ModelStudioPage } from './pages/ModelStudioPage';
+import { ModelStudioDetailPage } from './pages/ModelStudioDetailPage';
 import { ChatPage } from './pages/ChatPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { VerifyTokenPage } from './pages/VerifyTokenPage';
@@ -94,6 +95,7 @@ export function App() {
                   <Route path="/skills/:id/edit" element={<SkillCreatorPage />} />
                   <Route path="/content" element={<ContentBuilderPage />} />
                   <Route path="/model-studio" element={<ModelStudioPage />} />
+                  <Route path="/model-studio/:modelId" element={<ModelStudioDetailPage />} />
                   <Route path="/content/library" element={<ContentLibraryPage />} />
                   <Route path="/community" element={<CommunityPage />} />
                   <Route path="/community/*" element={<CommunityPage />} />

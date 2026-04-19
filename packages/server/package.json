@@ -12,7 +12,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:bootstrap": "tsx src/db/ensure-extensions.ts"
+    "db:bootstrap": "tsx src/db/ensure-extensions.ts",
+    "db:seed-e2e": "tsx src/db/seed-e2e-user.ts"
   },
   "dependencies": {
     "@cc/shared": "workspace:*",

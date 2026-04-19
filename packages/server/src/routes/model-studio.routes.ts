@@ -1,10 +1,17 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
+import {
+  modelCreateSchema,
+  modelUpdateSchema,
+  modelIdParamsSchema,
+  modelListQuerySchema,
+} from '@cc/shared';
 import { authenticate, requireRole } from '../middleware/auth.middleware.js';
-import { validate } from '../middleware/validate.middleware.js';
+import { validate, validateParams, validateQuery } from '../middleware/validate.middleware.js';
 import { NotFoundError } from '../utils/errors.js';
 import * as modelStudioController from '../controllers/model-studio.controller.js';
 import * as modelStudioService from '../services/model-studio.service.js';
+import * as modelController from '../controllers/model-studio-model.controller.js';
 
 /**
  * Model Studio — Step 1 routes.
@@ -60,5 +67,22 @@ router.put(
   validate(setFlagSchema),
   modelStudioController.setFlag,
 );
+
+// ============================================================
+// Models — Step 2
+// All routes below 404 when the flag is OFF (via featureFlagGate above).
+// Authorisation is handled inside the service via canAccessModel.
+// ============================================================
+
+router.get('/models', validateQuery(modelListQuerySchema), modelController.list);
+router.post('/models', validate(modelCreateSchema), modelController.create);
+router.get('/models/:id', validateParams(modelIdParamsSchema), modelController.getOne);
+router.patch(
+  '/models/:id',
+  validateParams(modelIdParamsSchema),
+  validate(modelUpdateSchema),
+  modelController.update,
+);
+router.delete('/models/:id', validateParams(modelIdParamsSchema), modelController.remove);
 
 export { router as modelStudioRoutes };

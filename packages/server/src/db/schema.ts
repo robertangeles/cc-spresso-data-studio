@@ -1980,18 +1980,20 @@ export const projectReadStatus = pgTable(
 // ============================================================
 // DATA MODELS (Model Studio project root)
 // Normal form: 2NF. OLTP.
-// Scoped to an organisation (org_id) AND owned by a user (owner_id).
-// Authorization: user can read if (owner_id = user) OR
-// active member of org_id in organisation_members.
+// Scoped to a project (project_id) AND owned by a user (owner_id).
+// Organisation is derived via projects.organisation_id — we do not
+// denormalize it here to avoid drift.
+// Authorization: user can read if (owner_id = user) OR active member
+// of the project's organisation in organisation_members.
 // ============================================================
 
 export const dataModels = pgTable(
   'data_models',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    organisationId: uuid('organisation_id')
+    projectId: uuid('project_id')
       .notNull()
-      .references(() => organisations.id, { onDelete: 'cascade' }),
+      .references(() => projects.id, { onDelete: 'cascade' }),
     ownerId: uuid('owner_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -2011,11 +2013,12 @@ export const dataModels = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // Unique: one model name per (org, owner) pair
-    uniqueIndex('idx_data_models_unique_name').on(t.organisationId, t.ownerId, t.name),
-    // Index: list models for an organisation
-    index('idx_data_models_organisation_id').on(t.organisationId),
-    // Index: list models owned by a user
+    // Unique: one model name per (project, owner) pair — two projects
+    // can each own a "Customer Domain" model without conflict.
+    uniqueIndex('idx_data_models_unique_name').on(t.projectId, t.ownerId, t.name),
+    // Index: list models for a project (sidebar + detail page)
+    index('idx_data_models_project_id').on(t.projectId),
+    // Index: list models owned by a user (profile / global view)
     index('idx_data_models_owner_id').on(t.ownerId),
   ],
 );
