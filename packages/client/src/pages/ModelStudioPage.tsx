@@ -9,6 +9,9 @@ import {
   Power,
   Plus,
   ArrowRight,
+  Building2,
+  Briefcase,
+  FolderKanban,
 } from 'lucide-react';
 import { useModelStudioFlag } from '../hooks/useModelStudioFlag';
 import { useModels, type DataModelSummary } from '../hooks/useModels';
@@ -50,25 +53,48 @@ export function ModelStudioPage() {
     return <ComingSoonStub isAdmin={isAdmin} onEnable={() => setEnabled(true)} />;
   }
 
-  const showList = !modelsLoading && total > 0;
+  // Three states — do NOT render the empty state while we still don't
+  // know the count, otherwise the "Start blank / Whiteboard / Query"
+  // landing flashes every time the user navigates back from a detail page.
+  const view = modelsLoading ? 'loading' : total > 0 ? 'list' : 'empty';
 
   return (
     <>
-      {showList ? (
-        <ModelsListView
+      {view === 'loading' && <LoadingSkeleton />}
+      {view === 'list' && (
+        <ModelsLibraryView
           models={models}
+          total={total}
           onCreateClick={() => setDialogOpen(true)}
           onOpen={(id) => navigate(`/model-studio/${id}`)}
         />
-      ) : (
-        <ModelStudioEmptyState onStartBlank={() => setDialogOpen(true)} />
       )}
+      {view === 'empty' && <ModelStudioEmptyState onStartBlank={() => setDialogOpen(true)} />}
       <CreateModelDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onCreated={handleCreated}
       />
     </>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="relative mx-auto flex h-full max-w-6xl flex-col gap-6 px-6 py-10">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(ellipse_at_top,_rgba(255,214,10,0.08),_transparent_70%)]"
+      />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-40 rounded-2xl border border-white/5 bg-surface-2/30 backdrop-blur animate-pulse"
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -262,26 +288,81 @@ function QuickStartCard({
 }
 
 // ============================================================
-// Models list — shown when the user has ≥1 models
+// Models library — stratified by Organisation → Client → Project → Model.
+// The hierarchy is the dominant design element: data architects live by
+// provenance, and this layout makes "who owns this model" readable at
+// a glance from the top of the page.
 // ============================================================
 
-function ModelsListView({
+interface GroupByProject {
+  projectId: string;
+  projectName: string;
+  models: DataModelSummary[];
+}
+interface GroupByClient {
+  clientId: string | null;
+  clientName: string | null; // null → "Direct under Organisation"
+  organisationName: string | null;
+  projects: GroupByProject[];
+  modelCount: number;
+}
+
+function groupModels(models: DataModelSummary[]): GroupByClient[] {
+  // Bucket by clientId (null becomes its own bucket), preserving the
+  // first-seen org name per bucket so headers stay stable.
+  const clientMap = new Map<string, GroupByClient>();
+  for (const m of models) {
+    const key = m.clientId ?? '__no_client__';
+    let bucket = clientMap.get(key);
+    if (!bucket) {
+      bucket = {
+        clientId: m.clientId ?? null,
+        clientName: m.clientName ?? null,
+        organisationName: m.organisationName ?? null,
+        projects: [],
+        modelCount: 0,
+      };
+      clientMap.set(key, bucket);
+    }
+    let proj = bucket.projects.find((p) => p.projectId === m.projectId);
+    if (!proj) {
+      proj = { projectId: m.projectId, projectName: m.projectName, models: [] };
+      bucket.projects.push(proj);
+    }
+    proj.models.push(m);
+    bucket.modelCount++;
+  }
+  // Stable sort: clients with a name first (alphabetical), "no client" last.
+  return Array.from(clientMap.values()).sort((a, b) => {
+    if (a.clientName && !b.clientName) return -1;
+    if (!a.clientName && b.clientName) return 1;
+    return (a.clientName ?? '').localeCompare(b.clientName ?? '');
+  });
+}
+
+function ModelsLibraryView({
   models,
+  total,
   onCreateClick,
   onOpen,
 }: {
   models: DataModelSummary[];
+  total: number;
   onCreateClick: () => void;
   onOpen: (id: string) => void;
 }) {
+  const groups = groupModels(models);
+  const clientCount = groups.filter((g) => g.clientName).length;
+  const projectCount = groups.reduce((acc, g) => acc + g.projects.length, 0);
+
   return (
-    <div className="relative mx-auto flex h-full max-w-6xl flex-col gap-6 px-6 py-10">
+    <div className="relative mx-auto flex h-full max-w-6xl flex-col gap-10 px-6 py-10">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(ellipse_at_top,_rgba(255,214,10,0.08),_transparent_70%)]"
       />
 
-      <header className="relative flex items-center justify-between gap-4">
+      <header className="relative flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-accent/25 via-accent/5 to-transparent border border-accent/40 text-accent shadow-[0_0_12px_rgba(255,214,10,0.2)]">
             <Boxes className="h-4 w-4" />
@@ -290,8 +371,16 @@ function ModelsListView({
             <h1 className="text-base font-semibold tracking-tight text-text-primary">
               Model Studio
             </h1>
-            <p className="text-xs text-text-secondary">
-              {models.length} {models.length === 1 ? 'model' : 'models'}
+            <p className="text-[11px] uppercase tracking-wider text-text-secondary/70 tabular-nums">
+              {total} {total === 1 ? 'model' : 'models'}
+              {clientCount > 0 && (
+                <>
+                  <span className="mx-1.5 text-text-secondary/40">·</span>
+                  {clientCount} {clientCount === 1 ? 'client' : 'clients'}
+                </>
+              )}
+              <span className="mx-1.5 text-text-secondary/40">·</span>
+              {projectCount} {projectCount === 1 ? 'project' : 'projects'}
             </p>
           </div>
         </div>
@@ -311,8 +400,80 @@ function ModelsListView({
         </button>
       </header>
 
-      <div className="relative grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {models.map((m) => (
+      {groups.map((g, i) => (
+        <ClientSection key={g.clientId ?? `no-client-${i}`} group={g} onOpen={onOpen} />
+      ))}
+    </div>
+  );
+}
+
+function ClientSection({ group, onOpen }: { group: GroupByClient; onOpen: (id: string) => void }) {
+  const displayLabel = group.clientName ?? 'Direct under organisation';
+  return (
+    <section className="relative flex flex-col gap-5">
+      {/* Client header — amber dot + uppercase + hairline divider */}
+      <div className="flex items-center gap-3">
+        <span
+          className={[
+            'inline-flex h-1.5 w-1.5 rounded-full shrink-0',
+            group.clientName
+              ? 'bg-accent shadow-[0_0_8px_rgba(255,214,10,0.6)]'
+              : 'bg-text-secondary/40',
+          ].join(' ')}
+          aria-hidden="true"
+        />
+        <div className="flex items-baseline gap-2 min-w-0">
+          {group.clientName ? (
+            <Briefcase className="h-3.5 w-3.5 text-accent shrink-0" />
+          ) : (
+            <Building2 className="h-3.5 w-3.5 text-text-secondary/60 shrink-0" />
+          )}
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-primary/90 truncate">
+            {displayLabel}
+          </h2>
+          {group.organisationName && group.clientName && (
+            <span className="text-[10px] uppercase tracking-wider text-text-secondary/50 truncate">
+              · {group.organisationName}
+            </span>
+          )}
+        </div>
+        <div className="h-px flex-1 bg-gradient-to-r from-white/10 via-white/5 to-transparent" />
+        <span className="text-[10px] uppercase tracking-wider text-text-secondary/60 tabular-nums shrink-0">
+          {group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}
+          <span className="mx-1 text-text-secondary/40">·</span>
+          {group.modelCount} {group.modelCount === 1 ? 'model' : 'models'}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-8 pl-4 border-l border-white/5">
+        {group.projects.map((p) => (
+          <ProjectShelf key={p.projectId} project={p} onOpen={onOpen} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProjectShelf({
+  project,
+  onOpen,
+}: {
+  project: GroupByProject;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-text-secondary">
+        <FolderKanban className="h-3.5 w-3.5 text-accent/70" />
+        <h3 className="text-xs font-semibold text-text-primary/90 truncate">
+          {project.projectName}
+        </h3>
+        <span className="text-[10px] uppercase tracking-wider text-text-secondary/50 tabular-nums">
+          {project.models.length} {project.models.length === 1 ? 'model' : 'models'}
+        </span>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {project.models.map((m) => (
           <ModelCard key={m.id} model={m} onOpen={() => onOpen(m.id)} />
         ))}
       </div>
@@ -333,7 +494,7 @@ function ModelCard({ model, onOpen }: { model: DataModelSummary; onOpen: () => v
       type="button"
       onClick={onOpen}
       className={[
-        'group relative flex flex-col gap-3 rounded-2xl border p-5 text-left',
+        'group relative flex flex-col gap-3 rounded-2xl border p-5 text-left min-h-[172px]',
         'bg-surface-2/50 backdrop-blur border-white/5',
         'transition-all duration-300 ease-out',
         'hover:-translate-y-1 hover:border-accent/40 hover:shadow-[0_0_24px_rgba(255,214,10,0.18)]',
@@ -350,15 +511,27 @@ function ModelCard({ model, onOpen }: { model: DataModelSummary; onOpen: () => v
         </span>
         <ArrowRight className="h-3.5 w-3.5 text-text-secondary/40 group-hover:text-accent transition-colors" />
       </div>
-      <h3 className="text-sm font-semibold text-text-primary line-clamp-1">{model.name}</h3>
-      {model.description && (
-        <p className="text-xs text-text-secondary leading-relaxed line-clamp-2">
+
+      <h3 className="text-sm font-semibold text-text-primary line-clamp-1 leading-snug">
+        {model.name}
+      </h3>
+
+      {model.description ? (
+        <p className="text-xs text-text-secondary leading-relaxed line-clamp-3">
           {model.description}
         </p>
+      ) : (
+        <p className="text-xs italic text-text-secondary/40 leading-relaxed line-clamp-3">
+          No description yet. Hover over models without a description to spot them — auto-describe
+          arrives with entities.
+        </p>
       )}
+
       <div className="mt-auto flex items-center justify-between text-[10px] uppercase tracking-wider text-text-secondary/60">
-        <span>{model.notation}</span>
-        <span>{relativeTime(model.updatedAt)}</span>
+        <span className="truncate">
+          {model.ownerName ? `by ${model.ownerName}` : model.notation}
+        </span>
+        <span className="tabular-nums">{relativeTime(model.updatedAt)}</span>
       </div>
     </button>
   );

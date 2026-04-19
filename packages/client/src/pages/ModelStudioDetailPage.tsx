@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Boxes, Construction, LayoutGrid, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Boxes, ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
 import type { DataModelSummary } from '../hooks/useModels';
+import { ModelStudioCanvas } from '../components/model-studio/ModelStudioCanvas';
 
 /**
  * Step 2 detail shell — the Step 3 canvas lands here.
@@ -76,58 +77,33 @@ export function ModelStudioDetailPage() {
           All models
         </Link>
 
-        <div className="flex items-center gap-2 pl-3 border-l border-white/5">
-          <div className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-accent/20 via-accent/5 to-transparent border border-accent/30 text-accent shadow-[0_0_8px_rgba(255,214,10,0.15)]">
+        {/* Trust chain — provenance first, then the model name. */}
+        <div className="flex items-center gap-2 pl-3 border-l border-white/5 min-w-0">
+          <TrustChain
+            organisation={model.organisationName}
+            client={model.clientName}
+            project={model.projectName}
+          />
+          <span className="text-text-secondary/40">›</span>
+          <div className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-accent/20 via-accent/5 to-transparent border border-accent/30 text-accent shadow-[0_0_8px_rgba(255,214,10,0.15)] shrink-0">
             <Boxes className="h-3 w-3" />
           </div>
-          <h1 className="text-sm font-semibold text-text-primary">{model.name}</h1>
+          <h1 className="text-sm font-semibold text-text-primary truncate">{model.name}</h1>
+          {model.ownerName && (
+            <span className="hidden md:inline text-[11px] uppercase tracking-wider text-text-secondary/60 shrink-0 pl-2">
+              · by {model.ownerName}
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex items-center gap-2 ml-auto shrink-0">
           <InertSelect label={capitalize(model.activeLayer)} />
           <InertSelect label={model.notation === 'ie' ? 'IE notation' : 'IDEF1X'} />
         </div>
       </header>
 
       <main className="relative flex-1 overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,214,10,0.06),_transparent_60%)]"
-        />
-        <div className="relative flex h-full flex-col items-center justify-center gap-4 px-6 py-12 text-center">
-          <div className="relative">
-            <div
-              className="absolute inset-0 bg-accent/15 blur-2xl rounded-full"
-              aria-hidden="true"
-            />
-            <div className="relative inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent/20 via-accent/5 to-transparent border border-accent/30 text-accent shadow-[0_0_24px_rgba(255,214,10,0.15)]">
-              <Construction className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="max-w-md">
-            <h2 className="bg-gradient-to-r from-text-primary to-accent bg-clip-text text-lg font-semibold tracking-tight text-transparent">
-              Canvas coming in Step 3
-            </h2>
-            <p className="mt-2 text-xs text-text-secondary">
-              Your model is saved. The drag-and-drop ERD canvas, entity panel, and relationship
-              tools land in the next step. For now, the shell is here — layer and notation controls
-              will become live in Step 6 and 7.
-            </p>
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-3 text-[11px] uppercase tracking-wider text-text-secondary/70">
-            <span className="inline-flex items-center gap-1.5">
-              <LayoutGrid className="h-3 w-3 text-accent" />
-              {model.activeLayer}
-            </span>
-            <span>·</span>
-            <span>{model.notation}</span>
-            <span>·</span>
-            <span>
-              {(model.tags?.length ?? 0) === 0 ? 'no tags' : `${model.tags.length} tag(s)`}
-            </span>
-          </div>
-        </div>
+        <ModelStudioCanvas modelId={model.id} layer={model.activeLayer} />
       </main>
     </div>
   );
@@ -147,6 +123,32 @@ function CenteredStatus({ message, showBack = false }: { message: string; showBa
         </Link>
       )}
     </div>
+  );
+}
+
+function TrustChain({
+  organisation,
+  client,
+  project,
+}: {
+  organisation: string | null;
+  client: string | null;
+  project: string | null;
+}) {
+  const links = [organisation, client, project].filter(Boolean) as string[];
+  if (links.length === 0) return null;
+  return (
+    <span
+      className="inline-flex items-center text-[11px] uppercase tracking-wider text-text-secondary/80 truncate min-w-0"
+      title={links.join(' / ')}
+    >
+      {links.map((label, i) => (
+        <span key={i} className="inline-flex items-center">
+          {i > 0 && <span className="mx-1 text-text-secondary/40">/</span>}
+          <span className="truncate">{label}</span>
+        </span>
+      ))}
+    </span>
   );
 }
 

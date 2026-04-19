@@ -48,6 +48,7 @@ export function CreateModelDialog({
   const [selectedOrgId, setSelectedOrgId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -115,6 +116,7 @@ export function CreateModelDialog({
     if (open) setTimeout(() => nameInputRef.current?.focus(), 30);
     else {
       setName('');
+      setDescription('');
       setError(null);
     }
   }, [open]);
@@ -140,12 +142,13 @@ export function CreateModelDialog({
     setSubmitting(true);
     setError(null);
     try {
+      const trimmedDesc = description.trim();
       const payload: ModelCreate = {
         name: name.trim(),
         projectId: selectedProjectId,
         activeLayer: 'conceptual',
         notation: 'ie',
-        description: null,
+        description: trimmedDesc.length > 0 ? trimmedDesc : null,
       };
       const created = await create(payload);
       onCreated(created);
@@ -262,6 +265,32 @@ export function CreateModelDialog({
               'transition-all',
             ].join(' ')}
             required
+          />
+        </label>
+
+        <div className="mt-4" />
+        <label className="block">
+          <div className="flex items-baseline justify-between mb-1.5">
+            <span className="block text-[11px] uppercase tracking-wider text-text-secondary/80">
+              Description{' '}
+              <span className="normal-case tracking-normal text-text-secondary/50">(optional)</span>
+            </span>
+            <span className="text-[10px] text-text-secondary/50 tabular-nums">
+              {description.length} / 2,000
+            </span>
+          </div>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
+            rows={3}
+            placeholder="What does this model capture? Who relies on it? Notes for future-you and anyone else inheriting it."
+            className={[
+              'w-full rounded-lg px-3 py-2 text-sm resize-y min-h-[84px] max-h-[220px]',
+              'bg-surface-1/60 border border-white/10 text-text-primary',
+              'placeholder:text-text-secondary/40',
+              'focus:outline-none focus:border-accent/50 focus:shadow-[0_0_12px_rgba(255,214,10,0.15)]',
+              'transition-all',
+            ].join(' ')}
           />
         </label>
 

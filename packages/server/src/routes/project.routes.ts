@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { createProjectSchema, updateProjectSchema } from '@cc/shared';
 import { authenticate } from '../middleware/auth.middleware.js';
+import { validate } from '../middleware/validate.middleware.js';
 import * as projectController from '../controllers/project.controller.js';
 
 const router = Router();
@@ -33,9 +35,11 @@ router.use(authenticate);
 
 // --- Projects ---
 router.get('/', projectController.listProjects);
-router.post('/', projectController.createProject);
+router.post('/', validate(createProjectSchema), projectController.createProject);
 router.get('/:projectId', projectController.getProject);
-router.put('/:projectId', projectController.updateProject);
+// validate() is strict — unknown fields now 400 instead of silently dropping.
+// This was the hole that let project client_id updates get lost (2026-04-19).
+router.put('/:projectId', validate(updateProjectSchema), projectController.updateProject);
 router.delete('/:projectId', projectController.deleteProject);
 
 // --- Columns ---

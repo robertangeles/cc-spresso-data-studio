@@ -1,7 +1,14 @@
 import { and, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import type { ModelCreate, ModelListQuery, ModelUpdate } from '@cc/shared';
 import { db } from '../db/index.js';
-import { dataModels, organisationMembers, projects } from '../db/schema.js';
+import {
+  clients,
+  dataModels,
+  organisationMembers,
+  organisations,
+  projects,
+  users,
+} from '../db/schema.js';
 import { ConflictError, DBError, NotFoundError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
 import { assertCanAccessModel, assertCanCreateInProject } from './model-studio-authz.service.js';
@@ -27,6 +34,61 @@ import { recordChange } from './model-studio-changelog.service.js';
 
 export type DataModel = typeof dataModels.$inferSelect;
 
+/**
+ * Hierarchy-enriched projection of a model. The trust principle
+ * (DMBOK §11) says every artefact must expose its provenance — who
+ * owns it and where it sits. We hydrate the chain once in SQL to
+ * avoid N+1s in the list view.
+ */
+export type DataModelWithContext = DataModel & {
+  projectName: string;
+  organisationId: string | null;
+  organisationName: string | null;
+  clientId: string | null;
+  clientName: string | null;
+  ownerName: string | null;
+};
+
+async function withContext(rows: DataModel[]): Promise<DataModelWithContext[]> {
+  if (rows.length === 0) return [];
+  const projectIds = Array.from(new Set(rows.map((r) => r.projectId)));
+  const ownerIds = Array.from(new Set(rows.map((r) => r.ownerId)));
+
+  const projectRows = await db
+    .select({
+      id: projects.id,
+      name: projects.name,
+      organisationId: projects.organisationId,
+      organisationName: organisations.name,
+      clientId: projects.clientId,
+      clientName: clients.name,
+    })
+    .from(projects)
+    .leftJoin(organisations, eq(organisations.id, projects.organisationId))
+    .leftJoin(clients, eq(clients.id, projects.clientId))
+    .where(inArray(projects.id, projectIds));
+  const projectMap = new Map(projectRows.map((p) => [p.id, p]));
+
+  const ownerRows = await db
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .where(inArray(users.id, ownerIds));
+  const ownerMap = new Map(ownerRows.map((u) => [u.id, u.name]));
+
+  return rows.map((r) => {
+    const p = projectMap.get(r.projectId);
+    return {
+      ...r,
+      projectName: p?.name ?? 'Unknown project',
+      organisationId: p?.organisationId ?? null,
+      organisationName: p?.organisationName ?? null,
+      clientId: p?.clientId ?? null,
+      clientName: p?.clientName ?? null,
+      ownerName: ownerMap.get(r.ownerId) ?? null,
+    };
+  });
+}
+
 const PG_UNIQUE_VIOLATION = '23505';
 
 function isUniqueViolation(err: unknown): boolean {
@@ -42,7 +104,7 @@ function isUniqueViolation(err: unknown): boolean {
 // CREATE
 // ============================================================
 
-export async function createModel(userId: string, dto: ModelCreate): Promise<DataModel> {
+export async function createModel(userId: string, dto: ModelCreate): Promise<DataModelWithContext> {
   await assertCanCreateInProject(userId, dto.projectId);
 
   try {
@@ -73,7 +135,8 @@ export async function createModel(userId: string, dto: ModelCreate): Promise<Dat
       { userId, modelId: created.id, projectId: dto.projectId },
       'Model Studio: model created',
     );
-    return created;
+    const [hydrated] = await withContext([created]);
+    return hydrated;
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw new ConflictError(
@@ -92,7 +155,7 @@ export async function createModel(userId: string, dto: ModelCreate): Promise<Dat
 export async function listModels(
   userId: string,
   query: ModelListQuery,
-): Promise<{ models: DataModel[]; total: number }> {
+): Promise<{ models: DataModelWithContext[]; total: number }> {
   // Accessible set: owned by user OR belongs to a project whose org
   // the user is a member of. Computed via two subqueries:
   //   - userOrgIds: all orgs the user is a member of
@@ -131,15 +194,18 @@ export async function listModels(
     .from(dataModels)
     .where(whereExpr);
 
-  return { models: rows, total: count };
+  const models = await withContext(rows);
+  return { models, total: count };
 }
 
 // ============================================================
 // GET one
 // ============================================================
 
-export async function getModel(userId: string, modelId: string): Promise<DataModel> {
-  return assertCanAccessModel(userId, modelId);
+export async function getModel(userId: string, modelId: string): Promise<DataModelWithContext> {
+  const row = await assertCanAccessModel(userId, modelId);
+  const [hydrated] = await withContext([row]);
+  return hydrated;
 }
 
 // ============================================================
@@ -150,7 +216,7 @@ export async function updateModel(
   userId: string,
   modelId: string,
   patch: ModelUpdate,
-): Promise<DataModel> {
+): Promise<DataModelWithContext> {
   const before = await assertCanAccessModel(userId, modelId);
 
   try {
@@ -173,7 +239,8 @@ export async function updateModel(
     });
 
     logger.info({ userId, modelId, fields: Object.keys(patch) }, 'Model Studio: model updated');
-    return updated;
+    const [hydrated] = await withContext([updated]);
+    return hydrated;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
     if (isUniqueViolation(err)) {

@@ -24,6 +24,14 @@ export interface DataModelSummary {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // Hierarchy context hydrated by the server so the UI can always
+  // show "who owns it" — Org → Client → Project → Model trust chain.
+  projectName: string;
+  organisationId: string | null;
+  organisationName: string | null;
+  clientId: string | null;
+  clientName: string | null;
+  ownerName: string | null;
 }
 
 interface ListResponse {

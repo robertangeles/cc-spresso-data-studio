@@ -5,6 +5,8 @@ import {
   modelUpdateSchema,
   modelIdParamsSchema,
   modelListQuerySchema,
+  canvasStatePutSchema,
+  canvasStateQuerySchema,
 } from '@cc/shared';
 import { authenticate, requireRole } from '../middleware/auth.middleware.js';
 import { validate, validateParams, validateQuery } from '../middleware/validate.middleware.js';
@@ -12,6 +14,7 @@ import { NotFoundError } from '../utils/errors.js';
 import * as modelStudioController from '../controllers/model-studio.controller.js';
 import * as modelStudioService from '../services/model-studio.service.js';
 import * as modelController from '../controllers/model-studio-model.controller.js';
+import * as canvasController from '../controllers/model-studio-canvas.controller.js';
 
 /**
  * Model Studio — Step 1 routes.
@@ -84,5 +87,22 @@ router.patch(
   modelController.update,
 );
 router.delete('/models/:id', validateParams(modelIdParamsSchema), modelController.remove);
+
+// ============================================================
+// Canvas state — Step 3
+// ============================================================
+
+router.get(
+  '/models/:id/canvas-state',
+  validateParams(modelIdParamsSchema),
+  validateQuery(canvasStateQuerySchema),
+  canvasController.getState,
+);
+router.put(
+  '/models/:id/canvas-state',
+  validateParams(modelIdParamsSchema),
+  validate(canvasStatePutSchema),
+  canvasController.putState,
+);
 
 export { router as modelStudioRoutes };

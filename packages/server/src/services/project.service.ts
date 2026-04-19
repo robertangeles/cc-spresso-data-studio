@@ -301,6 +301,8 @@ export async function updateProject(
     name?: string;
     description?: string | null;
     status?: string;
+    organisationId?: string | null;
+    clientId?: string | null;
     clientName?: string | null;
     clientContacts?: unknown;
     startDate?: string | null;

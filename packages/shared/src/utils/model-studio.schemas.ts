@@ -108,3 +108,44 @@ export const modelListQuerySchema = z
   })
   .strict();
 export type ModelListQuery = z.infer<typeof modelListQuerySchema>;
+
+// ============================================================
+// Canvas state (per user, per model, per layer)
+// ============================================================
+
+// Finite clamp — reject NaN / Infinity and anything outside ±1e6 so a
+// malformed position can't make the canvas unusable.
+const FINITE_COORD = z.number().finite().gte(-1_000_000).lte(1_000_000);
+
+const nodePositionValue = z.object({
+  x: FINITE_COORD,
+  y: FINITE_COORD,
+});
+
+// Up to 5,000 node positions per canvas — well beyond any realistic
+// MVP model size while still a cap to protect payload size.
+export const nodePositionsSchema = z
+  .record(z.string().uuid(), nodePositionValue)
+  .refine((o) => Object.keys(o).length <= 5000, { message: 'Too many node positions' });
+
+export const viewportSchema = z.object({
+  x: FINITE_COORD,
+  y: FINITE_COORD,
+  zoom: z.number().finite().gte(0.1).lte(3),
+});
+
+export const canvasStateQuerySchema = z
+  .object({
+    layer: LAYER.optional().default('conceptual'),
+  })
+  .strict();
+export type CanvasStateQuery = z.infer<typeof canvasStateQuerySchema>;
+
+export const canvasStatePutSchema = z
+  .object({
+    layer: LAYER,
+    nodePositions: nodePositionsSchema,
+    viewport: viewportSchema,
+  })
+  .strict();
+export type CanvasStatePut = z.infer<typeof canvasStatePutSchema>;
