@@ -3,6 +3,7 @@ import type { DatabaseStatus, TableInfo, QueryResult } from '@cc/shared';
 import { db, pool, schema } from '../db/index.js';
 import { config } from '../config/index.js';
 import { logger } from '../config/logger.js';
+import { runOnce } from '../db/migration-runner.js';
 
 // --- AI Provider: OpenRouter is the single gateway ---
 
@@ -72,7 +73,10 @@ export async function seedAIProviders(): Promise<void> {
     .where(sql`${schema.aiProviders.providerType} != 'openrouter'`);
 
   // --- Data migration: convert old model IDs to OpenRouter format ---
-  await migrateModelIds();
+  // Guarded by `applied_migrations.name = 'migrate-model-id-prefixes'`
+  // so the ~100 UPDATE statements below only run on the first boot of
+  // a fresh environment, not on every server restart.
+  await runOnce('migrate-model-id-prefixes', migrateModelIds);
 }
 
 /** One-time idempotent migration: convert short model IDs to OpenRouter format */

@@ -2407,4 +2407,22 @@ export const dataModelChangeLog = pgTable(
   ],
 );
 
+// ============================================================
+// APPLIED MIGRATIONS — one-shot guard for boot-time data migrations.
+//
+// Drizzle handles SCHEMA migrations via drizzle-kit. This table tracks
+// idempotent DATA migrations (backfills, alias rewrites, normalisations)
+// so they don't re-run on every server boot. See `migration-runner.ts`
+// for the `runOnce(name, fn)` helper.
+//
+// Normal form: 2NF. OLTP audit table.
+// ============================================================
+export const appliedMigrations = pgTable('applied_migrations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  // Stable identifier — never change once a migration has run in prod.
+  // Use kebab-case slugs (e.g. 'migrate-model-id-prefixes').
+  name: varchar('name', { length: 120 }).notNull().unique(),
+  appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ==== END MODEL STUDIO =======================================

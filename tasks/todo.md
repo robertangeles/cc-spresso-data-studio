@@ -13,24 +13,23 @@
 
 ## Tech debt — data practices (Spresso eats its own dog food)
 
-- [ ] **Stop running `migrateModelIds()` on every server boot.** Currently
-      [packages/server/src/services/admin.service.ts:79](packages/server/src/services/admin.service.ts#L79) is invoked from
-      `seedAIProviders()` ([line 75](packages/server/src/services/admin.service.ts#L75)) which is
-      called by `start()` in [packages/server/src/index.ts:25](packages/server/src/index.ts#L25). The migration is
-      idempotent at the row level (WHERE old = X), but the SQL still
-      runs against `conversations`, `flow_steps`, `user_profiles`,
-      `skills`, and `dim_models` for every alias on every boot — visible
-      noise + wasted DB cycles. We're a data studio shipping
-      anti-patterns: data migrations should run once, against a
-      versioned migrations table, not on every process restart.
+- [x] **Stop running `migrateModelIds()` on every server boot.** Fixed in
+      Step 4 follow-up. Added `applied_migrations` table + `runOnce(name, fn)`
+      helper at [packages/server/src/db/migration-runner.ts](packages/server/src/db/migration-runner.ts).
+      Race-safe via `INSERT ... ON CONFLICT DO NOTHING RETURNING`; rolls
+      back the marker if the migration body throws so failures retry on
+      the next boot. `migrateModelIds()` call in
+      [packages/server/src/services/admin.service.ts](packages/server/src/services/admin.service.ts)
+      now wrapped in `runOnce('migrate-model-id-prefixes', ...)`.
+      Tested via 4 integration cases (first-run, skip-on-replay,
+      throw-rolls-back-marker, race-safe concurrent claims).
 
-      **Proper fix:** introduce a lightweight `applied_migrations`
-      table (id, name, applied_at). Wrap `migrateModelIds` in a guard
-      that checks for its name, runs once, and inserts the row. Move
-      ad-hoc backfills under `packages/server/src/db/migrations/` and
-      run manually via `npx tsx`, mirroring the
-      `seed-model-studio-prompts.ts` pattern.
-
-      **Why it matters:** matches DMBOK governance principles, ends the
-      log noise, and removes a real long-tail risk (an aliasMap edit
-      + boot can corrupt rows without anyone noticing).
+- [ ] **Entity position drifts on reload** (Step 4 follow-up). Node positions
+      survive a reload but don't land exactly where the user dropped them.
+      Likely a coord-system mismatch in [packages/client/src/components/model-studio/ModelStudioCanvas.tsx](packages/client/src/components/model-studio/ModelStudioCanvas.tsx)
+      between `screenToFlowPosition` (used at create time) and the
+      saved positions in `data_model_canvas_states.node_positions`,
+      OR the React Flow viewport restoring after the nodes mount —
+      so the node's position is interpreted relative to a different
+      viewport on second render. Reproducible: drag a node, refresh,
+      observe the offset.
