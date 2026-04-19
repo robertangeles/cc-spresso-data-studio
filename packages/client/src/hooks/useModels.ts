@@ -18,6 +18,7 @@ export interface DataModelSummary {
   description: string | null;
   activeLayer: 'conceptual' | 'logical' | 'physical';
   notation: 'ie' | 'idef1x';
+  originDirection: 'greenfield' | 'existing_system';
   metadata: Record<string, unknown>;
   tags: string[];
   lastExportedAt: string | null;

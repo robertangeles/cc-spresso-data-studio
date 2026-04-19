@@ -7,6 +7,11 @@ import {
   modelListQuerySchema,
   canvasStatePutSchema,
   canvasStateQuerySchema,
+  entityCreateSchema,
+  entityUpdateSchema,
+  entityIdParamsSchema,
+  entityListQuerySchema,
+  entityDeleteQuerySchema,
 } from '@cc/shared';
 import { authenticate, requireRole } from '../middleware/auth.middleware.js';
 import { validate, validateParams, validateQuery } from '../middleware/validate.middleware.js';
@@ -15,6 +20,7 @@ import * as modelStudioController from '../controllers/model-studio.controller.j
 import * as modelStudioService from '../services/model-studio.service.js';
 import * as modelController from '../controllers/model-studio-model.controller.js';
 import * as canvasController from '../controllers/model-studio-canvas.controller.js';
+import * as entityController from '../controllers/model-studio-entity.controller.js';
 
 /**
  * Model Studio — Step 1 routes.
@@ -103,6 +109,47 @@ router.put(
   validateParams(modelIdParamsSchema),
   validate(canvasStatePutSchema),
   canvasController.putState,
+);
+
+// ============================================================
+// Entities — Step 4
+// All routes here also pass through featureFlagGate + authenticate.
+// Authorisation is enforced inside the service via assertCanAccessModel.
+// ============================================================
+
+router.get(
+  '/models/:id/entities',
+  validateParams(modelIdParamsSchema),
+  validateQuery(entityListQuerySchema),
+  entityController.list,
+);
+router.post(
+  '/models/:id/entities',
+  validateParams(modelIdParamsSchema),
+  validate(entityCreateSchema),
+  entityController.create,
+);
+router.get(
+  '/models/:id/entities/:entityId',
+  validateParams(entityIdParamsSchema),
+  entityController.getOne,
+);
+router.patch(
+  '/models/:id/entities/:entityId',
+  validateParams(entityIdParamsSchema),
+  validate(entityUpdateSchema),
+  entityController.update,
+);
+router.delete(
+  '/models/:id/entities/:entityId',
+  validateParams(entityIdParamsSchema),
+  validateQuery(entityDeleteQuerySchema),
+  entityController.remove,
+);
+router.post(
+  '/models/:id/entities/:entityId/auto-describe',
+  validateParams(entityIdParamsSchema),
+  entityController.autoDescribe,
 );
 
 export { router as modelStudioRoutes };

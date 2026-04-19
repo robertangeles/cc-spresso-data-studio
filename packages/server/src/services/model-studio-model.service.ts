@@ -117,6 +117,7 @@ export async function createModel(userId: string, dto: ModelCreate): Promise<Dat
         description: dto.description ?? null,
         activeLayer: dto.activeLayer ?? 'conceptual',
         notation: dto.notation ?? 'ie',
+        originDirection: dto.originDirection ?? 'greenfield',
         metadata: dto.metadata ?? {},
         tags: dto.tags ?? [],
       })

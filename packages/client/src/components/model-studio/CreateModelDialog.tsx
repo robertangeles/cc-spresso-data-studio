@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Boxes, Building2, FolderKanban, X } from 'lucide-react';
+import { Boxes, Building2, Database, FolderKanban, Sparkles, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { api } from '../../lib/api';
-import type { ModelCreate } from '@cc/shared';
+import type { ModelCreate, OriginDirection } from '@cc/shared';
 import { useModels, type DataModelSummary } from '../../hooks/useModels';
 
 /**
@@ -49,6 +49,7 @@ export function CreateModelDialog({
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [originDirection, setOriginDirection] = useState<OriginDirection>('greenfield');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -117,6 +118,7 @@ export function CreateModelDialog({
     else {
       setName('');
       setDescription('');
+      setOriginDirection('greenfield');
       setError(null);
     }
   }, [open]);
@@ -143,11 +145,16 @@ export function CreateModelDialog({
     setError(null);
     try {
       const trimmedDesc = description.trim();
+      // Map origin direction to the layer the canvas should open on:
+      // greenfield → top-down (start conceptual), existing_system →
+      // bottom-up (start physical, reverse-engineering posture).
+      const startingLayer = originDirection === 'existing_system' ? 'physical' : 'conceptual';
       const payload: ModelCreate = {
         name: name.trim(),
         projectId: selectedProjectId,
-        activeLayer: 'conceptual',
+        activeLayer: startingLayer,
         notation: 'ie',
+        originDirection,
         description: trimmedDesc.length > 0 ? trimmedDesc : null,
       };
       const created = await create(payload);
@@ -228,6 +235,25 @@ export function CreateModelDialog({
             options={orgs.map((o) => ({ value: o.id, label: o.name }))}
           />
         )}
+
+        <div className="mt-4" />
+        <FieldLabel icon={<Sparkles className="h-3 w-3" />} label="Starting from" />
+        <div className="grid grid-cols-2 gap-2">
+          <DirectionCard
+            label="Greenfield"
+            description="Start conceptual. Define entities first, then move down."
+            icon={<Sparkles className="h-3.5 w-3.5" />}
+            selected={originDirection === 'greenfield'}
+            onClick={() => setOriginDirection('greenfield')}
+          />
+          <DirectionCard
+            label="Existing system"
+            description="Start physical. Reverse-engineer first, then build upward."
+            icon={<Database className="h-3.5 w-3.5" />}
+            selected={originDirection === 'existing_system'}
+            onClick={() => setOriginDirection('existing_system')}
+          />
+        </div>
 
         <div className="mt-4" />
         <FieldLabel icon={<FolderKanban className="h-3 w-3" />} label="Project" />
@@ -348,6 +374,58 @@ function ErrorChip({ label }: { label: string }) {
     <div className="rounded-lg px-3 py-2 text-sm bg-surface-1/40 border border-white/5 text-red-300/80">
       {label}
     </div>
+  );
+}
+
+function DirectionCard({
+  label,
+  description,
+  icon,
+  selected,
+  onClick,
+}: {
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      data-testid={`direction-card-${label.toLowerCase().replace(/\s+/g, '-')}`}
+      className={[
+        'group rounded-lg border px-3 py-2.5 text-left transition-all',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
+        selected
+          ? 'border-accent/60 bg-gradient-to-br from-accent/15 via-accent/5 to-transparent shadow-[0_0_18px_rgba(255,214,10,0.25)]'
+          : 'border-white/10 bg-surface-1/40 hover:border-white/20 hover:-translate-y-0.5 hover:shadow-md',
+      ].join(' ')}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={[
+            'inline-flex h-6 w-6 items-center justify-center rounded-md border',
+            selected
+              ? 'border-accent/40 bg-accent/15 text-accent'
+              : 'border-white/10 bg-surface-2/40 text-text-secondary group-hover:text-text-primary',
+          ].join(' ')}
+        >
+          {icon}
+        </span>
+        <span
+          className={[
+            'text-xs font-semibold',
+            selected ? 'text-text-primary' : 'text-text-primary/90',
+          ].join(' ')}
+        >
+          {label}
+        </span>
+      </div>
+      <p className="mt-1.5 text-[11px] leading-snug text-text-secondary">{description}</p>
+    </button>
   );
 }
 

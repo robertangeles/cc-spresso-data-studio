@@ -2003,6 +2003,11 @@ export const dataModels = pgTable(
     activeLayer: varchar('active_layer', { length: 20 }).notNull().default('conceptual'),
     // Notation preference: ie | idef1x (render-only, not data)
     notation: varchar('notation', { length: 20 }).notNull().default('ie'),
+    // Modelling direction at creation: 'greenfield' (top-down) or
+    // 'existing_system' (bottom-up reverse-engineering). Captures intent;
+    // distinct from activeLayer (which tracks current view). Used by Step 7
+    // layer-switcher default direction and Phase 2 reverse-eng import flow.
+    originDirection: varchar('origin_direction', { length: 20 }).notNull().default('greenfield'),
     // Plug-in envelope for future governance/classification without schema change.
     metadata: jsonb('metadata').notNull().default('{}'),
     tags: jsonb('tags').notNull().default('[]'),
@@ -2401,5 +2406,23 @@ export const dataModelChangeLog = pgTable(
     index('idx_data_model_change_log_user').on(t.changedBy),
   ],
 );
+
+// ============================================================
+// APPLIED MIGRATIONS — one-shot guard for boot-time data migrations.
+//
+// Drizzle handles SCHEMA migrations via drizzle-kit. This table tracks
+// idempotent DATA migrations (backfills, alias rewrites, normalisations)
+// so they don't re-run on every server boot. See `migration-runner.ts`
+// for the `runOnce(name, fn)` helper.
+//
+// Normal form: 2NF. OLTP audit table.
+// ============================================================
+export const appliedMigrations = pgTable('applied_migrations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  // Stable identifier — never change once a migration has run in prod.
+  // Use kebab-case slugs (e.g. 'migrate-model-id-prefixes').
+  name: varchar('name', { length: 120 }).notNull().unique(),
+  appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ==== END MODEL STUDIO =======================================

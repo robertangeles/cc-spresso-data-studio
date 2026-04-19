@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import type { ReactNode } from 'react';
 import type { User, SessionStatus } from '@cc/shared';
 import axios from 'axios';
-import { api, setAccessToken } from '../lib/api';
+import { api, getAccessToken, setAccessToken } from '../lib/api';
 
 interface AuthContextType {
   user: Omit<User, 'createdAt' | 'updatedAt'> | null;
@@ -53,6 +53,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     const restoreSession = async () => {
+      // E2E hook: if api.ts pre-loaded an access token from
+      // window.__E2E_ACCESS_TOKEN__, skip the cookie-based refresh dance
+      // (Playwright contexts don't carry the refreshToken cookie). We
+      // derive the user from the JWT directly.
+      const preloaded = getAccessToken();
+      if (preloaded) {
+        try {
+          const payload = JSON.parse(atob(preloaded.split('.')[1]));
+          setUser({
+            id: payload.userId,
+            email: payload.email,
+            name: payload.name,
+            role: payload.role,
+            subscriptionTier: payload.subscriptionTier ?? 'free',
+            isEmailVerified: payload.isEmailVerified ?? true,
+          });
+          if (!cancelled) setIsLoading(false);
+          return;
+        } catch {
+          // fall through to normal refresh path
+        }
+      }
+
       try {
         const { data } = await axios.post('/api/auth/refresh', {}, { withCredentials: true });
         if (cancelled) return;
