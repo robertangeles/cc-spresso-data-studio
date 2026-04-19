@@ -12,6 +12,7 @@ import {
   numeric,
   index,
   uniqueIndex,
+  vector,
 } from 'drizzle-orm/pg-core';
 
 // ============================================================
@@ -1957,3 +1958,448 @@ export const projectReadStatus = pgTable(
     index('idx_project_read_status_user_id').on(t.userId),
   ],
 );
+
+// ============================================================
+// ==== MODEL STUDIO ==========================================
+// Greenfield feature: data-modelling studio with ERD canvas,
+// three layers (conceptual/logical/physical), two notations
+// (IE/IDEF1X), DDL export, RAG chat, plugin-ready metadata.
+//
+// Feature is gated by the `enable_model_studio` row in the
+// `settings` key/value table. When OFF, all Model Studio routes
+// return 404 to hide existence.
+//
+// All tables prefixed `data_model_*` to avoid collision with
+// `dim_models` (LLM pricing dimension table).
+//
+// Every table: 2NF, UUID PK, timestamps with tz, cascade FKs,
+// `metadata jsonb` + `tags jsonb` plug-in envelope per CEO-review
+// architecture. Every FK has an index with a comment above it.
+// ============================================================
+
+// ============================================================
+// DATA MODELS (Model Studio project root)
+// Normal form: 2NF. OLTP.
+// Scoped to a project (project_id) AND owned by a user (owner_id).
+// Organisation is derived via projects.organisation_id — we do not
+// denormalize it here to avoid drift.
+// Authorization: user can read if (owner_id = user) OR active member
+// of the project's organisation in organisation_members.
+// ============================================================
+
+export const dataModels = pgTable(
+  'data_models',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 200 }).notNull(),
+    description: text('description'),
+    // Active layer the user was last on: conceptual | logical | physical
+    activeLayer: varchar('active_layer', { length: 20 }).notNull().default('conceptual'),
+    // Notation preference: ie | idef1x (render-only, not data)
+    notation: varchar('notation', { length: 20 }).notNull().default('ie'),
+    // Plug-in envelope for future governance/classification without schema change.
+    metadata: jsonb('metadata').notNull().default('{}'),
+    tags: jsonb('tags').notNull().default('[]'),
+    // Soft milestone: when DDL was last exported (null = never).
+    lastExportedAt: timestamp('last_exported_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one model name per (project, owner) pair — two projects
+    // can each own a "Customer Domain" model without conflict.
+    uniqueIndex('idx_data_models_unique_name').on(t.projectId, t.ownerId, t.name),
+    // Index: list models for a project (sidebar + detail page)
+    index('idx_data_models_project_id').on(t.projectId),
+    // Index: list models owned by a user (profile / global view)
+    index('idx_data_models_owner_id').on(t.ownerId),
+  ],
+);
+
+// ============================================================
+// DATA MODEL ENTITIES (tables / business objects across all layers)
+// Normal form: 2NF. OLTP.
+// entity_type: standard | associative | subtype | supertype
+// layer: conceptual | logical | physical
+// ============================================================
+
+export const dataModelEntities = pgTable(
+  'data_model_entities',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    dataModelId: uuid('data_model_id')
+      .notNull()
+      .references(() => dataModels.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 128 }).notNull(),
+    businessName: varchar('business_name', { length: 255 }),
+    description: text('description'),
+    layer: varchar('layer', { length: 20 }).notNull(),
+    entityType: varchar('entity_type', { length: 20 }).notNull().default('standard'),
+    metadata: jsonb('metadata').notNull().default('{}'),
+    tags: jsonb('tags').notNull().default('[]'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: load all entities for a model (core read path)
+    index('idx_data_model_entities_data_model_id').on(t.dataModelId),
+    // Index: filter entities by layer when switching layers on canvas
+    index('idx_data_model_entities_model_layer').on(t.dataModelId, t.layer),
+  ],
+);
+
+// ============================================================
+// DATA MODEL LAYER LINKS (entity projections across layers)
+// Normal form: 2NF. OLTP.
+// Parent (conceptual) → child (logical), or logical → physical.
+// Parent and child MUST be on different layers (enforced in service).
+// ============================================================
+
+export const dataModelLayerLinks = pgTable(
+  'data_model_layer_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    parentId: uuid('parent_id')
+      .notNull()
+      .references(() => dataModelEntities.id, { onDelete: 'cascade' }),
+    childId: uuid('child_id')
+      .notNull()
+      .references(() => dataModelEntities.id, { onDelete: 'cascade' }),
+    linkType: varchar('link_type', { length: 40 }).notNull().default('layer_projection'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: no duplicate parent↔child link
+    uniqueIndex('idx_data_model_layer_links_unique').on(t.parentId, t.childId),
+    // Index: find children of a parent (walk down layers)
+    index('idx_data_model_layer_links_parent_id').on(t.parentId),
+    // Index: find parents of a child (walk up layers)
+    index('idx_data_model_layer_links_child_id').on(t.childId),
+  ],
+);
+
+// ============================================================
+// DATA MODEL ATTRIBUTES (columns / fields on an entity)
+// Normal form: 2NF. OLTP.
+// ordinal_position orders attributes within an entity.
+// ============================================================
+
+export const dataModelAttributes = pgTable(
+  'data_model_attributes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    entityId: uuid('entity_id')
+      .notNull()
+      .references(() => dataModelEntities.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 128 }).notNull(),
+    businessName: varchar('business_name', { length: 255 }),
+    description: text('description'),
+    dataType: varchar('data_type', { length: 64 }),
+    length: integer('length'),
+    precision: integer('precision'),
+    scale: integer('scale'),
+    isNullable: boolean('is_nullable').notNull().default(true),
+    isPrimaryKey: boolean('is_primary_key').notNull().default(false),
+    isForeignKey: boolean('is_foreign_key').notNull().default(false),
+    isUnique: boolean('is_unique').notNull().default(false),
+    defaultValue: text('default_value'),
+    ordinalPosition: integer('ordinal_position').notNull().default(0),
+    metadata: jsonb('metadata').notNull().default('{}'),
+    tags: jsonb('tags').notNull().default('[]'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: attribute name unique within an entity
+    uniqueIndex('idx_data_model_attributes_unique_name').on(t.entityId, t.name),
+    // Index: load all attributes for an entity (core read path)
+    index('idx_data_model_attributes_entity_id').on(t.entityId),
+  ],
+);
+
+// ============================================================
+// DATA MODEL ATTRIBUTE LINKS (logical attr ↔ physical column)
+// Normal form: 2NF. OLTP.
+// Mirrors layer_links but at attribute granularity.
+// ============================================================
+
+export const dataModelAttributeLinks = pgTable(
+  'data_model_attribute_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    parentId: uuid('parent_id')
+      .notNull()
+      .references(() => dataModelAttributes.id, { onDelete: 'cascade' }),
+    childId: uuid('child_id')
+      .notNull()
+      .references(() => dataModelAttributes.id, { onDelete: 'cascade' }),
+    linkType: varchar('link_type', { length: 40 }).notNull().default('layer_projection'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: no duplicate attribute link
+    uniqueIndex('idx_data_model_attribute_links_unique').on(t.parentId, t.childId),
+    // Index: walk down from a parent attribute
+    index('idx_data_model_attribute_links_parent_id').on(t.parentId),
+    // Index: walk up from a child attribute
+    index('idx_data_model_attribute_links_child_id').on(t.childId),
+  ],
+);
+
+// ============================================================
+// DATA MODEL RELATIONSHIPS (ERD edges between entities)
+// Normal form: 2NF. OLTP.
+// Source and target must be on the same layer (enforced in service).
+// Cardinality enum: one | many | zero_or_one | zero_or_many | one_or_many
+// ============================================================
+
+export const dataModelRelationships = pgTable(
+  'data_model_relationships',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    dataModelId: uuid('data_model_id')
+      .notNull()
+      .references(() => dataModels.id, { onDelete: 'cascade' }),
+    sourceEntityId: uuid('source_entity_id')
+      .notNull()
+      .references(() => dataModelEntities.id, { onDelete: 'cascade' }),
+    targetEntityId: uuid('target_entity_id')
+      .notNull()
+      .references(() => dataModelEntities.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 128 }),
+    sourceCardinality: varchar('source_cardinality', { length: 20 }).notNull(),
+    targetCardinality: varchar('target_cardinality', { length: 20 }).notNull(),
+    isIdentifying: boolean('is_identifying').notNull().default(false),
+    layer: varchar('layer', { length: 20 }).notNull(),
+    metadata: jsonb('metadata').notNull().default('{}'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: load all relationships for a model
+    index('idx_data_model_rels_data_model_id').on(t.dataModelId),
+    // Index: find relationships where an entity is the source
+    index('idx_data_model_rels_source_entity').on(t.sourceEntityId),
+    // Index: find relationships where an entity is the target
+    index('idx_data_model_rels_target_entity').on(t.targetEntityId),
+  ],
+);
+
+// ============================================================
+// DATA MODEL CANVAS STATES (per-user, per-layer viewport + positions)
+// Normal form: 2NF. OLTP.
+// Separate from model data so multiple views of the same model can
+// coexist (phase 2: subject-area subviews).
+// ============================================================
+
+export const dataModelCanvasStates = pgTable(
+  'data_model_canvas_states',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    dataModelId: uuid('data_model_id')
+      .notNull()
+      .references(() => dataModels.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    layer: varchar('layer', { length: 20 }).notNull(),
+    // { [nodeId]: { x: number, y: number } } — JSONB node positions
+    nodePositions: jsonb('node_positions').notNull().default('{}'),
+    // { x: number, y: number, zoom: number } — JSONB viewport
+    viewport: jsonb('viewport').notNull().default('{"x":0,"y":0,"zoom":1}'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: one canvas state per user per model per layer (optimistic concurrency)
+    uniqueIndex('idx_data_model_canvas_unique').on(t.dataModelId, t.userId, t.layer),
+    // Index: load a user's canvas states across all layers for a model
+    index('idx_data_model_canvas_model_user').on(t.dataModelId, t.userId),
+  ],
+);
+
+// ============================================================
+// DATA MODEL SEMANTIC MAPPINGS (physical col → logical attr → conceptual term)
+// Normal form: 2NF. OLTP.
+// Exportable as the semantic-layer contract.
+// ============================================================
+
+export const dataModelSemanticMappings = pgTable(
+  'data_model_semantic_mappings',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    dataModelId: uuid('data_model_id')
+      .notNull()
+      .references(() => dataModels.id, { onDelete: 'cascade' }),
+    physicalAttributeId: uuid('physical_attribute_id')
+      .notNull()
+      .references(() => dataModelAttributes.id, { onDelete: 'cascade' }),
+    logicalAttributeId: uuid('logical_attribute_id').references(() => dataModelAttributes.id, {
+      onDelete: 'set null',
+    }),
+    conceptualTerm: varchar('conceptual_term', { length: 255 }),
+    semanticLabel: varchar('semantic_label', { length: 255 }),
+    biToolName: varchar('bi_tool_name', { length: 100 }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    metadata: jsonb('metadata').notNull().default('{}'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: list all mappings for a model
+    index('idx_data_model_semantic_data_model_id').on(t.dataModelId),
+    // Index: find mapping by physical attribute (reverse lookup)
+    index('idx_data_model_semantic_physical_attr').on(t.physicalAttributeId),
+    // Index: find mapping by logical attribute
+    index('idx_data_model_semantic_logical_attr').on(t.logicalAttributeId),
+  ],
+);
+
+// ============================================================
+// DATA MODEL CHAT LOGS (every AI chat turn over a model)
+// Normal form: 2NF. OLTP (analytics fed later via fact_* tables).
+// Captures full context for future fine-tuning corpus.
+// ============================================================
+
+export const dataModelChatLogs = pgTable(
+  'data_model_chat_logs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    dataModelId: uuid('data_model_id')
+      .notNull()
+      .references(() => dataModels.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    userMessage: text('user_message').notNull(),
+    assistantMessage: text('assistant_message').notNull(),
+    // Compact serialisation of the model at turn time (for replay / fine-tuning)
+    modelContext: jsonb('model_context').notNull().default('{}'),
+    // RAG: which embedding rows were retrieved for this turn
+    retrievedChunks: jsonb('retrieved_chunks').notNull().default('[]'),
+    tokensUsed: integer('tokens_used').notNull().default(0),
+    // Which provider/model answered (for later ablation)
+    modelSlug: varchar('model_slug', { length: 150 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: load chat history for a model, newest first
+    index('idx_data_model_chat_logs_model_time').on(t.dataModelId, t.createdAt),
+    // Index: user's chat history across models
+    index('idx_data_model_chat_logs_user_id').on(t.userId),
+  ],
+);
+
+// ============================================================
+// DATA MODEL EMBEDDINGS (pgvector — RAG content chunks)
+// Normal form: 2NF. OLTP.
+// embedding column uses voyage-3 (1024 dims).
+// ivfflat index is created at bootstrap (not expressible via drizzle).
+// ============================================================
+
+export const dataModelEmbeddings = pgTable(
+  'data_model_embeddings',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    dataModelId: uuid('data_model_id')
+      .notNull()
+      .references(() => dataModels.id, { onDelete: 'cascade' }),
+    // Polymorphic pointer — object_type tells you which entity/attr/rel this embeds
+    objectId: uuid('object_id').notNull(),
+    objectType: varchar('object_type', { length: 40 }).notNull(),
+    // Short digest of the content that produced this embedding — used to
+    // detect staleness and to dedupe rapid-edit re-embed jobs.
+    contentDigest: varchar('content_digest', { length: 64 }).notNull(),
+    content: text('content').notNull(),
+    embedding: vector('embedding', { dimensions: 1024 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Unique: only one current embedding per object (per digest)
+    uniqueIndex('idx_data_model_embeddings_unique_obj').on(t.objectId, t.contentDigest),
+    // Index: restrict RAG search to one model (security + performance)
+    index('idx_data_model_embeddings_data_model_id').on(t.dataModelId),
+    // Index: polymorphic lookup
+    index('idx_data_model_embeddings_object').on(t.objectId),
+    // NOTE: ivfflat(embedding vector_cosine_ops, lists = 100) is created
+    // at startup by ensureModelStudioIndexes() — drizzle cannot express it.
+  ],
+);
+
+// ============================================================
+// DATA MODEL EMBEDDING JOBS (debounced re-embed queue)
+// Normal form: 2NF. OLTP.
+// Rapid edits coalesce on (object_id, content_digest). Worker drains
+// every 3s, dedupes by latest digest per object, calls voyage-3 once.
+// status: pending | processing | failed | done
+// ============================================================
+
+export const dataModelEmbeddingJobs = pgTable(
+  'data_model_embedding_jobs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    dataModelId: uuid('data_model_id')
+      .notNull()
+      .references(() => dataModels.id, { onDelete: 'cascade' }),
+    objectId: uuid('object_id').notNull(),
+    objectType: varchar('object_type', { length: 40 }).notNull(),
+    contentDigest: varchar('content_digest', { length: 64 }).notNull(),
+    content: text('content').notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+  },
+  (t) => [
+    // Index: worker drains pending jobs oldest-first
+    index('idx_data_model_embedding_jobs_status_time').on(t.status, t.createdAt),
+    // Index: dedupe lookup when enqueueing a new mutation
+    index('idx_data_model_embedding_jobs_object').on(t.objectId),
+  ],
+);
+
+// ============================================================
+// DATA MODEL CHANGE LOG (event-bus placeholder + audit trail)
+// Normal form: 2NF. OLTP.
+// Every CRUD on a Model Studio object writes one row here.
+// Seeds the future event-bus (phase 2) without a schema change.
+// action: create | update | delete
+// ============================================================
+
+export const dataModelChangeLog = pgTable(
+  'data_model_change_log',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    dataModelId: uuid('data_model_id')
+      .notNull()
+      .references(() => dataModels.id, { onDelete: 'cascade' }),
+    objectId: uuid('object_id').notNull(),
+    objectType: varchar('object_type', { length: 40 }).notNull(),
+    action: varchar('action', { length: 20 }).notNull(),
+    changedBy: uuid('changed_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    beforeState: jsonb('before_state'),
+    afterState: jsonb('after_state'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Index: timeline of changes for a model
+    index('idx_data_model_change_log_model_time').on(t.dataModelId, t.createdAt),
+    // Index: all changes to a specific object
+    index('idx_data_model_change_log_object').on(t.objectId),
+    // Index: a user's activity across models
+    index('idx_data_model_change_log_user').on(t.changedBy),
+  ],
+);
+
+// ==== END MODEL STUDIO =======================================

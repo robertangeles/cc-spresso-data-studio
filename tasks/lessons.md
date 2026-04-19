@@ -271,6 +271,21 @@ This is not optional polish — it is the difference between a product and a dem
 
 **Rule:** Any dropdown, tooltip, popover, or modal that needs to escape its parent container MUST use a React portal. Never rely on z-index or overflow tweaks — they are fragile and browser-dependent. When debugging "invisible but data exists" UI issues, check the DOM inspector first to see if the element exists but is clipped, before assuming a data/state problem.
 
+## 26. Every mutating route needs a strict Zod schema — silent field drops are a trust failure
+
+**Problem:** The project dropdown saved "Just Another Client" in the UI but the DB still had `client_id = null`. The PUT `/api/projects/:id` route had NO `validate()` middleware; the service's typed signature lacked `clientId`. So the body's `clientId` was spread into Drizzle's `.set({})`, silently ignored at the ORM layer, and the route returned 200. No DB violation (nullable FK, no constraint). No server error. The UI trusted the 200 and lied to the user.
+
+**Fix:**
+
+- Added `clientId` + `organisationId` to both `createProjectSchema` and `updateProjectSchema` in `@cc/shared`.
+- Marked both schemas `.strict()` so unknown fields fail with `400 Validation failed` and field-level details.
+- Wired `validate(updateProjectSchema)` and `validate(createProjectSchema)` onto the project routes.
+- Updated `updateProject` service signature to include the new optional FK fields.
+
+**Rule:** EVERY mutating route (`POST`, `PUT`, `PATCH`, `DELETE` when it takes a body) must have a Zod schema applied via `validate()` middleware. Update-style schemas MUST use `.strict()` so typos and orphaned fields surface as 400 errors, not silent drops. When adding a new column to a DB table, add it to the corresponding Zod schema in the same PR — the schema is a contract, not documentation. Service-layer typed signatures are not validation; only Zod + `.strict()` is.
+
+**Why it matters (DMBOK / trust):** An artefact that can't prove what was persisted is untrustworthy by definition. Silent accept-and-drop breaks the contract between UI and DB.
+
 ## 25. Enumerate detailed test plan BEFORE writing any feature code
 
 **Problem:** Features were implemented without upfront test planning, leading to ad-hoc testing that missed components, edge cases, and interaction scenarios. Bugs slipped through because there was no systematic checklist to verify against.

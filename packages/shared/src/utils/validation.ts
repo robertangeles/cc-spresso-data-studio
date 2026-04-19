@@ -187,24 +187,39 @@ const clientContactSchema = z.object({
   role: z.string().max(100).optional(),
 });
 
-export const createProjectSchema = z.object({
-  name: z.string().min(1, 'Project name is required').max(255),
-  description: z.string().max(5000).optional(),
-  clientName: z.string().max(255).optional(),
-  clientContacts: z.array(clientContactSchema).max(20).optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-});
+export const createProjectSchema = z
+  .object({
+    name: z.string().min(1, 'Project name is required').max(255),
+    description: z.string().max(5000).optional(),
+    // Foreign keys — nullable so callers can pass null explicitly to unlink.
+    organisationId: z.string().uuid().nullable().optional(),
+    clientId: z.string().uuid().nullable().optional(),
+    // Legacy denormalised string; retained for backwards compatibility with
+    // existing callers. New UIs should use clientId instead.
+    clientName: z.string().max(255).optional(),
+    clientContacts: z.array(clientContactSchema).max(20).optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+  })
+  .strict();
 
-export const updateProjectSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().max(5000).nullable().optional(),
-  status: z.enum(['active', 'archived', 'completed']).optional(),
-  clientName: z.string().max(255).nullable().optional(),
-  clientContacts: z.array(clientContactSchema).max(20).optional(),
-  startDate: z.string().nullable().optional(),
-  endDate: z.string().nullable().optional(),
-});
+export const updateProjectSchema = z
+  .object({
+    name: z.string().min(1).max(255).optional(),
+    description: z.string().max(5000).nullable().optional(),
+    status: z.enum(['active', 'archived', 'completed']).optional(),
+    // Foreign keys — pass `null` to unlink, a uuid string to re-link.
+    // `.strict()` on the whole object means any unknown field now returns
+    // 400 with field-level details instead of silently dropping — that's
+    // what let the client_id field slip through before (traced 2026-04-19).
+    organisationId: z.string().uuid().nullable().optional(),
+    clientId: z.string().uuid().nullable().optional(),
+    clientName: z.string().max(255).nullable().optional(),
+    clientContacts: z.array(clientContactSchema).max(20).optional(),
+    startDate: z.string().nullable().optional(),
+    endDate: z.string().nullable().optional(),
+  })
+  .strict();
 
 export const createColumnSchema = z.object({
   name: z.string().min(1, 'Column name is required').max(255),

@@ -40,3 +40,8 @@ coverage/
 # Turbo
 .turbo/
 packages/server/uploads/
+
+# Playwright artifacts (per-machine; must not be committed)
+packages/client/playwright-report/
+packages/client/test-results/
+packages/client/tests/e2e/.auth/
