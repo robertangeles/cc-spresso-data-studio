@@ -230,7 +230,7 @@
 
 ## STEP 5 — Attribute CRUD + D9 synthetic data
 
-**Status (2026-04-20):** Unit + Integration GREEN (23 shared + 16 server). E2E deferred pending manual acceptance — see `tasks/todo.md`.
+**Status (2026-04-20):** Unit + Integration + E2E all GREEN. 23 shared + 21 server integration (incl. Step 5 follow-ups) + 4 Playwright specs (S5-E1..E4) on `feature/model-studio-step5-attributes`.
 
 ### Unit
 
@@ -251,15 +251,15 @@
 | S5-I3 | `POST /api/models/:id/entities/:eid/synthetic-data`   | Happy                        | 200 with 10 rows         | P1       | ✓   |
 | S5-I4 | Synthetic data labelled `synthetic: true` in response | Happy                        | Response includes marker | P1       | ✓   |
 
-### E2E (deferred — see tasks/todo.md)
+### E2E — `packages/client/tests/e2e/model-studio-attributes.spec.ts`
 
-| ID    | Flow                                                                          | Expected    | Priority                                |
-| ----- | ----------------------------------------------------------------------------- | ----------- | --------------------------------------- | --- |
-| S5-E1 | Add attribute inline → appears in entity node                                 | Add         | Appears immediately                     | P1  |
-| S5-E2 | Drag-reorder attributes in panel → saved                                      | Drag        | Persisted                               | P1  |
-| S5-E3 | PK attributes rendered above the line on canvas node                          | Visual      | Above divider                           | P1  |
-| S5-E4 | Click "Synthetic data" → drawer opens below canvas with 10 rows + clear label | Interaction | Shown with "SYNTHETIC — NOT REAL" badge | P1  |
-| S5-E5 | Synthetic data drawer: close button, copy-to-clipboard, regenerate button     | Interact    | All work                                | P2  |
+| ID    | Flow                                                                       | Expected    | Priority                                | ✓   |
+| ----- | -------------------------------------------------------------------------- | ----------- | --------------------------------------- | --- | --- |
+| S5-E1 | Add attribute inline → appears in entity node                              | Add         | Appears immediately                     | P1  | ✓   |
+| S5-E2 | Drag-reorder attributes → saved (persists after refresh)                   | Drag        | Persisted                               | P1  | ✓   |
+| S5-E3 | PK attributes rendered above the line on canvas node                       | Visual      | Above divider                           | P1  | ✓   |
+| S5-E4 | Click "Synthetic data" → drawer opens below canvas with the required badge | Interaction | Shown with "SYNTHETIC — NOT REAL" badge | P1  | ✓   |
+| S5-E5 | Synthetic data drawer: close button, copy-to-clipboard, regenerate button  | Interact    | All work                                | P2  |
 
 ---
 

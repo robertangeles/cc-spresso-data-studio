@@ -67,13 +67,12 @@ the project memory at `project_model_studio_state.md` — use it.
       route on `main`). See `tasks/lessons.md` #27 for the writeup.
       Currently marked `.fixme` in
       [packages/client/tests/e2e/model-studio-entities.spec.ts](packages/client/tests/e2e/model-studio-entities.spec.ts).
-- [ ] **Step 5 E2E tests** (S5-E1..E4 + optional S5-E5). Backend
-      and frontend are in; Playwright specs were deferred past manual
-      acceptance. Use network-wait (not `waitForTimeout`) per lessons.md
-      #27 to avoid the S4-E3/E4/E6 suite-flakiness trap. Attribute
-      flows: inline add, drag-reorder persists, PKs render above the
-      divider on the canvas node, synthetic drawer opens with "SYNTHETIC
-      — NOT REAL" badge.
+- [x] **Step 5 E2E tests** (S5-E1..E4). Shipped in
+      [packages/client/tests/e2e/model-studio-attributes.spec.ts](packages/client/tests/e2e/model-studio-attributes.spec.ts).
+      All four P1 cases green. Uses mouse-based drag for dnd-kit
+      reorder; network-wait (`page.waitForResponse`) hoisted before
+      `page.goto` to avoid the S4-era race. S5-E5 (P2 drawer
+      controls) still outstanding — track as a follow-up if desired.
 - [ ] **Model-wide attribute batch endpoint**
       (`GET /api/model-studio/models/:id/attributes`). Today the
       canvas loads attributes per-entity on panel-open, which means
