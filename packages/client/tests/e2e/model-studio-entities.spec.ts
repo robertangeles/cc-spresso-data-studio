@@ -139,9 +139,6 @@ const isolatedTest = test.extend<{ page: Page; accessToken: string; storagePath:
 });
 
 test.describe('Model Studio — entities (Step 4)', () => {
-  test.beforeEach(() => {
-    cachedToken = null; // also reset per-test login cache
-  });
   isolatedTest(
     'S4-E1 + S4-E2: double-click pane creates entity, panel slides in',
     async ({ page, accessToken }) => {
