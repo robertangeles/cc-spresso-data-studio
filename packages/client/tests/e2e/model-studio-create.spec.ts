@@ -87,4 +87,61 @@ test.describe('Model Studio — create flow', () => {
       }
     }
   });
+
+  // Step 4.5 — origin direction choice. Picking "Existing system" must:
+  //   1. Persist origin_direction on the model row.
+  //   2. Open the canvas at the physical layer (header chip shows "Physical").
+  test('Existing-system card sets activeLayer to physical', async ({ page, request }) => {
+    const testName = `E2E Existing ${Date.now()}`;
+
+    await page.goto('/model-studio');
+    await page.waitForLoadState('networkidle');
+
+    const enableBtn = page.getByRole('button', { name: /enable model studio/i });
+    if (await enableBtn.isVisible().catch(() => false)) {
+      test.skip(true, 'Model Studio flag is OFF in this environment — skipping.');
+    }
+
+    const startBlank = page.getByRole('button', { name: /start blank/i });
+    const newModelBtn = page.getByRole('button', { name: /new model/i });
+    if (await startBlank.isVisible().catch(() => false)) {
+      await startBlank.click();
+    } else {
+      await newModelBtn.click();
+    }
+
+    // Pick the "Existing system" card. Greenfield is the default.
+    const existingCard = page.getByTestId('direction-card-existing-system');
+    await expect(existingCard).toBeVisible();
+    await existingCard.click();
+    await expect(existingCard).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByLabel(/model name/i).fill(testName);
+    await page.getByRole('button', { name: /create model/i }).click();
+
+    await page.waitForURL(/\/model-studio\/[0-9a-f-]{36}/, { timeout: 10_000 });
+    const modelId = page.url().match(/\/model-studio\/([0-9a-f-]{36})/)?.[1];
+    expect(modelId).toBeTruthy();
+
+    // Header layer chip should read "Physical" (capitalized activeLayer).
+    await expect(page.getByText(/^Physical$/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid="rf__wrapper"]')).toBeVisible({ timeout: 10_000 });
+
+    // Cleanup
+    if (modelId) {
+      const storageState = await page.context().storageState();
+      const cookieHeader = storageState.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+      const refresh = await request.post(`${API_BASE}/api/auth/refresh`, {
+        headers: { cookie: cookieHeader },
+      });
+      if (refresh.ok()) {
+        const token = (await refresh.json())?.data?.accessToken;
+        if (token) {
+          await request.delete(`${API_BASE}/api/model-studio/models/${modelId}`, {
+            headers: { authorization: `Bearer ${token}` },
+          });
+        }
+      }
+    }
+  });
 });

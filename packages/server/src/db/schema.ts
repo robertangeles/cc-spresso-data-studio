@@ -2003,6 +2003,11 @@ export const dataModels = pgTable(
     activeLayer: varchar('active_layer', { length: 20 }).notNull().default('conceptual'),
     // Notation preference: ie | idef1x (render-only, not data)
     notation: varchar('notation', { length: 20 }).notNull().default('ie'),
+    // Modelling direction at creation: 'greenfield' (top-down) or
+    // 'existing_system' (bottom-up reverse-engineering). Captures intent;
+    // distinct from activeLayer (which tracks current view). Used by Step 7
+    // layer-switcher default direction and Phase 2 reverse-eng import flow.
+    originDirection: varchar('origin_direction', { length: 20 }).notNull().default('greenfield'),
     // Plug-in envelope for future governance/classification without schema change.
     metadata: jsonb('metadata').notNull().default('{}'),
     tags: jsonb('tags').notNull().default('[]'),

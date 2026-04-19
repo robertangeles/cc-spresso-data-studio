@@ -29,6 +29,13 @@ export type EntityType = z.infer<typeof ENTITY_TYPE>;
 export const CARDINALITY = z.enum(['one', 'many', 'zero_or_one', 'zero_or_many', 'one_or_many']);
 export type Cardinality = z.infer<typeof CARDINALITY>;
 
+/** Direction the modeller is approaching the model from at creation:
+ *  - greenfield      : top-down, conceptual → logical → physical.
+ *  - existing_system : bottom-up, physical → logical → conceptual
+ *                      (reverse-engineering an existing database). */
+export const ORIGIN_DIRECTION = z.enum(['greenfield', 'existing_system']);
+export type OriginDirection = z.infer<typeof ORIGIN_DIRECTION>;
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -69,6 +76,12 @@ export const modelCreateSchema = z.object({
   projectId: uuidParam,
   activeLayer: LAYER.optional().default('conceptual'),
   notation: NOTATION.optional().default('ie'),
+  /** Modelling-direction intent at creation. The dialog also passes
+   *  activeLayer so the canvas opens on the matching layer; the two
+   *  fields are decoupled because activeLayer changes as the user
+   *  navigates layers, while originDirection is a fixed property of
+   *  the model. */
+  originDirection: ORIGIN_DIRECTION.optional().default('greenfield'),
   metadata: metadataSchema.optional(),
   tags: tagsSchema.optional(),
 });
@@ -80,6 +93,7 @@ export const modelUpdateSchema = z
     description: z.string().max(10_000).nullable().optional(),
     activeLayer: LAYER.optional(),
     notation: NOTATION.optional(),
+    originDirection: ORIGIN_DIRECTION.optional(),
     metadata: metadataSchema.optional(),
     tags: tagsSchema.optional(),
     archivedAt: z.coerce.date().nullable().optional(),
