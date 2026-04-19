@@ -371,6 +371,20 @@ export const syntheticDataRequestSchema = z
   .strict();
 export type SyntheticDataRequest = z.infer<typeof syntheticDataRequestSchema>;
 
+/** Model-wide attribute batch query. Lint is off by default because
+ *  the canvas preload doesn't need it — lint rehydrates when the
+ *  editor opens. Clients that want lint pass `?lint=true`. */
+export const attributeBatchQuerySchema = z
+  .object({
+    lint: z
+      .enum(['true', 'false'])
+      .optional()
+      .default('false')
+      .transform((v) => v === 'true'),
+  })
+  .strict();
+export type AttributeBatchQuery = z.infer<typeof attributeBatchQuerySchema>;
+
 // ============================================================
 // Naming-lint (D6) — server is authoritative; client mirrors for
 // inline amber underlines. Severity:

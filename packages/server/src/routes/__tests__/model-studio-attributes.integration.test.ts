@@ -536,4 +536,153 @@ describe('Model Studio — attributes (Step 5)', () => {
     expect(jobs.length).toBeGreaterThan(0);
     expect(jobs[0].objectType).toBe('attribute');
   });
+
+  // ----------------------------------------------------------
+  // Step-5 follow-up: model-wide batch endpoint.
+  // Canvas preload reads this instead of per-entity lazy load.
+  // ----------------------------------------------------------
+
+  it('GET /models/:id/attributes returns attributes grouped by entity (lint=false default)', async () => {
+    // Seed a dedicated entity so the test is deterministic regardless
+    // of what other cases have left behind on the shared model.
+    const fresh = await entityService.createEntity(userId, modelId, {
+      name: 'batch_target',
+      layer: 'logical',
+    });
+    createdEntityIds.push(fresh.id);
+    await attributeService.createAttribute(userId, modelId, fresh.id, {
+      name: 'id',
+      dataType: 'uuid',
+      isPrimaryKey: true,
+    });
+    await attributeService.createAttribute(userId, modelId, fresh.id, {
+      name: 'label',
+      dataType: 'varchar',
+      length: 100,
+    });
+
+    const res = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/attributes`, {
+      headers: authHeader(accessToken),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ApiResponse<{
+      attributesByEntity: Record<string, Array<{ name: string; lint: unknown[] }>>;
+      total: number;
+    }>;
+    expect(body.success).toBe(true);
+    expect(body.data.attributesByEntity[fresh.id]).toBeDefined();
+    expect(body.data.attributesByEntity[fresh.id]).toHaveLength(2);
+    // Lint is empty by default (withLint omitted).
+    expect(body.data.attributesByEntity[fresh.id][0].lint).toEqual([]);
+    expect(body.data.total).toBeGreaterThanOrEqual(2);
+  });
+
+  it('GET /models/:id/attributes?lint=true includes lint results', async () => {
+    // Physical entity with a non-snake name triggers a guaranteed
+    // lint violation so the assertion below doesn't depend on random
+    // other data.
+    const physical = await entityService.createEntity(userId, modelId, {
+      name: 'batch_phys',
+      layer: 'physical',
+    });
+    createdEntityIds.push(physical.id);
+    // Use an attribute name that will produce a lint warning on
+    // physical (_id suffix + non-uuid type).
+    await attributeService.createAttribute(userId, modelId, physical.id, {
+      name: 'customer_id',
+      dataType: 'varchar',
+      length: 36,
+    });
+
+    const res = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/attributes?lint=true`, {
+      headers: authHeader(accessToken),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ApiResponse<{
+      attributesByEntity: Record<string, Array<{ name: string; lint: Array<{ rule: string }> }>>;
+    }>;
+    const rows = body.data.attributesByEntity[physical.id];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].lint.some((r) => r.rule === 'id_suffix_should_be_uuid')).toBe(true);
+  });
+
+  it('GET /models/:id/attributes rejects strangers → 404', async () => {
+    const stranger = `stranger-batch-${Date.now()}@test.com`;
+    const reg = await fetch(`${BASE_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: stranger, password: 'stranger-pass-123', name: 'Stranger' }),
+    });
+    if (reg.status !== 201 && reg.status !== 200) {
+      console.warn('Register gated — skipping stranger case');
+      return;
+    }
+    const regBody = (await reg.json()) as ApiResponse<{ accessToken: string }>;
+    const strangerToken = regBody.data?.accessToken;
+    if (!strangerToken) return;
+    const res = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/attributes`, {
+      headers: authHeader(strangerToken),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  // ----------------------------------------------------------
+  // Step-5 follow-up: attribute history endpoint.
+  // Feeds the Erwin-style History tab.
+  // ----------------------------------------------------------
+
+  it('GET attribute history returns at least the create + update events', async () => {
+    const fresh = await entityService.createEntity(userId, modelId, {
+      name: 'history_target',
+      layer: 'logical',
+    });
+    createdEntityIds.push(fresh.id);
+    const attr = await attributeService.createAttribute(userId, modelId, fresh.id, {
+      name: 'status',
+      dataType: 'varchar',
+      length: 30,
+    });
+    await attributeService.updateAttribute(userId, modelId, fresh.id, attr.id, {
+      dataType: 'text',
+    });
+
+    const res = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${fresh.id}/attributes/${attr.id}/history`,
+      { headers: authHeader(accessToken) },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ApiResponse<{
+      events: Array<{ action: string; createdAt: string }>;
+    }>;
+    expect(body.data.events.length).toBeGreaterThanOrEqual(2);
+    const actions = body.data.events.map((e) => e.action);
+    expect(actions).toContain('create');
+    expect(actions).toContain('update');
+    // Descending order — most recent first.
+    const times = body.data.events.map((e) => new Date(e.createdAt).getTime());
+    const sorted = [...times].sort((a, b) => b - a);
+    expect(times).toEqual(sorted);
+  });
+
+  it('GET attribute history on a fresh attribute returns exactly one (create) event', async () => {
+    const fresh = await entityService.createEntity(userId, modelId, {
+      name: 'history_fresh',
+      layer: 'logical',
+    });
+    createdEntityIds.push(fresh.id);
+    const attr = await attributeService.createAttribute(userId, modelId, fresh.id, {
+      name: 'created_at',
+      dataType: 'timestamp',
+    });
+    const res = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${fresh.id}/attributes/${attr.id}/history`,
+      { headers: authHeader(accessToken) },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ApiResponse<{
+      events: Array<{ action: string }>;
+    }>;
+    expect(body.data.events).toHaveLength(1);
+    expect(body.data.events[0].action).toBe('create');
+  });
 });

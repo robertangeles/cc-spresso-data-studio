@@ -17,6 +17,7 @@ import {
   attributeIdParamsSchema,
   attributeReorderSchema,
   attributeDeleteQuerySchema,
+  attributeBatchQuerySchema,
   syntheticDataRequestSchema,
 } from '@cc/shared';
 import { authenticate, requireRole } from '../middleware/auth.middleware.js';
@@ -205,6 +206,20 @@ router.delete(
   validateParams(attributeIdParamsSchema),
   validateQuery(attributeDeleteQuerySchema),
   attributeController.remove,
+);
+
+// Model-wide attribute batch + per-attribute history (Step 5 follow-ups).
+// Batch powers the canvas preload; history feeds the Erwin-style editor.
+router.get(
+  '/models/:id/attributes',
+  validateParams(modelIdParamsSchema),
+  validateQuery(attributeBatchQuerySchema),
+  attributeController.listByModel,
+);
+router.get(
+  '/models/:id/entities/:entityId/attributes/:attributeId/history',
+  validateParams(attributeIdParamsSchema),
+  attributeController.history,
 );
 
 export { router as modelStudioRoutes };

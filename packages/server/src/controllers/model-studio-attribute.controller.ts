@@ -127,3 +127,40 @@ export async function syntheticData(req: Request, res: Response, next: NextFunct
     next(err);
   }
 }
+
+/** Model-wide batch fetch so the canvas preloads every entity's
+ *  attributes in one round trip. Lint is off by default — the canvas
+ *  doesn't need it; the editor rehydrates per-attr on open.
+ *
+ *  validateQuery only mutates `req.body`, not `req.query`, so we read
+ *  the raw string here and coerce to boolean. Zod already guaranteed
+ *  the value is 'true' | 'false' | undefined. */
+export async function listByModel(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = requireUserId(req);
+    const withLint = req.query.lint === 'true';
+    const result = await attributeService.listAttributesByModel(userId, req.params.id, {
+      withLint,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Change-log events for a single attribute. Powers the History tab
+ *  in the Erwin-style editor. */
+export async function history(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = requireUserId(req);
+    const events = await attributeService.listAttributeHistory(
+      userId,
+      req.params.id,
+      req.params.entityId,
+      req.params.attributeId,
+    );
+    res.json({ success: true, data: { events } });
+  } catch (err) {
+    next(err);
+  }
+}

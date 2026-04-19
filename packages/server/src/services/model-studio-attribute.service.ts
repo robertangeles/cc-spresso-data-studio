@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
 import {
   type AttributeCreate,
   type AttributeUpdate,
@@ -11,6 +11,7 @@ import { db } from '../db/index.js';
 import {
   dataModelAttributeLinks,
   dataModelAttributes,
+  dataModelChangeLog,
   dataModelEntities,
   dataModelSemanticMappings,
   systemPrompts,
@@ -732,4 +733,100 @@ export async function generateSyntheticData(
     generatedAt: new Date().toISOString(),
     modelUsed: DEFAULT_MODEL,
   };
+}
+
+// ============================================================
+// BATCH — every attribute under a model, grouped by entityId.
+// Called once on canvas mount so EntityNode can render PKs on first
+// paint instead of waiting for the user to click each entity.
+// ============================================================
+
+export interface AttributesByEntityResponse {
+  /** Entity-id → ordered attribute list. Missing entities (e.g. no
+   *  attributes yet) are simply absent from the map. */
+  attributesByEntity: Record<string, AttributeWithLint[]>;
+  total: number;
+}
+
+export async function listAttributesByModel(
+  userId: string,
+  modelId: string,
+  opts: { withLint: boolean } = { withLint: false },
+): Promise<AttributesByEntityResponse> {
+  await assertCanAccessModel(userId, modelId);
+
+  // JOIN once; we need entity.layer for lint evaluation (when asked)
+  // and for the AttributeWithLint shape.
+  const rows = await db
+    .select({
+      attribute: dataModelAttributes,
+      entityLayer: dataModelEntities.layer,
+    })
+    .from(dataModelAttributes)
+    .innerJoin(dataModelEntities, eq(dataModelEntities.id, dataModelAttributes.entityId))
+    .where(eq(dataModelEntities.dataModelId, modelId))
+    .orderBy(asc(dataModelAttributes.entityId), asc(dataModelAttributes.ordinalPosition));
+
+  const attributesByEntity: Record<string, AttributeWithLint[]> = {};
+  for (const { attribute, entityLayer } of rows) {
+    const withLintOrEmpty = opts.withLint
+      ? withLint(attribute, entityLayer as Layer)
+      : { ...attribute, lint: [] as NamingLintRule[] };
+    const list = attributesByEntity[attribute.entityId] ?? [];
+    list.push(withLintOrEmpty);
+    attributesByEntity[attribute.entityId] = list;
+  }
+
+  return { attributesByEntity, total: rows.length };
+}
+
+// ============================================================
+// HISTORY — change-log events for a single attribute. Powers the
+// Erwin-style History tab. Lazy-loaded per-attr from the client.
+// ============================================================
+
+export interface AttributeHistoryEvent {
+  id: string;
+  action: string;
+  changedBy: string;
+  beforeState: unknown;
+  afterState: unknown;
+  createdAt: Date;
+}
+
+export async function listAttributeHistory(
+  userId: string,
+  modelId: string,
+  entityId: string,
+  attributeId: string,
+): Promise<AttributeHistoryEvent[]> {
+  await assertCanAccessModel(userId, modelId);
+  await getParentEntity(modelId, entityId);
+
+  // Ensure the attribute actually belongs to this entity — protects
+  // against /models/A/entities/X/attributes/Y/history where Y lives
+  // under a different entity/model.
+  await getAttribute(userId, modelId, entityId, attributeId);
+
+  const rows = await db
+    .select({
+      id: dataModelChangeLog.id,
+      action: dataModelChangeLog.action,
+      changedBy: dataModelChangeLog.changedBy,
+      beforeState: dataModelChangeLog.beforeState,
+      afterState: dataModelChangeLog.afterState,
+      createdAt: dataModelChangeLog.createdAt,
+    })
+    .from(dataModelChangeLog)
+    .where(
+      and(
+        eq(dataModelChangeLog.dataModelId, modelId),
+        eq(dataModelChangeLog.objectId, attributeId),
+        eq(dataModelChangeLog.objectType, 'attribute'),
+      ),
+    )
+    .orderBy(desc(dataModelChangeLog.createdAt))
+    .limit(200);
+
+  return rows;
 }

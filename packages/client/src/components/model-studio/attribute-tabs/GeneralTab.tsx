@@ -1,0 +1,154 @@
+import { useEffect, useState } from 'react';
+import type { AttributeUpdate } from '@cc/shared';
+import type { AttributeSummary } from '../../../hooks/useAttributes';
+
+/**
+ * General tab — the inline-editable property sheet for a single
+ * attribute. Mirrors what Erwin shows on its General tab: name,
+ * business name, definition, default value, ordinal position. Drives
+ * `onUpdate` per field on blur (auto-save; matches the rest of the app).
+ */
+
+export interface GeneralTabProps {
+  attribute: AttributeSummary;
+  onUpdate: (patch: AttributeUpdate) => Promise<AttributeSummary>;
+}
+
+export function GeneralTab({ attribute, onUpdate }: GeneralTabProps) {
+  const [draft, setDraft] = useState({
+    businessName: attribute.businessName ?? '',
+    description: attribute.description ?? '',
+    defaultValue: attribute.defaultValue ?? '',
+  });
+
+  // Reset draft whenever the selected attribute changes — prevents
+  // half-typed text from one row bleeding into another.
+  useEffect(() => {
+    setDraft({
+      businessName: attribute.businessName ?? '',
+      description: attribute.description ?? '',
+      defaultValue: attribute.defaultValue ?? '',
+    });
+  }, [attribute.id]);
+
+  async function commit<K extends keyof typeof draft>(field: K, raw: string) {
+    const trimmed = raw.trim();
+    const current = (attribute[field as keyof AttributeSummary] ?? '') as string;
+    if ((trimmed || null) === (current || null)) return;
+    await onUpdate({ [field]: trimmed || null } as AttributeUpdate);
+  }
+
+  return (
+    <div className="grid gap-4 px-4 py-3 sm:grid-cols-2">
+      <FieldSlot
+        label="Business name"
+        hint="Human-readable label. Free-form."
+        value={draft.businessName}
+        onChange={(v) => setDraft((d) => ({ ...d, businessName: v }))}
+        onBlur={() => commit('businessName', draft.businessName)}
+        placeholder="e.g. Customer identifier"
+      />
+      <FieldSlot
+        label="Default value"
+        hint="Raw literal or expression; no validation at MVP."
+        value={draft.defaultValue}
+        onChange={(v) => setDraft((d) => ({ ...d, defaultValue: v }))}
+        onBlur={() => commit('defaultValue', draft.defaultValue)}
+        placeholder="e.g. gen_random_uuid()"
+        mono
+      />
+      <div className="sm:col-span-2">
+        <FieldLabel
+          label="Definition"
+          hint="Prose sketch; the full editor lives on the Definition tab."
+        />
+        <textarea
+          value={draft.description}
+          onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+          onBlur={() => commit('description', draft.description)}
+          rows={4}
+          placeholder="What does this attribute represent? What constraints or business rules apply?"
+          className="w-full resize-y rounded-md border border-white/10 bg-surface-1/50 px-3 py-2 text-xs leading-relaxed text-text-primary placeholder:text-text-secondary/40 focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
+        />
+      </div>
+
+      <div className="sm:col-span-2 grid grid-cols-3 gap-2 rounded-md border border-white/5 bg-surface-1/30 p-2">
+        <MetaCell label="Ordinal" value={attribute.ordinalPosition} />
+        <MetaCell
+          label="Created"
+          value={new Date(attribute.createdAt).toLocaleDateString()}
+          title={new Date(attribute.createdAt).toLocaleString()}
+        />
+        <MetaCell
+          label="Updated"
+          value={new Date(attribute.updatedAt).toLocaleDateString()}
+          title={new Date(attribute.updatedAt).toLocaleString()}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FieldLabel({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className="mb-1 flex items-baseline justify-between">
+      <span className="text-[10px] uppercase tracking-wider text-text-secondary/80">{label}</span>
+      {hint && <span className="text-[10px] text-text-secondary/50">{hint}</span>}
+    </div>
+  );
+}
+
+function FieldSlot({
+  label,
+  hint,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  mono,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  onBlur: () => void;
+  placeholder?: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <FieldLabel label={label} hint={hint} />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className={[
+          'w-full rounded-md border border-white/10 bg-surface-1/50 px-2.5 py-1.5 text-xs text-text-primary',
+          'placeholder:text-text-secondary/40',
+          'focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40',
+          mono ? 'font-mono' : '',
+        ].join(' ')}
+      />
+    </div>
+  );
+}
+
+function MetaCell({
+  label,
+  value,
+  title,
+}: {
+  label: string;
+  value: string | number;
+  title?: string;
+}) {
+  return (
+    <div>
+      <div className="text-[9px] uppercase tracking-wider text-text-secondary/60">{label}</div>
+      <div className="mt-0.5 font-mono text-[11px] text-text-primary" title={title}>
+        {value}
+      </div>
+    </div>
+  );
+}

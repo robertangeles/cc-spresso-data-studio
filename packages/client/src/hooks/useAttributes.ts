@@ -57,6 +57,24 @@ interface ListResponse {
   total: number;
 }
 
+interface BatchResponse {
+  attributesByEntity: Record<string, AttributeSummary[]>;
+  total: number;
+}
+
+export interface AttributeHistoryEvent {
+  id: string;
+  action: string;
+  changedBy: string;
+  beforeState: unknown;
+  afterState: unknown;
+  createdAt: string;
+}
+
+interface HistoryResponse {
+  events: AttributeHistoryEvent[];
+}
+
 interface ReorderResponse {
   attributes: AttributeSummary[];
 }
@@ -75,6 +93,9 @@ export function useAttributes(modelId: string | undefined) {
   const [attributesByEntity, setAttributesByEntity] = useState<Record<string, AttributeSummary[]>>(
     {},
   );
+  const [historyByAttrId, setHistoryByAttrId] = useState<Record<string, AttributeHistoryEvent[]>>(
+    {},
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,6 +105,8 @@ export function useAttributes(modelId: string | undefined) {
     [modelId],
   );
 
+  /** Single per-entity fetch. Kept for edge cases (e.g. after a
+   *  stale-state reconciliation) — the canvas relies on `loadAll`. */
   const load = useCallback(
     async (entityId: string) => {
       if (!modelId) return;
@@ -103,6 +126,26 @@ export function useAttributes(modelId: string | undefined) {
     },
     [modelId, base],
   );
+
+  /** Model-wide batch preload. Called by the canvas on mount so every
+   *  EntityNode can render PKs on first paint without clicking. Lint
+   *  is skipped here to keep the payload small (~150KB on 50 entities);
+   *  the editor re-loads per-attribute lint when it opens. */
+  const loadAll = useCallback(async () => {
+    if (!modelId) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const { data } = await api.get<{ data: BatchResponse }>(
+        `/model-studio/models/${modelId}/attributes`,
+      );
+      setAttributesByEntity(data?.data?.attributesByEntity ?? {});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load attributes');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [modelId]);
 
   const create = useCallback(
     async (entityId: string, dto: AttributeCreate): Promise<AttributeSummary> => {
@@ -194,16 +237,45 @@ export function useAttributes(modelId: string | undefined) {
     [attributesByEntity],
   );
 
+  /** Fetch history for a single attribute (change_log events). Cached
+   *  per attrId for the panel lifetime; invalidated on mutation of that
+   *  attribute. Feeds the Erwin History tab. */
+  const loadHistory = useCallback(
+    async (entityId: string, attrId: string): Promise<AttributeHistoryEvent[]> => {
+      if (!modelId) return [];
+      if (historyByAttrId[attrId]) return historyByAttrId[attrId];
+      const { data } = await api.get<{ data: HistoryResponse }>(
+        base(entityId, `/${attrId}/history`),
+      );
+      const events = data?.data?.events ?? [];
+      setHistoryByAttrId((prev) => ({ ...prev, [attrId]: events }));
+      return events;
+    },
+    [modelId, base, historyByAttrId],
+  );
+
+  const invalidateHistory = useCallback((attrId: string) => {
+    setHistoryByAttrId((prev) => {
+      if (!(attrId in prev)) return prev;
+      const next = { ...prev };
+      delete next[attrId];
+      return next;
+    });
+  }, []);
+
   return {
     attributesByEntity,
     getFor,
     isLoading,
     error,
     load,
+    loadAll,
     create,
     update,
     remove,
     reorder,
     generateSyntheticData,
+    loadHistory,
+    invalidateHistory,
   };
 }

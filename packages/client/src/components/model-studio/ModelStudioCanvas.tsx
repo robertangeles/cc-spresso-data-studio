@@ -18,7 +18,7 @@ import { useCanvasState } from '../../hooks/useCanvasState';
 import { useEntities, type EntitySummary } from '../../hooks/useEntities';
 import { useAttributes, type SyntheticDataResult } from '../../hooks/useAttributes';
 import { EntityNode, type EntityNodeData } from './EntityNode';
-import { EntityDetailPanel } from './EntityDetailPanel';
+import { EntityEditor } from './EntityEditor';
 import { SyntheticDataDrawer } from './SyntheticDataDrawer';
 import '@xyflow/react/dist/style.css';
 
@@ -77,15 +77,13 @@ function InnerCanvas({ modelId, layer }: Props) {
     rf.setViewport({ x: v.x, y: v.y, zoom: v.zoom });
   }, [canvas.isLoading, canvas.state.viewport, rf]);
 
-  // Lazy-load attributes when an entity is selected. First-time
-  // selection triggers a fetch; subsequent selections use the cached
-  // map. The node immediately receives what we have (possibly []) so
-  // the canvas doesn't flicker while the request is in flight.
+  // Preload every entity's attributes in one batch call on canvas
+  // mount so PKs render on nodes from first paint — no click required
+  // (Step-5 follow-up #1/#3). The useAttributes hook keeps the map
+  // fresh on subsequent mutations.
   useEffect(() => {
-    if (!selectedId) return;
-    if (attrs.attributesByEntity[selectedId] !== undefined) return;
-    void attrs.load(selectedId);
-  }, [selectedId, attrs]);
+    void attrs.loadAll();
+  }, [attrs.loadAll]);
 
   // Build React Flow nodes from entities + persisted positions.
   const nodes: Node<EntityNodeData>[] = useMemo(() => {
@@ -322,7 +320,7 @@ function InnerCanvas({ modelId, layer }: Props) {
         </div>
       )}
 
-      <EntityDetailPanel
+      <EntityEditor
         entity={selectedEntity}
         attributes={attrs.getFor(selectedId)}
         attributesBusy={attrs.isLoading}
@@ -335,6 +333,7 @@ function InnerCanvas({ modelId, layer }: Props) {
         onAttributeDelete={attributeDelete}
         onAttributeReorder={attributeReorder}
         onGenerateSynthetic={generateSyntheticForSelected}
+        onLoadHistory={attrs.loadHistory}
       />
 
       <SyntheticDataDrawer
