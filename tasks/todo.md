@@ -18,10 +18,10 @@ the project memory at `project_model_studio_state.md` — use it.
 - [x] **Step 5** — Attribute CRUD + D9 synthetic data + attribute
       lint + Erwin-style editor + governance classification + rules
       tab + PK/FK/NN/UQ invariant normaliser + human-readable audit.
-      Shipped across 6 commits on
+      Shipped across 8 commits on
       `feature/model-studio-step5-attributes`
-      (`1e6b3fb` → `b58efa4`). Pushed to origin; NOT merged to
-      `main` yet — awaits explicit sign-off.
+      (`1e6b3fb` → `0ff65d1`) and merged into `main` via no-ff merge
+      `c14b2a0` on 2026-04-20. Render auto-deploy triggered.
       Highlights: - Backend: attribute CRUD (5 routes), reorder (atomic dense
       1..N), D9 synthetic data (ephemeral, system-prompt-backed,
       CSV-injection-safe), batch endpoint
@@ -94,11 +94,10 @@ the project memory at `project_model_studio_state.md` — use it.
       `page.goto` to avoid the S4-era race. S5-E5 (P2 drawer
       controls) still outstanding — track as a follow-up if desired.
 
-- [ ] **Merge `feature/model-studio-step5-attributes` into `main`.**
-      6 commits, tests green at every step, branch pushed to origin.
-      Run `git checkout main && git merge
-  feature/model-studio-step5-attributes --no-ff`, confirm CI
-      passes, push `main`. Render auto-deploys on main push.
+- [x] **Merge `feature/model-studio-step5-attributes` into `main`.**
+      Done 2026-04-20 as merge commit `c14b2a0`. Pushed to origin;
+      Render auto-deploy triggered. Feature branch can be deleted
+      locally + on origin at any time.
 
 - [ ] **Step 5 P2 drawer-controls spec (S5-E5).** Playwright:
       copy-to-clipboard + regenerate + close buttons on the
