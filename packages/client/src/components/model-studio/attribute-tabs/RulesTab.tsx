@@ -24,8 +24,12 @@ export interface RulesTabProps {
 export function RulesTab({ attribute, onUpdate }: RulesTabProps) {
   const [draft, setDraft] = useState(attribute.transformationLogic ?? '');
 
+  // Reset the draft when a different attribute is selected. Keyed on
+  // attribute.id ONLY — syncing on transformationLogic would wipe the
+  // user's in-progress edit every time the server round-trip completes.
   useEffect(() => {
     setDraft(attribute.transformationLogic ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attribute.id]);
 
   async function commit() {

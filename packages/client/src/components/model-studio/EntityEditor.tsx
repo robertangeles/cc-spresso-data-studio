@@ -105,6 +105,9 @@ export function EntityEditor(props: EntityEditorProps) {
   // Default to the Entity General view (no attribute selected).
   // Preserve the user's row selection across re-renders; clear it only
   // when the entity changes or the selected attribute vanishes.
+  // Keyed on `entity?.id` rather than the full `entity` object so the
+  // effect doesn't re-fire every time the parent hands us a new
+  // entity reference with identical data.
   useEffect(() => {
     if (!entity) {
       setSelectedAttrId(null);
@@ -112,6 +115,7 @@ export function EntityEditor(props: EntityEditorProps) {
     }
     const stillSelected = selectedAttrId && props.attributes.some((a) => a.id === selectedAttrId);
     if (!stillSelected && selectedAttrId !== null) setSelectedAttrId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity?.id, props.attributes, selectedAttrId]);
 
   if (!entity) return null;

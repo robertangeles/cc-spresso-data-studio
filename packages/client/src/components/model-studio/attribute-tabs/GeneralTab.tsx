@@ -27,13 +27,16 @@ export function GeneralTab({ attribute, onUpdate }: GeneralTabProps) {
   });
 
   // Reset draft whenever the selected attribute changes — prevents
-  // half-typed text from one row bleeding into another.
+  // half-typed text from one row bleeding into another. Keyed on
+  // attribute.id ONLY; syncing on the individual fields would wipe
+  // the user's in-progress typing every server round-trip.
   useEffect(() => {
     setDraft({
       businessName: attribute.businessName ?? '',
       defaultValue: attribute.defaultValue ?? '',
       description: attribute.description ?? '',
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attribute.id]);
 
   async function commit<K extends keyof typeof draft>(field: K, raw: string) {

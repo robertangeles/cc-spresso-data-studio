@@ -158,10 +158,13 @@ export function AttributePropertyEditor({
 }: AttributePropertyEditorProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
 
-  // When the selected attribute changes, land on General so tab state
-  // doesn't feel stale after a row click.
+  // When the selected attribute changes, land on General so tab
+  // state doesn't feel stale after a row click. Keyed on
+  // `attribute?.id` only — the full attribute object's identity is
+  // unstable and would reset the tab on every PATCH round-trip.
   useEffect(() => {
     if (attribute) setActiveTab('general');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attribute?.id]);
 
   if (!attribute) {

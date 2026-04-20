@@ -81,9 +81,10 @@ function InnerCanvas({ modelId, layer }: Props) {
   // mount so PKs render on nodes from first paint — no click required
   // (Step-5 follow-up #1/#3). The useAttributes hook keeps the map
   // fresh on subsequent mutations.
+  const loadAllAttrs = attrs.loadAll;
   useEffect(() => {
-    void attrs.loadAll();
-  }, [attrs.loadAll]);
+    void loadAllAttrs();
+  }, [loadAllAttrs]);
 
   // Build React Flow nodes from entities + persisted positions.
   const nodes: Node<EntityNodeData>[] = useMemo(() => {
