@@ -244,7 +244,7 @@ function RelationshipEdgeComponent(props: EdgeProps) {
         path={edgePath}
         style={{
           stroke,
-          strokeWidth: 2,
+          strokeWidth: 1.25,
           strokeDasharray: dashArray,
           opacity: shimmer ? 0.85 : 1,
           transition: 'opacity 200ms ease',
@@ -311,26 +311,42 @@ function GlyphMarker({
   return (
     <g transform={`translate(${x} ${y}) rotate(${angleDeg})`} data-testid={testId}>
       {glyph.bar && (
-        <line x1={-14} y1={-6} x2={-14} y2={6} stroke={stroke} strokeWidth={2} data-glyph="bar" />
+        <line
+          x1={-14}
+          y1={-6}
+          x2={-14}
+          y2={6}
+          stroke={stroke}
+          strokeWidth={1.25}
+          data-glyph="bar"
+        />
       )}
       {glyph.crowsFoot && (
-        <g data-glyph="crows-foot" stroke={stroke} strokeWidth={1.8} fill="none">
+        <g data-glyph="crows-foot" stroke={stroke} strokeWidth={1.15} fill="none">
           <line x1={-4} y1={0} x2={-14} y2={-7} />
           <line x1={-4} y1={0} x2={-14} y2={0} />
           <line x1={-4} y1={0} x2={-14} y2={7} />
         </g>
       )}
       {glyph.filledCircle && (
-        <circle cx={-18} cy={0} r={3.5} fill={fill} stroke={stroke} data-glyph="filled-circle" />
+        <circle
+          cx={-18}
+          cy={0}
+          r={3}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={1.15}
+          data-glyph="filled-circle"
+        />
       )}
       {glyph.openCircle && (
         <circle
           cx={-22}
           cy={0}
-          r={3.5}
+          r={3}
           fill="#0B0E13"
           stroke={stroke}
-          strokeWidth={1.6}
+          strokeWidth={1.15}
           data-glyph="open-circle"
         />
       )}

@@ -7,6 +7,7 @@ import {
   Controls,
   MiniMap,
   applyNodeChanges,
+  useNodesState,
   useReactFlow,
   type Connection,
   type Edge,
@@ -148,8 +149,12 @@ function InnerCanvas({ modelId, layer }: Props) {
     return m;
   }, [rels.relationships]);
 
-  // Nodes.
-  const nodes: Node<EntityNodeData>[] = useMemo(() => {
+  // "Canonical" nodes — the shape React Flow should render, derived purely
+  // from external state (entities, attributes, selection, orphan badges).
+  // We do NOT use this directly as `nodes` on ReactFlow; React Flow v12
+  // needs to own node identity during drag gestures, so we seed a
+  // `useNodesState` from this and merge updates in a sync effect below.
+  const canonicalNodes: Node<EntityNodeData>[] = useMemo(() => {
     const visible = ent.entities.filter((e) => e.layer === layer);
     return visible.map((e) => {
       const pos = canvas.state.nodePositions[e.id] ?? { x: 0, y: 0 };
@@ -186,6 +191,26 @@ function InnerCanvas({ modelId, layer }: Props) {
     showOrphanBadges,
   ]);
 
+  // React Flow v12 node state. Owning node identity here fixes the
+  // "trying to drag a node that is not initialized" warning that
+  // appears when `nodes` is recomputed via useMemo on every external
+  // state change.
+  const [nodes, setNodes, onNodesChangeInternal] = useNodesState<Node<EntityNodeData>>([]);
+
+  // Sync external (canonical) → local. Preserve positions of nodes that
+  // still exist so an in-flight drag is not clobbered by a data refresh.
+  useEffect(() => {
+    setNodes((prev) => {
+      const prevById = new Map(prev.map((n) => [n.id, n]));
+      return canonicalNodes.map((c) => {
+        const existing = prevById.get(c.id);
+        if (!existing) return c;
+        // Keep the live position (drag-aware); refresh everything else.
+        return { ...c, position: existing.position };
+      });
+    });
+  }, [canonicalNodes, setNodes]);
+
   // Edges.
   const edges: Edge<RelationshipEdgeData>[] = useMemo(() => {
     return rels.relationships
@@ -220,17 +245,24 @@ function InnerCanvas({ modelId, layer }: Props) {
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<Node<EntityNodeData>>[]) => {
+      // Let React Flow own the live drag state (fixes "not initialized" warning).
+      onNodesChangeInternal(changes);
+
+      // Persist positions only on drag END (not during every mouse-move).
+      // React Flow emits `{type:'position', dragging:false}` once per drag gesture
+      // when the user releases the mouse; intermediate changes have `dragging:true`.
+      const dragEndChanges = changes.filter((c) => c.type === 'position' && c.dragging === false);
+      if (dragEndChanges.length === 0) return;
+
       const next = applyNodeChanges(changes, nodes);
       const nextPositions: Record<string, { x: number; y: number }> = {};
       for (const n of next) nextPositions[n.id] = { x: n.position.x, y: n.position.y };
-      const hasMove = changes.some((c) => c.type === 'position');
-      if (!hasMove) return;
       canvas.save({
         nodePositions: nextPositions,
         viewport: canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 },
       });
     },
-    [canvas, nodes],
+    [canvas, nodes, onNodesChangeInternal],
   );
 
   const handleMoveEnd = useCallback(

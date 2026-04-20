@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { KeyRound } from 'lucide-react';
 import type { NamingLintRule } from '@cc/shared';
@@ -69,6 +69,25 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
   // D-R2 — listen for rel:hover and pulse the border when this node is
   // an endpoint of the hovered edge.
   const [isEndpointHot, setIsEndpointHot] = useState(false);
+  // Hover state drives handle visibility. Uses NATIVE mouseenter/leave via ref
+  // because React's synthetic onMouseEnter is eaten by React Flow's node
+  // wrapper (which calls stopPropagation on pointer events for its own drag
+  // gesture). Native listeners attached to the element directly bypass
+  // delegation and fire reliably.
+  const [isHovered, setIsHovered] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const onEnter = () => setIsHovered(true);
+    const onLeave = () => setIsHovered(false);
+    el.addEventListener('mouseenter', onEnter);
+    el.addEventListener('mouseleave', onLeave);
+    return () => {
+      el.removeEventListener('mouseenter', onEnter);
+      el.removeEventListener('mouseleave', onLeave);
+    };
+  }, []);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onHover = (evt: Event) => {
@@ -106,9 +125,10 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
 
   return (
     <div
+      ref={rootRef}
       data-testid="entity-node"
       className={[
-        'group relative min-w-[180px] max-w-[260px] rounded-xl border backdrop-blur-xl transition-all duration-150 ease-out',
+        'relative min-w-[180px] max-w-[260px] rounded-xl border backdrop-blur-xl transition-all duration-150 ease-out',
         'bg-surface-2/70 border-white/10 shadow-[0_4px_18px_rgba(0,0,0,0.35)]',
         'hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.45)]',
         selected
@@ -127,26 +147,42 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
       <Handle
         type="target"
         position={Position.Top}
-        className="!h-2.5 !w-2.5 !border-0 !bg-accent hover:!opacity-100"
-        style={{ opacity: 0.55, boxShadow: '0 0 6px rgba(255,214,10,0.45)' }}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent"
+        style={{
+          opacity: isHovered ? 1 : 0,
+          boxShadow: '0 0 6px rgba(255,214,10,0.55)',
+          transition: 'opacity 120ms ease-out',
+        }}
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!h-2.5 !w-2.5 !border-0 !bg-accent hover:!opacity-100"
-        style={{ opacity: 0.55, boxShadow: '0 0 6px rgba(255,214,10,0.45)' }}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent"
+        style={{
+          opacity: isHovered ? 1 : 0,
+          boxShadow: '0 0 6px rgba(255,214,10,0.55)',
+          transition: 'opacity 120ms ease-out',
+        }}
       />
       <Handle
         type="target"
         position={Position.Left}
-        className="!h-2.5 !w-2.5 !border-0 !bg-accent hover:!opacity-100"
-        style={{ opacity: 0.55, boxShadow: '0 0 6px rgba(255,214,10,0.45)' }}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent"
+        style={{
+          opacity: isHovered ? 1 : 0,
+          boxShadow: '0 0 6px rgba(255,214,10,0.55)',
+          transition: 'opacity 120ms ease-out',
+        }}
       />
       <Handle
         type="source"
         position={Position.Right}
-        className="!h-2.5 !w-2.5 !border-0 !bg-accent hover:!opacity-100"
-        style={{ opacity: 0.55, boxShadow: '0 0 6px rgba(255,214,10,0.45)' }}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent"
+        style={{
+          opacity: isHovered ? 1 : 0,
+          boxShadow: '0 0 6px rgba(255,214,10,0.55)',
+          transition: 'opacity 120ms ease-out',
+        }}
       />
 
       {/* D-R5 orphan-entity badge */}
@@ -186,7 +222,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
           {pks.length > 0 && (
             <ul data-testid="entity-node-pk-group" className="px-3 py-1.5 space-y-0.5">
               {pks.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
-                <AttributeLine key={a.id} attr={a} isPk />
+                <AttributeLine key={a.id} attr={a} isPk isParentHovered={isHovered} />
               ))}
               {pks.length > MAX_VISIBLE_PER_GROUP && (
                 <li className="text-[10px] text-text-secondary italic">
@@ -201,7 +237,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
           {nonPks.length > 0 && (
             <ul data-testid="entity-node-nonpk-group" className="px-3 py-1.5 space-y-0.5">
               {nonPks.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
-                <AttributeLine key={a.id} attr={a} isPk={false} />
+                <AttributeLine key={a.id} attr={a} isPk={false} isParentHovered={isHovered} />
               ))}
               {nonPks.length > MAX_VISIBLE_PER_GROUP && (
                 <li className="text-[10px] text-text-secondary italic">
@@ -216,7 +252,15 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
   );
 }
 
-function AttributeLine({ attr, isPk }: { attr: EntityNodeAttribute; isPk: boolean }) {
+function AttributeLine({
+  attr,
+  isPk,
+  isParentHovered,
+}: {
+  attr: EntityNodeAttribute;
+  isPk: boolean;
+  isParentHovered: boolean;
+}) {
   return (
     <li
       data-testid="entity-node-attribute"
@@ -245,15 +289,23 @@ function AttributeLine({ attr, isPk }: { attr: EntityNodeAttribute; isPk: boolea
         type="target"
         position={Position.Left}
         id={`attr-${attr.id}-target`}
-        className="!h-1.5 !w-1.5 !border-0 !bg-accent hover:!opacity-100"
-        style={{ left: -3, opacity: 0.35 }}
+        className="!h-1.5 !w-1.5 !border-0 !bg-accent"
+        style={{
+          left: -3,
+          opacity: isParentHovered ? 0.8 : 0,
+          transition: 'opacity 120ms ease-out',
+        }}
       />
       <Handle
         type="source"
         position={Position.Right}
         id={`attr-${attr.id}-source`}
-        className="!h-1.5 !w-1.5 !border-0 !bg-accent hover:!opacity-100"
-        style={{ right: -3, opacity: 0.35 }}
+        className="!h-1.5 !w-1.5 !border-0 !bg-accent"
+        style={{
+          right: -3,
+          opacity: isParentHovered ? 0.8 : 0,
+          transition: 'opacity 120ms ease-out',
+        }}
       />
     </li>
   );
