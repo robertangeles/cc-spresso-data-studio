@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   uuid,
@@ -2198,6 +2199,8 @@ export const dataModelRelationships = pgTable(
     isIdentifying: boolean('is_identifying').notNull().default(false),
     layer: varchar('layer', { length: 20 }).notNull(),
     metadata: jsonb('metadata').notNull().default('{}'),
+    // Optimistic concurrency token — PATCH bumps this; stale PATCH → 409.
+    version: integer('version').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -2208,6 +2211,18 @@ export const dataModelRelationships = pgTable(
     index('idx_data_model_rels_source_entity').on(t.sourceEntityId),
     // Index: find relationships where an entity is the target
     index('idx_data_model_rels_target_entity').on(t.targetEntityId),
+    // Unique: guarantees 409 on duplicate rel within a model. COALESCE lets
+    // two unnamed rels between the same pair co-exist only if one has a name.
+    uniqueIndex('idx_data_model_rels_unique_triple').on(
+      t.dataModelId,
+      t.sourceEntityId,
+      t.targetEntityId,
+      sql`COALESCE(name, '')`,
+    ),
+    // Partial: cycle-detection walk only considers identifying rels
+    index('idx_data_model_rels_identifying')
+      .on(t.sourceEntityId, t.targetEntityId)
+      .where(sql`is_identifying = true`),
   ],
 );
 
@@ -2233,6 +2248,10 @@ export const dataModelCanvasStates = pgTable(
     nodePositions: jsonb('node_positions').notNull().default('{}'),
     // { x: number, y: number, zoom: number } — JSONB viewport
     viewport: jsonb('viewport').notNull().default('{"x":0,"y":0,"zoom":1}'),
+    // Per-user notation preference. Values match packages/shared/src/utils/
+    // model-studio.schemas.ts NOTATION enum ('ie' | 'idef1x'). A DB-level
+    // CHECK constraint (created by runOnce migration) enforces the enum.
+    notation: varchar('notation', { length: 10 }).notNull().default('ie'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

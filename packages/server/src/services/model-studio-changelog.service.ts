@@ -14,7 +14,23 @@ import { logger } from '../config/logger.js';
  *     losing the user's actual mutation.
  */
 
-export type ChangeLogAction = 'create' | 'update' | 'delete';
+/**
+ * Canonical action verbs written into `data_model_change_log.action`.
+ *
+ * The original three (`create` / `update` / `delete`) cover the entity
+ * + attribute CRUD surface. Step 6 adds three relationship-specific
+ * verbs so the audit humaniser can render them as distinct phrases:
+ *   - `propagate` — identifying-rel PK propagation wrote new child attrs.
+ *   - `unwind`    — identifying toggled off / rel deleted, propagated
+ *                   attrs removed.
+ *   - `infer`     — FK-graph inference generated a relationship proposal.
+ *
+ * The DB column is `varchar(20)` so no migration is needed to add new
+ * verbs. Extending the union (rather than stringly-typing) keeps the
+ * audit humaniser exhaustive — new verbs surface as TS errors until
+ * `auditFormatter.ts` handles them.
+ */
+export type ChangeLogAction = 'create' | 'update' | 'delete' | 'propagate' | 'unwind' | 'infer';
 
 export interface ChangeLogInput {
   dataModelId: string;

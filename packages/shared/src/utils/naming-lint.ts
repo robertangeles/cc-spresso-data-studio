@@ -201,3 +201,71 @@ export function lintAttribute(
 
   return issues;
 }
+
+// Matches PascalCase / camelCase tokens like `CustomerOrders` or
+// `customerOrders`. Used to warn that a relationship name is drifting
+// from the snake_case / sentence-style conventions the rest of the
+// lint ecosystem enforces.
+const CAMEL_OR_PASCAL_CASE = /[a-z][A-Z]|^[A-Z][a-z]+[A-Z]/;
+
+// Patterns that match Spresso's house style for relationship naming.
+// A name containing any of these reads naturally (e.g. `has_many_orders`,
+// `belongs_to_customer`, `customer_to_invoice`, `line_items_of_order`).
+const RELATIONSHIP_PATTERN_HINTS: readonly string[] = ['_to_', 'has_', 'belongs_to_', '_of_'];
+
+/**
+ * Lint a relationship name on a given layer.
+ *
+ * Advisory only — relationship names are optional (cardinality carries
+ * the semantics), so empty / null / whitespace input returns `[]` with
+ * no issues. Rules fired:
+ *
+ *   - Physical layer + not snake_case ⇒ `snake_case` violation
+ *     (matches the identifier rule — relationships land in DDL
+ *     comments and index names, so the surface still matters).
+ *   - camelCase / PascalCase ⇒ `relationship_name_case` warning
+ *     suggesting snake_case or sentence-style. Fires on all layers
+ *     because it captures style drift that the physical rule misses
+ *     on conceptual/logical layers.
+ *   - No `_to_` / `has_` / `belongs_to_` / `_of_` pattern ⇒
+ *     `relationship_name_pattern` info — a soft nudge, never a block.
+ */
+export function lintRelationshipName(
+  name: string | null | undefined,
+  layer: Layer,
+): NamingLintRule[] {
+  const issues: NamingLintRule[] = [];
+  if (name == null) return issues;
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return issues;
+
+  if (layer === 'physical' && !SNAKE_CASE.test(trimmed)) {
+    issues.push({
+      rule: 'snake_case',
+      severity: 'violation',
+      message: 'Physical-layer relationship names must be snake_case.',
+      suggestion: toSnakeCase(trimmed),
+    });
+  }
+
+  if (CAMEL_OR_PASCAL_CASE.test(trimmed)) {
+    issues.push({
+      rule: 'relationship_name_case',
+      severity: 'warning',
+      message: 'Use snake_case or sentence-style',
+      suggestion: toSnakeCase(trimmed),
+    });
+  }
+
+  const lower = trimmed.toLowerCase();
+  const hasPatternHint = RELATIONSHIP_PATTERN_HINTS.some((p) => lower.includes(p));
+  if (!hasPatternHint) {
+    issues.push({
+      rule: 'relationship_name_pattern',
+      severity: 'info',
+      message: 'Consider a `has_*`, `belongs_to_*`, `_to_` or `_of_` pattern for readability.',
+    });
+  }
+
+  return issues;
+}

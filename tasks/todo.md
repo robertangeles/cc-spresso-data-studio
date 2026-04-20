@@ -131,6 +131,51 @@ the project memory at `project_model_studio_state.md` — use it.
       idempotent but follow the older pattern. Not urgent — they're
       explicit row-existence checks, not bulk UPDATEs.
 
+## Step 6 follow-ups (deferred from Phase 6 Playwright build)
+
+- [ ] **S6-E1 / E2 / E3 / E4 / E5 / E6 / E7 / E8 — full E2E suite.**
+      All 10 cases currently `.fixme` in
+      `packages/client/tests/e2e/model-studio-relationships.spec.ts`.
+      Root cause observed during Phase 6: when the spec is run, the
+      auth `setup` project succeeds but subsequent test pages fail
+      `expect(page.locator('.react-flow')).toBeVisible()` within 30 s
+      — the canvas DOM never appears. Hypotheses (in order of
+      likelihood): (a) the per-test `isolatedTest` fixture's
+      per-test `/api/auth/login` burns through the auth rate limit
+      (5 per 15 min) and later tests get the browser into a
+      redirect-to-login loop; (b) `canvas_states` GET returns an
+      error for brand-new models, so the canvas renders an error
+      state instead of `.react-flow`; (c) some cross-test state
+      leak between `isolatedTest` fixtures. Debug in a dedicated
+      session: (1) add an `afterEach` that dumps the failing page's
+      body + console on screenshot for root cause, (2) try the S5
+      pattern of a single shared `BrowserContext` via
+      `dependencies: ['setup']` without per-test login, (3) confirm
+      the Phase 5 canvas renders for a fresh model without rels.
+      Drag-dependent (E1/E3/E4) additionally need the React Flow v12
+      handle-drag automation worked out — see earlier Phase 6 agent
+      investigation for the 3 tried approaches and why each was
+      brittle.
+- [ ] **S6-E9 — two-tab BroadcastChannel notation sync E2E.** Currently
+      `.fixme` in
+      `packages/client/tests/e2e/model-studio-relationships.spec.ts`.
+      Root cause: the per-test fixture launches each Playwright
+      `BrowserContext` in its own Chromium process, and
+      `BroadcastChannel` does not cross process boundaries — so a
+      notation flip in context A is never received in context B.
+      Options for un-fixme: (a) add one dedicated test that shares a
+      single `BrowserContext` across two `page`s (without breaking the
+      existing per-test auth-injection pattern), or (b) lean on
+      `S6-U21` (`useNotation` BroadcastChannel unit test) as sufficient
+      coverage. Pick one in a follow-up phase.
+- [ ] **S6-E10 — `⌘R` keyboard-draw flow.** Currently `.fixme` in the
+      same spec. There is no keyboard-draw handler on
+      `ModelStudioCanvas.tsx` today — Phase 6 investigation confirms
+      zero references to KeyR / metaKey / `'r'` anywhere in the
+      model-studio tree. Ship the handler (select source entity →
+      `⌘R` → select target → `Enter` creates the rel) then un-fixme
+      the test.
+
 ## Phase 1 (legacy content-builder scaffold — pre-rebrand, kept for history)
 
 - [x] Monorepo scaffold

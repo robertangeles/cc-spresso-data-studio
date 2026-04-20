@@ -426,7 +426,10 @@ export type AttributeBatchQuery = z.infer<typeof attributeBatchQuerySchema>;
 //   - warning : reserved-word style smell (soft).
 // ============================================================
 
-export const NAMING_LINT_SEVERITY = z.enum(['violation', 'warning']);
+// `info` added Step 6 for advisory rules that are neither blockers nor
+// reserved-word-style smells (e.g. relationship-name pattern hint).
+// Additive-only — `violation` and `warning` retain their Step 4/5 shapes.
+export const NAMING_LINT_SEVERITY = z.enum(['violation', 'warning', 'info']);
 export type NamingLintSeverity = z.infer<typeof NAMING_LINT_SEVERITY>;
 
 export const namingLintRuleSchema = z.object({
@@ -437,3 +440,155 @@ export const namingLintRuleSchema = z.object({
   suggestion: z.string().optional(),
 });
 export type NamingLintRule = z.infer<typeof namingLintRuleSchema>;
+
+// ============================================================
+// Relationships (data_model_relationships table) — Step 6
+//
+// Relationships connect two entities on the same model + layer. The
+// Zod layer here validates shape only; the service enforces the
+// cross-layer / cross-model / cycle invariants after authZ fetches.
+//
+// `metadata` is a JSONB bag capped at 4 KB (serialised) with the
+// prototype-pollution-style keys rejected outright. This matches the
+// Step 6 security hard rules in tasks/alignment-step6.md §7.
+//
+// `version` lives on the canonical row (6A — optimistic lock). Server
+// assigns and increments it; PATCH requires the client-observed value
+// or returns 409.
+// ============================================================
+
+/** Keys we refuse to store in JSONB because they can shadow Object
+ *  prototype properties in downstream consumers. The list mirrors the
+ *  defensive set used by hardened JSON parsers. */
+const RELATIONSHIP_METADATA_BANNED_KEYS: ReadonlySet<string> = new Set([
+  '__proto__',
+  'constructor',
+  'prototype',
+]);
+
+const RELATIONSHIP_METADATA_MAX_BYTES = 4096;
+
+/** Open-ended bag. Two-stage validation:
+ *   1. Raw-input key guard (superRefine on `z.unknown()`): rejects the
+ *      banned prototype-pollution keys BEFORE zod's `.record()` strips
+ *      them. `z.record()` silently drops `__proto__` from parsed output,
+ *      so a refine running over the parsed result never sees it.
+ *   2. Record shape + 4 KB serialised-length refine on the passed-through
+ *      value.
+ *
+ * `preprocess` + a typed throw is the idiomatic zod pattern here — we
+ * can't use `pipe()` because the record stage would have already stripped
+ * the offending key by the time the downstream refine runs. */
+export const relationshipMetadataSchema = z
+  .unknown()
+  .superRefine((raw, ctx) => {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Metadata must be a plain object',
+      });
+      return;
+    }
+    // Inspect the raw own-property keys — `__proto__` survives JSON.parse
+    // as an own property, which is exactly the attack surface we care about.
+    for (const key of Object.keys(raw as Record<string, unknown>)) {
+      if (RELATIONSHIP_METADATA_BANNED_KEYS.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Metadata contains a reserved key (${key})`,
+        });
+        return;
+      }
+    }
+    // Serialised-size gate. Reject before we hand off to `.record()`
+    // so the byte ceiling binds on raw input.
+    if (JSON.stringify(raw).length > RELATIONSHIP_METADATA_MAX_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Metadata exceeds 4 KB',
+      });
+    }
+  })
+  .pipe(z.record(z.unknown()));
+
+/** Free-form, optional rel name (e.g. "places", "belongs_to_customer").
+ *  Trimmed; capped to match entity name length for symmetry. Nullable
+ *  because an unnamed edge is legitimate (cardinality carries the
+ *  semantics). */
+const relationshipNameSchema = z
+  .string()
+  .trim()
+  .max(128, 'Name must be 128 characters or fewer')
+  .nullable()
+  .optional();
+
+/** Canonical relationship row as the API returns it. */
+export const relationshipSchema = z.object({
+  id: uuidParam,
+  dataModelId: uuidParam,
+  sourceEntityId: uuidParam,
+  targetEntityId: uuidParam,
+  name: relationshipNameSchema,
+  sourceCardinality: CARDINALITY,
+  targetCardinality: CARDINALITY,
+  isIdentifying: z.boolean(),
+  layer: LAYER,
+  metadata: relationshipMetadataSchema.default({}),
+  version: z.number().int().positive(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type Relationship = z.infer<typeof relationshipSchema>;
+
+/** Creation body — server owns id/dataModelId (from the URL)/version/
+ *  timestamps. Callers only supply shape-level fields. Strict so typos
+ *  surface as 422s instead of being silently dropped. */
+export const createRelationshipSchema = z
+  .object({
+    sourceEntityId: uuidParam,
+    targetEntityId: uuidParam,
+    name: relationshipNameSchema,
+    sourceCardinality: CARDINALITY,
+    targetCardinality: CARDINALITY,
+    isIdentifying: z.boolean(),
+    layer: LAYER,
+    metadata: relationshipMetadataSchema.optional(),
+  })
+  .strict();
+export type CreateRelationshipInput = z.infer<typeof createRelationshipSchema>;
+
+/** Partial patch. `version` is mandatory on every PATCH — it is the
+ *  optimistic-lock token (6A). A patch without it must be rejected at
+ *  the schema layer so stale clients can't accidentally race. */
+export const updateRelationshipSchema = z
+  .object({
+    sourceEntityId: uuidParam.optional(),
+    targetEntityId: uuidParam.optional(),
+    name: relationshipNameSchema,
+    sourceCardinality: CARDINALITY.optional(),
+    targetCardinality: CARDINALITY.optional(),
+    isIdentifying: z.boolean().optional(),
+    layer: LAYER.optional(),
+    metadata: relationshipMetadataSchema.optional(),
+    version: z.number().int().positive(),
+  })
+  .strict();
+export type UpdateRelationshipInput = z.infer<typeof updateRelationshipSchema>;
+
+/** Params for `/models/:id/relationships/:relId`. Both segments are
+ *  UUIDs so we get a clean 422 on malformed ids before the service
+ *  wastes a query on them. */
+export const relationshipIdParamsSchema = z.object({
+  id: uuidParam,
+  relId: uuidParam,
+});
+export type RelationshipIdParams = z.infer<typeof relationshipIdParamsSchema>;
+
+/** Params for `/models/:id/entities/:entityId/impact` (cascade-delete
+ *  preview). Shares shape with the entity-id params but re-declared
+ *  here to keep Step 6 additions locally grouped. */
+export const entityImpactParamsSchema = z.object({
+  id: uuidParam,
+  entityId: uuidParam,
+});
+export type EntityImpactParams = z.infer<typeof entityImpactParamsSchema>;

@@ -4,6 +4,10 @@ import { db, pool, schema } from '../db/index.js';
 import { config } from '../config/index.js';
 import { logger } from '../config/logger.js';
 import { runOnce } from '../db/migration-runner.js';
+import {
+  addCanvasStatesNotationColumn,
+  addRelationshipsVersionAndIndexes,
+} from '../db/migrations/step6-relationships.js';
 
 // --- AI Provider: OpenRouter is the single gateway ---
 
@@ -77,6 +81,13 @@ export async function seedAIProviders(): Promise<void> {
   // so the ~100 UPDATE statements below only run on the first boot of
   // a fresh environment, not on every server restart.
   await runOnce('migrate-model-id-prefixes', migrateModelIds);
+
+  // Step 6 — Relationships + IE/IDEF1X notation schema adapters.
+  // Each ALTER is itself idempotent (`IF NOT EXISTS`), so the runOnce
+  // guard here is primarily to silence the boot-time log spam and keep
+  // the applied_migrations audit trail accurate.
+  await runOnce('add-canvas-states-notation-column', addCanvasStatesNotationColumn);
+  await runOnce('add-relationships-version-and-indexes', addRelationshipsVersionAndIndexes);
 }
 
 /** One-time idempotent migration: convert short model IDs to OpenRouter format */
