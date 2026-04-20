@@ -97,7 +97,7 @@ the project memory at `project_model_studio_state.md` — use it.
 - [ ] **Merge `feature/model-studio-step5-attributes` into `main`.**
       6 commits, tests green at every step, branch pushed to origin.
       Run `git checkout main && git merge
-    feature/model-studio-step5-attributes --no-ff`, confirm CI
+  feature/model-studio-step5-attributes --no-ff`, confirm CI
       passes, push `main`. Render auto-deploys on main push.
 
 - [ ] **Step 5 P2 drawer-controls spec (S5-E5).** Playwright:
@@ -122,15 +122,9 @@ the project memory at `project_model_studio_state.md` — use it.
       register phrases — add cases in `formatAuditEvent`'s switch
       and extend `FIELD_LABELS` as new columns land.
 
-- [ ] **Entity position drift on reload.** Node positions survive a
-- [ ] **Model-wide attribute batch endpoint**
-      (`GET /api/model-studio/models/:id/attributes`). Today the
-      canvas loads attributes per-entity on panel-open, which means
-      PK indicators appear on a node only after the user opens its
-      panel. A single model-wide batch call on canvas mount would
-      preload every node's attributes so PKs render immediately
-      after refresh. Server service method + route + client hook
-      change. Est. 30 min.
+- [x] **Model-wide attribute batch endpoint** — shipped in Step 5
+      follow-ups (`8c8ee38`). `GET /api/model-studio/models/:id/attributes?lint=bool` + `useAttributes.loadAll()` on canvas mount. PK indicators now
+      render immediately on first paint / after refresh.
 - [ ] **Convert remaining seed scripts to use `runOnce()`** for
       consistency. Today only `migrateModelIds` is guarded; the
       various `seed*` calls in `start()` (`seedRoles`, `seedAIProviders`,
