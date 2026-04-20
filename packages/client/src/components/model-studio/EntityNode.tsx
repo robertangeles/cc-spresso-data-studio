@@ -108,7 +108,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
     <div
       data-testid="entity-node"
       className={[
-        'relative min-w-[180px] max-w-[260px] rounded-xl border backdrop-blur-xl transition-all duration-150 ease-out',
+        'group relative min-w-[180px] max-w-[260px] rounded-xl border backdrop-blur-xl transition-all duration-150 ease-out',
         'bg-surface-2/70 border-white/10 shadow-[0_4px_18px_rgba(0,0,0,0.35)]',
         'hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.45)]',
         selected
@@ -117,11 +117,37 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
         isEndpointHot ? 'ring-2 ring-accent animate-pulse' : '',
       ].join(' ')}
     >
-      {/* Hidden anchors for future relationship edges */}
-      <Handle type="target" position={Position.Top} className="!opacity-0" />
-      <Handle type="source" position={Position.Bottom} className="!opacity-0" />
-      <Handle type="target" position={Position.Left} className="!opacity-0" />
-      <Handle type="source" position={Position.Right} className="!opacity-0" />
+      {/*
+        Entity-level connect handles — revealed on hover per Infection Virus
+        "make you want to touch it". Amber dot with soft glow at each cardinal
+        midpoint; invisible until the user hovers the node so the canvas stays
+        calm at rest. Click-and-drag from a handle to another entity's handle
+        creates a relationship.
+      */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent hover:!opacity-100"
+        style={{ opacity: 0.55, boxShadow: '0 0 6px rgba(255,214,10,0.45)' }}
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent hover:!opacity-100"
+        style={{ opacity: 0.55, boxShadow: '0 0 6px rgba(255,214,10,0.45)' }}
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent hover:!opacity-100"
+        style={{ opacity: 0.55, boxShadow: '0 0 6px rgba(255,214,10,0.45)' }}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent hover:!opacity-100"
+        style={{ opacity: 0.55, boxShadow: '0 0 6px rgba(255,214,10,0.45)' }}
+      />
 
       {/* D-R5 orphan-entity badge */}
       {data.showOrphanBadge !== false && (
@@ -208,23 +234,26 @@ function AttributeLine({ attr, isPk }: { attr: EntityNodeAttribute; isPk: boolea
           {attr.dataType}
         </span>
       )}
-      {/* Attribute-level handles — invisible; docked left + right so
-          dragging from a row lands on the same row on the other node.
-          IDs follow the `attr-{uuid}-{source|target}` contract parsed
-          by ModelStudioCanvas.onConnect. */}
+      {/* Attribute-level handles — revealed on entity hover (same
+          Infection-Virus reveal as the entity-level handles). Smaller
+          than the entity-level dots so the 4 big cardinal handles stay
+          the primary affordance; attribute dots are the power-user
+          option for FK↔PK precision. IDs follow the
+          `attr-{uuid}-{source|target}` contract parsed by
+          ModelStudioCanvas.onConnect. */}
       <Handle
         type="target"
         position={Position.Left}
         id={`attr-${attr.id}-target`}
-        className="!opacity-0"
-        style={{ left: -4 }}
+        className="!h-1.5 !w-1.5 !border-0 !bg-accent hover:!opacity-100"
+        style={{ left: -3, opacity: 0.35 }}
       />
       <Handle
         type="source"
         position={Position.Right}
         id={`attr-${attr.id}-source`}
-        className="!opacity-0"
-        style={{ right: -4 }}
+        className="!h-1.5 !w-1.5 !border-0 !bg-accent hover:!opacity-100"
+        style={{ right: -3, opacity: 0.35 }}
       />
     </li>
   );

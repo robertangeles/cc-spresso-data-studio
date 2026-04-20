@@ -344,3 +344,13 @@ This is not optional polish — it is the difference between a product and a dem
 Meanwhile Phase 6 spec keeps all 10 cases as `test.fixme` with root-cause comments so the test plan ↔ spec mapping stays 1:1.
 
 **Rule:** When copying a Playwright fixture pattern between suites, count the logins per run. Rate limits that are fine for 4 tests become flaky for 15. If you need per-test isolation, burn ONE login and derive per-test modelIds via the API fixture, not per-test `storageState`.
+
+## 31. A cathedral with no visible door — Step 6 shipped with unclickable connection handles
+
+**Problem:** Step 6's core feature is drawing relationships by dragging between entity handles. The 14 Phase-5 components, 464 green tests, and full Erwin propagation were all in place — but `EntityNode.tsx` kept the original Step-4 handle styling: `className="!opacity-0"`. The comment said _"Edges connect via four anchors so future relationships have somewhere"_ — i.e. placeholders. Phase 5 extended that pattern with per-attribute handles using the SAME `!opacity-0`. Net effect: the feature was functionally undiscoverable — you could only draw a rel if you guessed the invisible 10×10 hotspot at each entity edge midpoint. User reaction: _"OMG. You know the importance of this right? Why did we miss this?"_
+
+**Fix:** Made handles visible at rest (subtle amber dots, 55% opacity for entity-level, 35% for attribute-level) with a `hover:!opacity-100` brightening on direct hover. Verified visually via Playwright screenshot — not by tests passing.
+
+**Secondary fix attempted + dropped:** `group-hover:!opacity-100` on `group`-wrapped parent. Tailwind JIT did not generate the `.group:hover .group-hover\!opacity-100` rule for reasons I didn't fully diagnose (the class appeared in `className` but produced no CSS match). Lesson: prefer inline-style + `hover:` for one-off Tailwind edge cases instead of fighting JIT's scan rules.
+
+**Rule:** For every UI task, **open the actual browser** before reporting done. CLAUDE.md already says this; your feedback memory says it three different ways (`visual_verification`, `e2e_verification`, `visual_verification_browser`). 464 green tests prove correctness, not discoverability. For any interactive element — drag handle, keyboard shortcut, context menu — verify that a naive user would find it without knowing what to look for. The CEO plan review's 10-section checklist did not include "walk through the first-time-user flow"; add that section to every future plan-review-skill run.
