@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
-import { History as HistoryIcon, AlertCircle, Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
+import {
+  History as HistoryIcon,
+  AlertCircle,
+  Loader2,
+  Plus,
+  Pencil,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import type { AttributeHistoryEvent } from '../../../hooks/useAttributes';
+import { formatAuditEvent } from '../../../lib/auditFormatter';
 
 /**
  * History tab — read-only timeline of change_log events for the
@@ -86,8 +95,13 @@ export function HistoryTab({ entityId, attributeId, loadHistory }: HistoryTabPro
 function HistoryRow({ event }: { event: AttributeHistoryEvent }) {
   const icon = ACTION_ICONS[event.action] ?? <Pencil className="h-2.5 w-2.5" />;
   const tone = ACTION_TONES[event.action] ?? 'text-text-secondary border-white/10 bg-surface-2/60';
+  const lines = formatAuditEvent(event);
   return (
-    <li className="relative flex items-start gap-3 rounded-md border border-white/5 bg-surface-1/30 px-3 py-2">
+    <li
+      data-testid="history-row"
+      data-action={event.action}
+      className="relative flex items-start gap-3 rounded-md border border-white/5 bg-surface-1/30 px-3 py-2"
+    >
       <span
         className={[
           'mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border',
@@ -98,7 +112,7 @@ function HistoryRow({ event }: { event: AttributeHistoryEvent }) {
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-text-primary">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-text-secondary/70">
             {event.action}
           </span>
           <time
@@ -108,11 +122,26 @@ function HistoryRow({ event }: { event: AttributeHistoryEvent }) {
             {relativeTime(event.createdAt)}
           </time>
         </div>
-        {Boolean(event.afterState) && typeof event.afterState === 'object' ? (
-          <pre className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-snug text-text-secondary">
-            {JSON.stringify(event.afterState, null, 2)}
-          </pre>
-        ) : null}
+        <ul className="mt-0.5 space-y-0.5">
+          {lines.map((line, idx) => (
+            <li
+              key={idx}
+              className="text-[11px] leading-snug text-text-primary"
+              // Code-style markers `like this` are rendered as subtle
+              // monospace highlights without a heavy full Markdown parse.
+              dangerouslySetInnerHTML={{
+                __html: line
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(
+                    /`([^`]+)`/g,
+                    '<code class="rounded bg-surface-2/70 px-1 py-0.5 font-mono text-[10px] text-accent/80">$1</code>',
+                  ),
+              }}
+            />
+          ))}
+        </ul>
       </div>
     </li>
   );
@@ -122,12 +151,14 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
   create: <Plus className="h-2.5 w-2.5" />,
   update: <Pencil className="h-2.5 w-2.5" />,
   delete: <Trash2 className="h-2.5 w-2.5" />,
+  synthetic_generated: <Sparkles className="h-2.5 w-2.5" />,
 };
 
 const ACTION_TONES: Record<string, string> = {
   create: 'text-emerald-200 border-emerald-400/40 bg-emerald-500/10',
   update: 'text-accent border-accent/40 bg-accent/10',
   delete: 'text-red-200 border-red-400/40 bg-red-500/10',
+  synthetic_generated: 'text-fuchsia-200 border-fuchsia-400/40 bg-fuchsia-500/10',
 };
 
 function relativeTime(iso: string): string {

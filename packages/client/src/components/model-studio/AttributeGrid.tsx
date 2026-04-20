@@ -193,13 +193,13 @@ export function AttributeGrid({
                   </Th>
                   <Th
                     className="w-8 text-center"
-                    title="Primary Key — uniquely identifies each row. A column can't be both PK and FK."
+                    title="Primary Key — uniquely identifies each row. Implies NOT NULL + UNIQUE. Can coexist with FK for subtype / 1:1 / composite patterns."
                   >
                     PK
                   </Th>
                   <Th
                     className="w-8 text-center"
-                    title="Foreign Key — references another table's primary key."
+                    title="Foreign Key — references another table's primary key. May coexist with PK on the same column."
                   >
                     FK
                   </Th>
