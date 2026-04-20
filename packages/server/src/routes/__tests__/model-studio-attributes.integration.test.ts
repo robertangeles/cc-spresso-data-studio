@@ -7,7 +7,9 @@
  *   S5-I3  generateSyntheticData happy (service, mocked completer)     → 10 rows
  *   S5-I4  Synthetic data marker `synthetic: true` in response         → shape asserted
  *   S5-U2  Reorder service re-computes ordinals densely (1,2,3)        → positions verified
- *   S5-U3  PK toggle cascades to is_foreign_key=false if contradictory → row updated
+ *   S5-U3  (revised) PK + FK coexist on the same column (subtype / 1:1 / composite patterns)
+ *   S5-U3b (new)     PK=true silently forces isNullable=false + isUnique=true
+ *   S5-U3c (new)     PATCH isNullable=true on a PK attribute silently coerces back to false
  *   S5-U4  Synthetic data returns exactly N rows matching attrs        → shape verified
  *   S5-U5  Synthetic data refusal → AIRefusalError, no rows returned   → error asserted
  *
@@ -330,31 +332,12 @@ describe('Model Studio — attributes (Step 5)', () => {
   });
 
   // ----------------------------------------------------------
-  // S5-U3 — PK toggle cascades to is_foreign_key=false
+  // S5-U3 (revised) — PK + FK coexistence. Subtype / 1:1 / composite-
+  // identifying-FK patterns all require both flags on the same column.
   // ----------------------------------------------------------
-  it('S5-U3: setting isPrimaryKey=true on an FK clears isForeignKey', async () => {
+  it('S5-U3: PK + FK coexist on the same column via create', async () => {
     const fresh = await entityService.createEntity(userId, modelId, {
-      name: 'pk_cascade',
-      layer: 'logical',
-    });
-    createdEntityIds.push(fresh.id);
-    const attr = await attributeService.createAttribute(userId, modelId, fresh.id, {
-      name: 'org_id',
-      isForeignKey: true,
-    });
-    expect(attr.isForeignKey).toBe(true);
-    expect(attr.isPrimaryKey).toBe(false);
-
-    const updated = await attributeService.updateAttribute(userId, modelId, fresh.id, attr.id, {
-      isPrimaryKey: true,
-    });
-    expect(updated.isPrimaryKey).toBe(true);
-    expect(updated.isForeignKey).toBe(false);
-  });
-
-  it('create with isPrimaryKey=true and isForeignKey=true → FK wins-loser (FK cleared)', async () => {
-    const fresh = await entityService.createEntity(userId, modelId, {
-      name: 'pk_fk_conflict',
+      name: 'pk_fk_subtype',
       layer: 'logical',
     });
     createdEntityIds.push(fresh.id);
@@ -364,7 +347,85 @@ describe('Model Studio — attributes (Step 5)', () => {
       isForeignKey: true,
     });
     expect(attr.isPrimaryKey).toBe(true);
-    expect(attr.isForeignKey).toBe(false);
+    expect(attr.isForeignKey).toBe(true);
+  });
+
+  it('S5-U3: setting PK=true on an existing FK row keeps FK on (no more cascade-clear)', async () => {
+    const fresh = await entityService.createEntity(userId, modelId, {
+      name: 'fk_then_pk',
+      layer: 'logical',
+    });
+    createdEntityIds.push(fresh.id);
+    const attr = await attributeService.createAttribute(userId, modelId, fresh.id, {
+      name: 'org_id',
+      isForeignKey: true,
+    });
+    const updated = await attributeService.updateAttribute(userId, modelId, fresh.id, attr.id, {
+      isPrimaryKey: true,
+    });
+    expect(updated.isPrimaryKey).toBe(true);
+    expect(updated.isForeignKey).toBe(true);
+  });
+
+  // ----------------------------------------------------------
+  // S5-U3b — PK silently forces NN + UQ via create
+  // ----------------------------------------------------------
+  it('S5-U3b: PK=true silently forces isNullable=false + isUnique=true at create', async () => {
+    const fresh = await entityService.createEntity(userId, modelId, {
+      name: 'pk_implies_nn_uq',
+      layer: 'logical',
+    });
+    createdEntityIds.push(fresh.id);
+    // Client explicitly passes the contradictory combo; server coerces.
+    const attr = await attributeService.createAttribute(userId, modelId, fresh.id, {
+      name: 'id',
+      isPrimaryKey: true,
+      isNullable: true,
+      isUnique: false,
+    });
+    expect(attr.isPrimaryKey).toBe(true);
+    expect(attr.isNullable).toBe(false);
+    expect(attr.isUnique).toBe(true);
+  });
+
+  // ----------------------------------------------------------
+  // S5-U3c — PATCH attempting to break PK invariant silently coerces.
+  // ----------------------------------------------------------
+  it('S5-U3c: PATCH isNullable=true on a PK attribute silently coerces back to false', async () => {
+    const fresh = await entityService.createEntity(userId, modelId, {
+      name: 'pk_patch_nn',
+      layer: 'logical',
+    });
+    createdEntityIds.push(fresh.id);
+    const attr = await attributeService.createAttribute(userId, modelId, fresh.id, {
+      name: 'customer_id',
+      isPrimaryKey: true,
+    });
+    const updated = await attributeService.updateAttribute(userId, modelId, fresh.id, attr.id, {
+      isNullable: true,
+    });
+    expect(updated.isPrimaryKey).toBe(true);
+    expect(updated.isNullable).toBe(false); // coerced
+    expect(updated.isUnique).toBe(true); // coerced
+  });
+
+  it('clearing PK keeps NN/UQ sticky at their PK-era values', async () => {
+    const fresh = await entityService.createEntity(userId, modelId, {
+      name: 'pk_sticky',
+      layer: 'logical',
+    });
+    createdEntityIds.push(fresh.id);
+    const attr = await attributeService.createAttribute(userId, modelId, fresh.id, {
+      name: 'order_id',
+      isPrimaryKey: true,
+    });
+    // PK was on → NN=true + UQ=true. Now clear PK.
+    const updated = await attributeService.updateAttribute(userId, modelId, fresh.id, attr.id, {
+      isPrimaryKey: false,
+    });
+    expect(updated.isPrimaryKey).toBe(false);
+    expect(updated.isNullable).toBe(false); // sticky
+    expect(updated.isUnique).toBe(true); // sticky
   });
 
   // ----------------------------------------------------------

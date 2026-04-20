@@ -31,6 +31,7 @@ import { assertCanAccessModel } from './model-studio-authz.service.js';
 import { recordChange } from './model-studio-changelog.service.js';
 import { enqueueEmbedding } from './model-studio-embedding.service.js';
 import { providerRegistry } from './ai/index.js';
+import { normalizeAttributeFlags } from './model-studio-attribute-flags.js';
 
 /**
  * Step 5 — Attribute CRUD + Synthetic Data (D9).
@@ -205,6 +206,15 @@ export async function createAttribute(
   const nextOrdinal = Number(maxOrdinal) + 1;
 
   try {
+    // Apply flag invariants: PK ⇒ NN + UQ; PK + FK can coexist.
+    // See normalizeAttributeFlags docstring for the full rule set.
+    const flags = normalizeAttributeFlags({
+      isPrimaryKey: dto.isPrimaryKey,
+      isForeignKey: dto.isForeignKey,
+      isNullable: dto.isNullable,
+      isUnique: dto.isUnique,
+    });
+
     const [created] = await db
       .insert(dataModelAttributes)
       .values({
@@ -216,14 +226,13 @@ export async function createAttribute(
         length: dto.length ?? null,
         precision: dto.precision ?? null,
         scale: dto.scale ?? null,
-        isNullable: dto.isNullable ?? true,
-        isPrimaryKey: dto.isPrimaryKey ?? false,
-        // PK/FK mutual exclusion: a column is either a PK or an FK
-        // (could in theory be both in composite-key edge cases, but
-        // that's not supported in this MVP).
-        isForeignKey: dto.isPrimaryKey ? false : (dto.isForeignKey ?? false),
-        isUnique: dto.isUnique ?? false,
+        isNullable: flags.isNullable,
+        isPrimaryKey: flags.isPrimaryKey,
+        isForeignKey: flags.isForeignKey,
+        isUnique: flags.isUnique,
         defaultValue: dto.defaultValue ?? null,
+        classification: dto.classification ?? null,
+        transformationLogic: dto.transformationLogic ?? null,
         ordinalPosition: nextOrdinal,
         metadata: dto.metadata ?? {},
         tags: dto.tags ?? [],
@@ -299,28 +308,55 @@ export async function updateAttribute(
     }
   }
 
-  // PK → forces isForeignKey=false (S5-U3). The client may have sent
-  // either value for isForeignKey in the same patch; PK wins.
-  const effectivePatch: AttributeUpdate = { ...patch };
-  if (patch.isPrimaryKey === true) {
-    effectivePatch.isForeignKey = false;
-  }
+  // Apply flag invariants: PK ⇒ NN + UQ; PK + FK can coexist. Sticky
+  // NN/UQ when PK is cleared. The normaliser receives the patch's
+  // flag fields merged with the current row's flags and returns the
+  // final effective shape. See model-studio-attribute-flags.ts.
+  const normalisedFlags = normalizeAttributeFlags(
+    {
+      isPrimaryKey: patch.isPrimaryKey,
+      isForeignKey: patch.isForeignKey,
+      isNullable: patch.isNullable,
+      isUnique: patch.isUnique,
+    },
+    {
+      isPrimaryKey: before.isPrimaryKey,
+      isForeignKey: before.isForeignKey,
+      isNullable: before.isNullable,
+      isUnique: before.isUnique,
+    },
+  );
+
+  // Only write flags if any flag field was in the patch OR the normaliser
+  // produced a drift from current (e.g. PK was already true but the client
+  // re-asserted PK and the row had NN=true mis-set). Track `flagTouched`
+  // so we don't churn `updatedAt` on pure no-op patches.
+  const flagTouched =
+    patch.isPrimaryKey !== undefined ||
+    patch.isForeignKey !== undefined ||
+    patch.isNullable !== undefined ||
+    patch.isUnique !== undefined;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (effectivePatch.name !== undefined) updates.name = effectivePatch.name;
-  if (effectivePatch.businessName !== undefined) updates.businessName = effectivePatch.businessName;
-  if (effectivePatch.description !== undefined) updates.description = effectivePatch.description;
-  if (effectivePatch.dataType !== undefined) updates.dataType = effectivePatch.dataType;
-  if (effectivePatch.length !== undefined) updates.length = effectivePatch.length;
-  if (effectivePatch.precision !== undefined) updates.precision = effectivePatch.precision;
-  if (effectivePatch.scale !== undefined) updates.scale = effectivePatch.scale;
-  if (effectivePatch.isNullable !== undefined) updates.isNullable = effectivePatch.isNullable;
-  if (effectivePatch.isPrimaryKey !== undefined) updates.isPrimaryKey = effectivePatch.isPrimaryKey;
-  if (effectivePatch.isForeignKey !== undefined) updates.isForeignKey = effectivePatch.isForeignKey;
-  if (effectivePatch.isUnique !== undefined) updates.isUnique = effectivePatch.isUnique;
-  if (effectivePatch.defaultValue !== undefined) updates.defaultValue = effectivePatch.defaultValue;
-  if (effectivePatch.metadata !== undefined) updates.metadata = effectivePatch.metadata;
-  if (effectivePatch.tags !== undefined) updates.tags = effectivePatch.tags;
+  if (patch.name !== undefined) updates.name = patch.name;
+  if (patch.businessName !== undefined) updates.businessName = patch.businessName;
+  if (patch.description !== undefined) updates.description = patch.description;
+  if (patch.dataType !== undefined) updates.dataType = patch.dataType;
+  if (patch.length !== undefined) updates.length = patch.length;
+  if (patch.precision !== undefined) updates.precision = patch.precision;
+  if (patch.scale !== undefined) updates.scale = patch.scale;
+  if (flagTouched) {
+    updates.isNullable = normalisedFlags.isNullable;
+    updates.isPrimaryKey = normalisedFlags.isPrimaryKey;
+    updates.isForeignKey = normalisedFlags.isForeignKey;
+    updates.isUnique = normalisedFlags.isUnique;
+  }
+  if (patch.defaultValue !== undefined) updates.defaultValue = patch.defaultValue;
+  if (patch.classification !== undefined) updates.classification = patch.classification;
+  if (patch.transformationLogic !== undefined)
+    updates.transformationLogic = patch.transformationLogic;
+  if (patch.metadata !== undefined) updates.metadata = patch.metadata;
+  if (patch.tags !== undefined) updates.tags = patch.tags;
 
   try {
     const [updated] = await db
@@ -343,10 +379,10 @@ export async function updateAttribute(
     });
 
     const contentChanged =
-      effectivePatch.name !== undefined ||
-      effectivePatch.businessName !== undefined ||
-      effectivePatch.description !== undefined ||
-      effectivePatch.dataType !== undefined;
+      patch.name !== undefined ||
+      patch.businessName !== undefined ||
+      patch.description !== undefined ||
+      patch.dataType !== undefined;
     if (contentChanged) {
       await enqueueEmbedding({
         dataModelId: modelId,
@@ -357,7 +393,7 @@ export async function updateAttribute(
     }
 
     logger.info(
-      { userId, modelId, entityId, attributeId, fields: Object.keys(effectivePatch) },
+      { userId, modelId, entityId, attributeId, fields: Object.keys(patch) },
       'Model Studio: attribute updated',
     );
     return withLint(updated, entity.layer as Layer);

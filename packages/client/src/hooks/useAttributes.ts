@@ -34,6 +34,8 @@ export interface AttributeSummary {
   isForeignKey: boolean;
   isUnique: boolean;
   defaultValue: string | null;
+  classification: string | null;
+  transformationLogic: string | null;
   ordinalPosition: number;
   metadata: Record<string, unknown>;
   tags: string[];

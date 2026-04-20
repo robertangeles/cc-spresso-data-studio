@@ -290,6 +290,36 @@ const dataTypeSchema = z
 
 const defaultValueSchema = z.string().max(1000, 'Default value must be 1,000 characters or fewer');
 
+/** Governance classification enum — DMBOK + compliance-framework
+ *  categories. Stored as varchar on the attribute row so the list can
+ *  evolve without a migration. Keep UI labels below in lockstep. */
+export const ATTRIBUTE_CLASSIFICATION = z.enum([
+  'PII',
+  'PCI',
+  'PHI',
+  'Financial',
+  'Confidential',
+  'Restricted',
+  'Internal',
+  'Public',
+]);
+export type AttributeClassification = z.infer<typeof ATTRIBUTE_CLASSIFICATION>;
+
+export const ATTRIBUTE_CLASSIFICATION_LABELS: Record<AttributeClassification, string> = {
+  PII: 'PII — Personally Identifiable Information',
+  PCI: 'PCI — Payment Card Information',
+  PHI: 'PHI — Protected Health Information',
+  Financial: 'Financial — SOX / financial reporting',
+  Confidential: 'Confidential — business-confidential',
+  Restricted: 'Restricted — highest-sensitivity internal',
+  Internal: 'Internal — normal internal use',
+  Public: 'Public — released externally',
+};
+
+const transformationLogicSchema = z
+  .string()
+  .max(20_000, 'Transformation logic must be 20,000 characters or fewer');
+
 export const attributeCreateSchema = z
   .object({
     name: attributeNameSchema,
@@ -308,6 +338,8 @@ export const attributeCreateSchema = z
     isForeignKey: z.boolean().optional().default(false),
     isUnique: z.boolean().optional().default(false),
     defaultValue: defaultValueSchema.optional().nullable(),
+    classification: ATTRIBUTE_CLASSIFICATION.optional().nullable(),
+    transformationLogic: transformationLogicSchema.optional().nullable(),
     metadata: metadataSchema.optional(),
     tags: tagsSchema.optional(),
   })
@@ -331,6 +363,8 @@ export const attributeUpdateSchema = z
     isForeignKey: z.boolean().optional(),
     isUnique: z.boolean().optional(),
     defaultValue: defaultValueSchema.nullable().optional(),
+    classification: ATTRIBUTE_CLASSIFICATION.nullable().optional(),
+    transformationLogic: transformationLogicSchema.nullable().optional(),
     metadata: metadataSchema.optional(),
     tags: tagsSchema.optional(),
   })

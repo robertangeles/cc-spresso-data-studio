@@ -72,7 +72,10 @@ function readStoredWidth(): WidthMode {
   } catch {
     // localStorage may be disabled; fall through to default
   }
-  return 'compact';
+  // Default to expanded — Spresso is a DMBOK-grade tool, architects
+  // expect rich detail on open. Users can collapse to compact and the
+  // preference persists.
+  return 'expanded';
 }
 
 export function EntityEditor(props: EntityEditorProps) {
@@ -99,20 +102,16 @@ export function EntityEditor(props: EntityEditorProps) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Default-select the first attribute when the selected entity
-  // changes (makes tab state meaningful on open).
+  // Default to the Entity General view (no attribute selected).
+  // Preserve the user's row selection across re-renders; clear it only
+  // when the entity changes or the selected attribute vanishes.
   useEffect(() => {
     if (!entity) {
       setSelectedAttrId(null);
       return;
     }
-    if (props.attributes.length === 0) {
-      setSelectedAttrId(null);
-      return;
-    }
-    // Preserve selection if still present; else fall back to the first.
     const stillSelected = selectedAttrId && props.attributes.some((a) => a.id === selectedAttrId);
-    if (!stillSelected) setSelectedAttrId(props.attributes[0].id);
+    if (!stillSelected && selectedAttrId !== null) setSelectedAttrId(null);
   }, [entity?.id, props.attributes, selectedAttrId]);
 
   if (!entity) return null;
@@ -381,6 +380,7 @@ function EntityHeader({
       setAutoBusy(false);
     }
   }
+
   function applySuggestion() {
     if (!violation?.suggestion) return;
     setDraft((d) => ({ ...d, name: violation.suggestion! }));
@@ -388,66 +388,26 @@ function EntityHeader({
 
   return (
     <header className="shrink-0 border-b border-white/10 px-4 py-3">
-      {/* Row 1 — badge, name, actions */}
-      <div className="flex items-start gap-3">
-        <div className="shrink-0">
-          <span
-            className={[
-              'inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[10px] font-bold uppercase tracking-wider',
-              badge.tone,
-            ].join(' ')}
-            title={`${badge.full} layer`}
-            aria-label={`${badge.full} layer`}
-          >
-            <span className="font-mono text-[11px]">{badge.label}</span>
-            {width === 'expanded' && <span>{badge.full}</span>}
-          </span>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-text-secondary/60">
-            Entity · {attributeCount} attribute{attributeCount === 1 ? '' : 's'}
-          </p>
-          <input
-            ref={nameRef}
-            data-testid="entity-editor-name"
-            value={draft.name}
-            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-            onBlur={commitName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
-            }}
-            placeholder="entity_name"
-            autoComplete="off"
-            className={[
-              'mt-0.5 w-full rounded-sm border bg-transparent px-1 font-mono text-base font-semibold text-text-primary',
-              'focus:border-accent/40 focus:bg-surface-1/60 focus:outline-none',
-              violation
-                ? 'border-amber-400/50 underline decoration-amber-400 decoration-wavy underline-offset-4'
-                : 'border-transparent hover:border-white/10',
-            ].join(' ')}
-          />
-          {violation && (
-            <div
-              data-testid="naming-lint-violation"
-              className="mt-1 flex items-center gap-2 text-[10px] text-amber-300"
-            >
-              <span>{violation.message}</span>
-              {violation.suggestion && (
-                <button
-                  type="button"
-                  onClick={applySuggestion}
-                  className="rounded-sm border border-amber-400/30 bg-amber-400/15 px-1.5 py-0.5 text-amber-200 hover:bg-amber-400/25"
-                >
-                  Use &quot;{violation.suggestion}&quot;
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Action strip: compact icon buttons, right-aligned */}
-        <div className="flex shrink-0 items-center gap-1">
+      {/* Row 1 — metadata strip: layer badge + entity-type subtitle + window controls */}
+      <div className="flex items-center gap-2">
+        <span
+          className={[
+            'inline-flex h-6 items-center gap-1.5 rounded-md border px-1.5 text-[10px] font-bold uppercase tracking-wider',
+            badge.tone,
+          ].join(' ')}
+          title={`${badge.full} layer`}
+          aria-label={`${badge.full} layer`}
+        >
+          <span className="font-mono text-[11px]">{badge.label}</span>
+          <span>{badge.full}</span>
+        </span>
+        <span
+          className="text-[10px] uppercase tracking-[0.2em] text-text-secondary/60"
+          title="Entity scope. Attribute-level tabs open when you click an attribute row."
+        >
+          Entity · {attributeCount} attribute{attributeCount === 1 ? '' : 's'}
+        </span>
+        <div className="ml-auto flex items-center gap-1">
           {modalMode && (
             <IconButton
               testId="entity-editor-back"
@@ -459,7 +419,11 @@ function EntityHeader({
           )}
           <IconButton
             testId="entity-editor-width-toggle"
-            label={width === 'expanded' ? 'Compact' : 'Expand'}
+            label={
+              width === 'expanded'
+                ? 'Collapse to compact view (grid only)'
+                : 'Expand for the tabbed property editor'
+            }
             onClick={onToggleWidth}
           >
             {width === 'expanded' ? (
@@ -468,14 +432,65 @@ function EntityHeader({
               <Maximize2 className="h-3.5 w-3.5" />
             )}
           </IconButton>
-          <IconButton testId="entity-editor-close" label="Close" onClick={onClose}>
+          <IconButton testId="entity-editor-close" label="Close entity editor" onClick={onClose}>
             <X className="h-3.5 w-3.5" />
           </IconButton>
         </div>
       </div>
 
-      {/* Row 2 — business name + description (stacked) */}
-      <div className="mt-3 grid grid-cols-1 gap-2">
+      {/* Row 2 — Name (technical identifier) */}
+      <div className="mt-3">
+        <FieldLabel
+          label="Name"
+          hint={
+            entity.layer === 'physical'
+              ? 'snake_case technical identifier'
+              : 'Technical identifier (free-form on non-physical layers)'
+          }
+        />
+        <input
+          ref={nameRef}
+          data-testid="entity-editor-name"
+          value={draft.name}
+          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+          onBlur={commitName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+          }}
+          placeholder="entity_name"
+          autoComplete="off"
+          title="Technical identifier for this entity. snake_case is required on the physical layer."
+          className={[
+            'w-full rounded-md border bg-surface-1/40 px-2.5 py-1.5 font-mono text-sm font-semibold text-text-primary',
+            'placeholder:text-text-secondary/40',
+            'focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40',
+            violation
+              ? 'border-amber-400/50 underline decoration-amber-400 decoration-wavy underline-offset-4'
+              : 'border-white/10',
+          ].join(' ')}
+        />
+        {violation && (
+          <div
+            data-testid="naming-lint-violation"
+            className="mt-1 flex items-center gap-2 text-[10px] text-amber-300"
+          >
+            <span>{violation.message}</span>
+            {violation.suggestion && (
+              <button
+                type="button"
+                onClick={applySuggestion}
+                className="rounded-sm border border-amber-400/30 bg-amber-400/15 px-1.5 py-0.5 text-amber-200 hover:bg-amber-400/25"
+              >
+                Use &quot;{violation.suggestion}&quot;
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Row 3 — Business name (human-readable label) */}
+      <div className="mt-3">
+        <FieldLabel label="Business name" hint="Human-readable label. Free-form." />
         <input
           data-testid="entity-editor-business-name"
           value={draft.businessName}
@@ -484,16 +499,23 @@ function EntityHeader({
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
           }}
-          placeholder="Business name"
-          className="w-full rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-1 text-xs text-text-primary placeholder:text-text-secondary/40 focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
+          placeholder="e.g. Employee"
+          title="Human-readable label shown to business stakeholders."
+          className="w-full rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-secondary/40 focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
         />
+      </div>
+
+      {/* Row 4 — Definition (DMBOK term for the prose description) */}
+      <div className="mt-3">
+        <FieldLabel label="Definition" hint="Prose; use Auto-describe to draft" />
         <textarea
           data-testid="entity-editor-description"
           value={draft.description}
           onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
           onBlur={commitDescription}
           rows={width === 'expanded' ? 3 : 2}
-          placeholder="What does this entity represent?"
+          placeholder="What real-world thing does this entity represent? What rules apply?"
+          title="Plain-English description of what the entity represents and any business rules."
           className={[
             'w-full resize-y rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-1.5 text-xs leading-relaxed text-text-primary',
             'placeholder:text-text-secondary/40',
@@ -502,13 +524,13 @@ function EntityHeader({
           ].join(' ')}
         />
         {autoError && (
-          <p data-testid="auto-describe-error" className="text-[10px] text-red-300">
+          <p data-testid="auto-describe-error" className="mt-1 text-[10px] text-red-300">
             {autoError}
           </p>
         )}
       </div>
 
-      {/* Row 3 — action buttons (Auto-describe, Synthetic, Delete) */}
+      {/* Row 5 — action buttons */}
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <ActionButton
           testId="auto-describe-button"
@@ -516,6 +538,7 @@ function EntityHeader({
           disabled={autoBusy}
           icon={<Sparkles className="h-3 w-3" />}
           tone="accent"
+          title="Ask Claude to draft the entity's Definition based on its name + attributes."
         >
           {autoBusy ? 'Describing…' : 'Auto-describe'}
         </ActionButton>
@@ -527,8 +550,8 @@ function EntityHeader({
           tone="accent"
           title={
             attributeCount === 0
-              ? 'Add at least one attribute before generating synthetic data'
-              : 'Generate 10 synthetic preview rows'
+              ? 'Add at least one attribute before generating synthetic data.'
+              : 'Generate 10 fake-but-plausible preview rows for this entity.'
           }
         >
           Synthetic data
@@ -540,6 +563,7 @@ function EntityHeader({
               onClick={() => setConfirmDelete(true)}
               icon={<Trash2 className="h-3 w-3" />}
               tone="danger"
+              title="Delete this entity. Dependent attributes and relationships cascade."
             >
               Delete
             </ActionButton>
@@ -565,31 +589,6 @@ function EntityHeader({
         </div>
       </div>
     </header>
-  );
-}
-
-function IconButton({
-  testId,
-  label,
-  onClick,
-  children,
-}: {
-  testId: string;
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      data-testid={testId}
-      onClick={onClick}
-      className="rounded-md p-1.5 text-text-secondary hover:bg-white/5 hover:text-text-primary"
-    >
-      {children}
-    </button>
   );
 }
 
@@ -628,6 +627,42 @@ function ActionButton({
       ].join(' ')}
     >
       {icon}
+      {children}
+    </button>
+  );
+}
+
+function FieldLabel({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className="mb-1 flex items-baseline justify-between">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/80">
+        {label}
+      </span>
+      {hint && <span className="text-[10px] text-text-secondary/50">{hint}</span>}
+    </div>
+  );
+}
+
+function IconButton({
+  testId,
+  label,
+  onClick,
+  children,
+}: {
+  testId: string;
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      data-testid={testId}
+      onClick={onClick}
+      className="rounded-md p-1.5 text-text-secondary hover:bg-white/5 hover:text-text-primary"
+    >
       {children}
     </button>
   );

@@ -17,7 +17,14 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, KeyRound, Link2, Plus, Trash2 } from 'lucide-react';
-import { lintAttribute, type AttributeCreate, type AttributeUpdate, type Layer } from '@cc/shared';
+import {
+  ATTRIBUTE_CLASSIFICATION,
+  ATTRIBUTE_CLASSIFICATION_LABELS,
+  lintAttribute,
+  type AttributeCreate,
+  type AttributeUpdate,
+  type Layer,
+} from '@cc/shared';
 import type { AttributeSummary } from '../../hooks/useAttributes';
 
 /**
@@ -56,6 +63,19 @@ const DATA_TYPES = [
   'timestamp',
   'jsonb',
 ];
+
+/** Tone per classification — muted but distinct palettes so scanning
+ *  a grid-full of rows gives the governance story at a glance. */
+const CLASSIFICATION_TONES: Record<string, string> = {
+  PII: 'border-rose-400/40 bg-rose-500/10 text-rose-200',
+  PCI: 'border-rose-400/40 bg-rose-500/10 text-rose-200',
+  PHI: 'border-rose-400/40 bg-rose-500/10 text-rose-200',
+  Financial: 'border-amber-400/40 bg-amber-500/10 text-amber-200',
+  Confidential: 'border-orange-400/40 bg-orange-500/10 text-orange-200',
+  Restricted: 'border-red-400/50 bg-red-500/15 text-red-100',
+  Internal: 'border-sky-400/40 bg-sky-500/10 text-sky-200',
+  Public: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200',
+};
 
 export interface AttributeGridProps {
   attributes: AttributeSummary[];
@@ -161,30 +181,57 @@ export function AttributeGrid({
             <table className="w-full border-separate border-spacing-0 font-sans">
               <thead>
                 <tr className="sticky top-0 z-10 bg-surface-2/90 backdrop-blur-xl">
-                  <Th className="w-7" />
-                  <Th>Name</Th>
-                  <Th className="w-[120px]">Data Type</Th>
-                  <Th className="w-8 text-center" title="Primary key">
+                  <Th className="w-7" title="Drag the handle in a row to reorder attributes." />
+                  <Th title="Column identifier. Snake_case is required on the physical layer; free-form elsewhere.">
+                    Name
+                  </Th>
+                  <Th
+                    className="w-[120px]"
+                    title="SQL data type (uuid, varchar, numeric, timestamp, …). Drives DDL generation."
+                  >
+                    Data Type
+                  </Th>
+                  <Th
+                    className="w-8 text-center"
+                    title="Primary Key — uniquely identifies each row. A column can't be both PK and FK."
+                  >
                     PK
                   </Th>
-                  <Th className="w-8 text-center" title="Foreign key">
+                  <Th
+                    className="w-8 text-center"
+                    title="Foreign Key — references another table's primary key."
+                  >
                     FK
                   </Th>
-                  <Th className="w-8 text-center" title="Not null">
+                  <Th
+                    className="w-8 text-center"
+                    title="NOT NULL — column cannot contain null values."
+                  >
                     NN
                   </Th>
-                  <Th className="w-8 text-center" title="Unique">
+                  <Th
+                    className="w-8 text-center"
+                    title="UNIQUE — disallows duplicate values across rows."
+                  >
                     UQ
                   </Th>
-                  <Th>Definition</Th>
-                  <Th className="w-8" />
+                  <Th
+                    className="w-[110px]"
+                    title="Governance classification — PII, PCI, PHI, Financial, etc. Drives compliance reporting and access policy."
+                  >
+                    Classification
+                  </Th>
+                  <Th title="One-line preview of the column's definition. Read-only — edit in the Documentation tab below.">
+                    Definition
+                  </Th>
+                  <Th className="w-8" title="Delete this attribute." />
                 </tr>
               </thead>
               <tbody>
                 {attributes.length === 0 && (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-6 text-center text-[11px] italic text-text-secondary/60"
                     >
                       No attributes yet. Add one below — the first will be a uuid primary key by
@@ -231,10 +278,11 @@ export function AttributeGrid({
             data-testid="attribute-add-type"
             value={newDataType}
             onChange={(e) => setNewDataType(e.target.value)}
+            style={{ colorScheme: 'dark' }}
             className="rounded-md border border-white/10 bg-surface-1/60 px-2 py-1 font-mono text-[11px] text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
           >
             {DATA_TYPES.map((t) => (
-              <option key={t} value={t}>
+              <option key={t} value={t} className="bg-surface-2 text-text-primary">
                 {t}
               </option>
             ))}
@@ -309,7 +357,6 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
     isDragging,
   } = useSortable({ id: attr.id });
   const [draftName, setDraftName] = useState(attr.name);
-  const [draftDefinition, setDraftDefinition] = useState(attr.description ?? '');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const liveLint = lintAttribute(draftName, layer, {
@@ -338,11 +385,21 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
     await onUpdate({ dataType: next || null });
   }
 
-  async function commitDefinition() {
-    const trimmed = draftDefinition.trim();
-    const current = attr.description ?? '';
-    if ((trimmed || null) === (current || null)) return;
-    await onUpdate({ description: trimmed || null });
+  async function commitClassification(next: string) {
+    const nextVal = next === '' ? null : (next as AttributeSummary['classification']);
+    if ((nextVal ?? null) === (attr.classification ?? null)) return;
+    await onUpdate({
+      classification: nextVal as
+        | 'PII'
+        | 'PCI'
+        | 'PHI'
+        | 'Financial'
+        | 'Confidential'
+        | 'Restricted'
+        | 'Internal'
+        | 'Public'
+        | null,
+    });
   }
 
   async function toggle(field: 'isPrimaryKey' | 'isForeignKey' | 'isNullable' | 'isUnique') {
@@ -396,7 +453,6 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
             }
           }}
           disabled={isBusy}
-          onClick={(e) => e.stopPropagation()}
           title={nameViolation?.message ?? nameWarning?.message}
           className={[
             'w-full min-w-0 rounded-sm border bg-transparent px-1.5 py-1 font-mono text-xs text-text-primary',
@@ -416,13 +472,15 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
           data-testid="attribute-datatype"
           value={attr.dataType ?? ''}
           onChange={(e) => void commitDataType(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
           disabled={isBusy}
+          style={{ colorScheme: 'dark' }}
           className="w-full rounded-sm border border-transparent bg-transparent px-1.5 py-1 font-mono text-[11px] text-text-primary hover:border-white/10 focus:border-accent/40 focus:bg-surface-1/70 focus:outline-none"
         >
-          <option value="">—</option>
+          <option value="" className="bg-surface-2 text-text-primary">
+            —
+          </option>
           {DATA_TYPES.map((t) => (
-            <option key={t} value={t}>
+            <option key={t} value={t} className="bg-surface-2 text-text-primary">
               {t}
             </option>
           ))}
@@ -453,44 +511,78 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
         />
       </td>
 
-      {/* NN — inverted: "NN" highlighted when isNullable === false */}
+      {/* NN — inverted: "NN" highlighted when isNullable === false.
+          Locked on when PK is set (SQL invariant: PK ⇒ NOT NULL). */}
       <td className="border-b border-white/5 px-1 py-0.5 text-center align-middle">
         <FlagToggle
           label="NN"
           testId="attribute-nn-toggle"
           active={!attr.isNullable}
           onClick={() => toggle('isNullable')}
+          locked={attr.isPrimaryKey}
+          lockReason="Auto-set by PK — primary keys are always NOT NULL."
         />
       </td>
 
-      {/* UQ */}
+      {/* UQ — locked on when PK is set (SQL invariant: PK ⇒ UNIQUE). */}
       <td className="border-b border-white/5 px-1 py-0.5 text-center align-middle">
         <FlagToggle
           label="UQ"
           testId="attribute-uq-toggle"
           active={attr.isUnique}
           onClick={() => toggle('isUnique')}
+          locked={attr.isPrimaryKey}
+          lockReason="Auto-set by PK — primary keys are always UNIQUE."
         />
       </td>
 
-      {/* Definition (single-line) */}
+      {/* Classification — dropdown. `color-scheme: dark` tells the OS
+          to render the native option list in dark mode so it matches
+          our glass UI instead of flashing a bright white panel. */}
       <td className="border-b border-white/5 px-2 py-0.5 align-middle">
-        <input
-          value={draftDefinition}
-          onChange={(e) => setDraftDefinition(e.target.value)}
-          onBlur={commitDefinition}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
-            if (e.key === 'Escape') {
-              setDraftDefinition(attr.description ?? '');
-              (e.currentTarget as HTMLInputElement).blur();
-            }
-          }}
-          onClick={(e) => e.stopPropagation()}
+        <select
+          data-testid="attribute-classification"
+          value={attr.classification ?? ''}
+          onChange={(e) => void commitClassification(e.target.value)}
           disabled={isBusy}
-          placeholder="—"
-          className="w-full min-w-0 truncate rounded-sm border border-transparent bg-transparent px-1.5 py-1 text-[11px] italic text-text-secondary placeholder:text-text-secondary/30 hover:border-white/10 focus:border-accent/40 focus:bg-surface-1/70 focus:not-italic focus:text-text-primary focus:outline-none"
-        />
+          style={{ colorScheme: 'dark' }}
+          title={
+            attr.classification
+              ? (ATTRIBUTE_CLASSIFICATION_LABELS[
+                  attr.classification as keyof typeof ATTRIBUTE_CLASSIFICATION_LABELS
+                ] ?? attr.classification)
+              : 'Set a governance classification (PII, PCI, Financial, etc.)'
+          }
+          className={[
+            'w-full rounded-sm border px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wider',
+            'hover:border-white/20 focus:border-accent/40 focus:bg-surface-1/70 focus:outline-none',
+            attr.classification
+              ? (CLASSIFICATION_TONES[attr.classification] ??
+                'border-white/10 bg-surface-1/50 text-text-primary')
+              : 'border-transparent bg-transparent text-text-secondary/50',
+          ].join(' ')}
+        >
+          <option value="" className="bg-surface-2 text-text-primary">
+            —
+          </option>
+          {ATTRIBUTE_CLASSIFICATION.options.map((c) => (
+            <option key={c} value={c} className="bg-surface-2 text-text-primary">
+              {c}
+            </option>
+          ))}
+        </select>
+      </td>
+
+      {/* Definition — read-only preview; the editor lives on the
+          Documentation tab below. */}
+      <td className="border-b border-white/5 px-2 py-0.5 align-middle">
+        <div
+          data-testid="attribute-definition-preview"
+          title={attr.description ?? 'Read-only. Edit in the Documentation tab.'}
+          className="w-full min-w-0 truncate px-1.5 py-1 text-[11px] italic text-text-secondary/70"
+        >
+          {attr.description?.trim() ? attr.description : '—'}
+        </div>
       </td>
 
       {/* Delete */}
@@ -534,6 +626,8 @@ function FlagToggle({
   testId,
   icon,
   accent = 'neutral',
+  locked = false,
+  lockReason,
 }: {
   label: string;
   active: boolean;
@@ -541,6 +635,14 @@ function FlagToggle({
   testId: string;
   icon?: React.ReactNode;
   accent?: 'amber' | 'indigo' | 'neutral';
+  /** When true, click is a no-op and the toggle renders with a
+   *  locked-but-active look. Used for PK-implied NN/UQ where the
+   *  invariant is SQL-definitional and the UI mirrors what the
+   *  server will coerce anyway. */
+  locked?: boolean;
+  /** Tooltip explaining WHY the toggle is locked. Shown only when
+   *  locked=true; otherwise the label is the tooltip. */
+  lockReason?: string;
 }) {
   const activeClass =
     accent === 'amber'
@@ -549,20 +651,32 @@ function FlagToggle({
         ? 'border-indigo-400/40 bg-indigo-500/15 text-indigo-200'
         : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200';
 
+  // Locked + active reads as "definitively on, not editable". We dim
+  // the tone slightly so it still signals "on" without looking like
+  // the user's own toggle state.
+  const lockedActiveClass = 'border-white/20 bg-white/5 text-text-secondary/80 cursor-not-allowed';
+
   return (
     <button
       type="button"
       aria-pressed={active}
+      aria-disabled={locked}
       data-testid={testId}
+      data-locked={locked ? 'true' : 'false'}
       onClick={(e) => {
         e.stopPropagation();
+        if (locked) return;
         onClick();
       }}
       className={[
         'inline-flex h-5 w-5 items-center justify-center rounded-sm border font-mono text-[9px] font-bold tracking-wider transition-colors',
-        active ? activeClass : 'border-white/10 text-text-secondary/50 hover:text-text-primary',
+        locked
+          ? lockedActiveClass
+          : active
+            ? activeClass
+            : 'border-white/10 text-text-secondary/50 hover:text-text-primary',
       ].join(' ')}
-      title={label}
+      title={locked ? (lockReason ?? `${label} (locked)`) : label}
     >
       {icon ?? label}
     </button>

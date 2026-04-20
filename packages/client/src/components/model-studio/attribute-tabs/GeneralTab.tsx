@@ -15,10 +15,15 @@ export interface GeneralTabProps {
 }
 
 export function GeneralTab({ attribute, onUpdate }: GeneralTabProps) {
+  // Name + Data Type + PK/FK/NN/UQ/Classification live in the grid
+  // above (inline-editable). General hosts the rest — and, per Rob's
+  // direction, the short Definition lives here too (grid column is
+  // a read-only preview). The richer Markdown editor ships on the
+  // Documentation tab when Step 11 polish lands.
   const [draft, setDraft] = useState({
     businessName: attribute.businessName ?? '',
-    description: attribute.description ?? '',
     defaultValue: attribute.defaultValue ?? '',
+    description: attribute.description ?? '',
   });
 
   // Reset draft whenever the selected attribute changes — prevents
@@ -26,8 +31,8 @@ export function GeneralTab({ attribute, onUpdate }: GeneralTabProps) {
   useEffect(() => {
     setDraft({
       businessName: attribute.businessName ?? '',
-      description: attribute.description ?? '',
       defaultValue: attribute.defaultValue ?? '',
+      description: attribute.description ?? '',
     });
   }, [attribute.id]);
 
@@ -57,17 +62,19 @@ export function GeneralTab({ attribute, onUpdate }: GeneralTabProps) {
         placeholder="e.g. gen_random_uuid()"
         mono
       />
+
       <div className="sm:col-span-2">
         <FieldLabel
           label="Definition"
-          hint="Prose sketch; the full editor lives on the Definition tab."
+          hint="Short prose. Shown read-only in the grid column above."
         />
         <textarea
+          data-testid="attribute-general-definition"
           value={draft.description}
           onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
           onBlur={() => commit('description', draft.description)}
           rows={4}
-          placeholder="What does this attribute represent? What constraints or business rules apply?"
+          placeholder="What does this attribute represent? What business rules apply?"
           className="w-full resize-y rounded-md border border-white/10 bg-surface-1/50 px-3 py-2 text-xs leading-relaxed text-text-primary placeholder:text-text-secondary/40 focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
         />
       </div>

@@ -2116,6 +2116,17 @@ export const dataModelAttributes = pgTable(
     isUnique: boolean('is_unique').notNull().default(false),
     defaultValue: text('default_value'),
     ordinalPosition: integer('ordinal_position').notNull().default(0),
+    // Step 5 follow-up: governance classification. Nullable — null
+    // means "no classification set" and is the default. Validated
+    // at the zod layer against a fixed enum of DMBOK / compliance
+    // categories so the DB just needs a varchar, not a check
+    // constraint (easier to evolve the enum without a migration).
+    classification: varchar('classification', { length: 50 }),
+    // Step 5 follow-up: free-form SQL or pseudocode describing how
+    // this attribute is derived. Backs the "Rules" tab in the
+    // attribute property editor. Null when no transformation is
+    // documented.
+    transformationLogic: text('transformation_logic'),
     metadata: jsonb('metadata').notNull().default('{}'),
     tags: jsonb('tags').notNull().default('[]'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2126,6 +2137,9 @@ export const dataModelAttributes = pgTable(
     uniqueIndex('idx_data_model_attributes_unique_name').on(t.entityId, t.name),
     // Index: load all attributes for an entity (core read path)
     index('idx_data_model_attributes_entity_id').on(t.entityId),
+    // Index: filter "all PII columns in this model" style queries
+    // for governance dashboards. Partial index to skip null rows.
+    index('idx_data_model_attributes_classification').on(t.classification),
   ],
 );
 
