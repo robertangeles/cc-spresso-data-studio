@@ -132,3 +132,72 @@ export function lintIdentifier(name: string, layer: Layer): NamingLintRule[] {
 
   return issues;
 }
+
+/** Attribute-specific lint context. Only meaningful on the physical
+ *  layer (logical/conceptual types are informational, not enforced). */
+export interface AttributeLintContext {
+  dataType?: string | null;
+  length?: number | null;
+  precision?: number | null;
+  scale?: number | null;
+}
+
+/**
+ * Lint an attribute name + type combo. Delegates to lintIdentifier for
+ * the base rules (snake_case, reserved words), then appends rules that
+ * only make sense with attribute context:
+ *
+ *   - `*_id` suffix with non-uuid data_type → warn, suggest `uuid`.
+ *   - VARCHAR with no length → warn (Postgres allows it, most DBAs don't).
+ *   - NUMERIC with scale > precision → violation (Postgres rejects the DDL).
+ *
+ * Only applies on the physical layer. Conceptual / logical return the
+ * base lintIdentifier result unchanged. Kept as a separate function
+ * instead of extending lintIdentifier so existing entity callers don't
+ * silently lose attribute-rule coverage if they forget to pass context.
+ */
+export function lintAttribute(
+  name: string,
+  layer: Layer,
+  ctx: AttributeLintContext = {},
+): NamingLintRule[] {
+  const issues = lintIdentifier(name, layer);
+  if (layer !== 'physical') return issues;
+
+  const trimmed = name.trim();
+  const dataType = ctx.dataType?.trim().toLowerCase();
+
+  // `*_id` suffix with a non-uuid type. Skip `id` alone — that's a
+  // perfectly valid PK column name and not an FK-style id column.
+  if (trimmed.length > 3 && trimmed.endsWith('_id') && dataType && dataType !== 'uuid') {
+    issues.push({
+      rule: 'id_suffix_should_be_uuid',
+      severity: 'warning',
+      message: `Columns ending in "_id" are conventionally uuid; "${ctx.dataType}" is unusual.`,
+      suggestion: 'uuid',
+    });
+  }
+
+  if (dataType === 'varchar' && (ctx.length == null || ctx.length <= 0)) {
+    issues.push({
+      rule: 'varchar_requires_length',
+      severity: 'warning',
+      message: 'VARCHAR columns should declare a length. Default Postgres behaviour is unbounded.',
+    });
+  }
+
+  if (
+    dataType === 'numeric' &&
+    ctx.precision != null &&
+    ctx.scale != null &&
+    ctx.scale > ctx.precision
+  ) {
+    issues.push({
+      rule: 'numeric_scale_gt_precision',
+      severity: 'violation',
+      message: `NUMERIC(${ctx.precision}, ${ctx.scale}) is invalid — scale must be ≤ precision.`,
+    });
+  }
+
+  return issues;
+}

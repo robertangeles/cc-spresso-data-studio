@@ -230,34 +230,36 @@
 
 ## STEP 5 — Attribute CRUD + D9 synthetic data
 
+**Status (2026-04-20):** Unit + Integration + E2E all GREEN. 23 shared + 21 server integration (incl. Step 5 follow-ups) + 4 Playwright specs (S5-E1..E4) on `feature/model-studio-step5-attributes`.
+
 ### Unit
 
-| ID    | Test                                                                       | Input                           | Expected                        | Priority |
-| ----- | -------------------------------------------------------------------------- | ------------------------------- | ------------------------------- | -------- |
-| S5-U1 | `attributeCreateSchema` validates data_type per platform                   | physical + data_type=`VARCHAR`  | OK                              | P1       |
-| S5-U2 | Reorder service re-computes ordinal_positions densely (1,2,3 not 1,3,5)    | reorder of 3 attrs              | positions 1,2,3                 | P1       |
-| S5-U3 | PK toggle on attribute cascades to is_foreign_key = false if contradictory | set PK on existing FK           | FK cleared                      | P1       |
-| S5-U4 | Synthetic data: service returns exactly 10 rows matching declared types    | call with entity having 5 attrs | 10 rows × 5 cols                | P1       |
-| S5-U5 | Synthetic data: Claude refusal returns AIRefusalError, no rows shown       | mock refusal                    | error, drawer shows error state | P1       |
+| ID    | Test                                                                       | Input                           | Expected                        | Priority | ✓   |
+| ----- | -------------------------------------------------------------------------- | ------------------------------- | ------------------------------- | -------- | --- |
+| S5-U1 | `attributeCreateSchema` validates data_type per platform                   | physical + data_type=`VARCHAR`  | OK                              | P1       | ✓   |
+| S5-U2 | Reorder service re-computes ordinal_positions densely (1,2,3 not 1,3,5)    | reorder of 3 attrs              | positions 1,2,3                 | P1       | ✓   |
+| S5-U3 | PK toggle on attribute cascades to is_foreign_key = false if contradictory | set PK on existing FK           | FK cleared                      | P1       | ✓   |
+| S5-U4 | Synthetic data: service returns exactly 10 rows matching declared types    | call with entity having 5 attrs | 10 rows × 5 cols                | P1       | ✓   |
+| S5-U5 | Synthetic data: Claude refusal returns AIRefusalError, no rows shown       | mock refusal                    | error, drawer shows error state | P1       | ✓   |
 
 ### Integration
 
-| ID    | Route                                                 | Case                         | Expected                 | Priority |
-| ----- | ----------------------------------------------------- | ---------------------------- | ------------------------ | -------- |
-| S5-I1 | `POST /api/models/:id/entities/:eid/attributes`       | Valid                        | 201                      | P1       |
-| S5-I2 | Duplicate attribute name within entity                | Second insert with same name | 409 ConflictError        | P1       |
-| S5-I3 | `POST /api/models/:id/entities/:eid/synthetic-data`   | Happy                        | 200 with 10 rows         | P1       |
-| S5-I4 | Synthetic data labelled `synthetic: true` in response | Happy                        | Response includes marker | P1       |
+| ID    | Route                                                 | Case                         | Expected                 | Priority | ✓   |
+| ----- | ----------------------------------------------------- | ---------------------------- | ------------------------ | -------- | --- |
+| S5-I1 | `POST /api/models/:id/entities/:eid/attributes`       | Valid                        | 201                      | P1       | ✓   |
+| S5-I2 | Duplicate attribute name within entity                | Second insert with same name | 409 ConflictError        | P1       | ✓   |
+| S5-I3 | `POST /api/models/:id/entities/:eid/synthetic-data`   | Happy                        | 200 with 10 rows         | P1       | ✓   |
+| S5-I4 | Synthetic data labelled `synthetic: true` in response | Happy                        | Response includes marker | P1       | ✓   |
 
-### E2E
+### E2E — `packages/client/tests/e2e/model-studio-attributes.spec.ts`
 
-| ID    | Flow                                                                          | Expected    | Priority                                |
-| ----- | ----------------------------------------------------------------------------- | ----------- | --------------------------------------- | --- |
-| S5-E1 | Add attribute inline → appears in entity node                                 | Add         | Appears immediately                     | P1  |
-| S5-E2 | Drag-reorder attributes in panel → saved                                      | Drag        | Persisted                               | P1  |
-| S5-E3 | PK attributes rendered above the line on canvas node                          | Visual      | Above divider                           | P1  |
-| S5-E4 | Click "Synthetic data" → drawer opens below canvas with 10 rows + clear label | Interaction | Shown with "SYNTHETIC — NOT REAL" badge | P1  |
-| S5-E5 | Synthetic data drawer: close button, copy-to-clipboard, regenerate button     | Interact    | All work                                | P2  |
+| ID    | Flow                                                                       | Expected    | Priority                                | ✓   |
+| ----- | -------------------------------------------------------------------------- | ----------- | --------------------------------------- | --- | --- |
+| S5-E1 | Add attribute inline → appears in entity node                              | Add         | Appears immediately                     | P1  | ✓   |
+| S5-E2 | Drag-reorder attributes → saved (persists after refresh)                   | Drag        | Persisted                               | P1  | ✓   |
+| S5-E3 | PK attributes rendered above the line on canvas node                       | Visual      | Above divider                           | P1  | ✓   |
+| S5-E4 | Click "Synthetic data" → drawer opens below canvas with the required badge | Interaction | Shown with "SYNTHETIC — NOT REAL" badge | P1  | ✓   |
+| S5-E5 | Synthetic data drawer: close button, copy-to-clipboard, regenerate button  | Interact    | All work                                | P2  |
 
 ---
 
