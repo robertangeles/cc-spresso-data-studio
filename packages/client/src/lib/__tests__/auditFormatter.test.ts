@@ -370,3 +370,55 @@ describe('formatAuditEvent — relationship actions (S6-U22)', () => {
     expect(lines).toEqual(['Generated 5 relationship proposals from FK graph.']);
   });
 });
+
+describe('formatAuditEvent — Step 6 Direction A phrases', () => {
+  it('narrates altKeyGroup assignment (null → AK1)', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { altKeyGroup: null },
+        afterState: { altKeyGroup: 'AK1' },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Flagged as');
+    expect(lines[0]).toContain('AK1');
+  });
+
+  it('narrates altKeyGroup clear (AK2 → null)', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { altKeyGroup: 'AK2' },
+        afterState: { altKeyGroup: null },
+      }),
+    );
+    expect(lines).toEqual(['Cleared alt key group.']);
+  });
+
+  it('narrates inverse verb phrase set (null → value)', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { inverseName: null },
+        afterState: { inverseName: 'is_managed_by' },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Set inverse verb phrase to');
+    expect(lines[0]).toContain('is_managed_by');
+  });
+
+  it('narrates display id assignment (null → E007)', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { displayId: null },
+        afterState: { displayId: 'E007' },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Assigned display id');
+    expect(lines[0]).toContain('E007');
+  });
+});

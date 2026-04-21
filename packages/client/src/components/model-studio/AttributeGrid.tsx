@@ -216,6 +216,12 @@ export function AttributeGrid({
                     UQ
                   </Th>
                   <Th
+                    className="w-[70px] text-center"
+                    title="Alt Key Group — columns sharing the same AKn label form one composite business key. NN + UQ are auto-enforced."
+                  >
+                    AK
+                  </Th>
+                  <Th
                     className="w-[110px]"
                     title="Governance classification — PII, PCI, PHI, Financial, etc. Drives compliance reporting and access policy."
                   >
@@ -231,7 +237,7 @@ export function AttributeGrid({
                 {attributes.length === 0 && (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       className="px-4 py-6 text-center text-[11px] italic text-text-secondary/60"
                     >
                       No attributes yet. Add one below — the first will be a uuid primary key by
@@ -249,6 +255,7 @@ export function AttributeGrid({
                     onSelect={() => onSelect(attr.id)}
                     onUpdate={(patch) => onUpdate(attr.id, patch)}
                     onDelete={() => onDelete(attr.id)}
+                    allAttributes={attributes}
                   />
                 ))}
               </tbody>
@@ -345,9 +352,38 @@ interface RowProps {
   onSelect: () => void;
   onUpdate: (patch: AttributeUpdate) => Promise<AttributeSummary>;
   onDelete: () => Promise<void>;
+  /** Every attribute on the entity — needed by the AK picker so the
+   *  "New group…" option can compute the next unused AKn label. */
+  allAttributes: AttributeSummary[];
 }
 
-function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDelete }: RowProps) {
+/** Compute the next AKn label not yet used by any attribute on the
+ *  entity. Used by the "New group…" option in the AK picker — if the
+ *  entity already has AK1 + AK2, the next pick is AK3. Capped at AK99
+ *  to stay under the `VARCHAR(10)` column width; in practice an
+ *  entity with ≥ 3 distinct BKs is already a red flag. */
+function nextAltKeyGroup(attributes: AttributeSummary[]): string {
+  const used = new Set<string>();
+  for (const a of attributes) {
+    if (a.altKeyGroup && /^AK\d+$/.test(a.altKeyGroup)) used.add(a.altKeyGroup);
+  }
+  for (let i = 1; i <= 99; i += 1) {
+    const candidate = `AK${i}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  return 'AK99';
+}
+
+function AttributeRow({
+  attr,
+  layer,
+  selected,
+  isBusy,
+  onSelect,
+  onUpdate,
+  onDelete,
+  allAttributes,
+}: RowProps) {
   const {
     attributes: dndAttributes,
     listeners,
@@ -404,6 +440,21 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
 
   async function toggle(field: 'isPrimaryKey' | 'isForeignKey' | 'isNullable' | 'isUnique') {
     await onUpdate({ [field]: !attr[field] });
+  }
+
+  async function commitAltKeyGroup(next: string) {
+    // "" = None (clear); "__new__" = allocate next unused AKn.
+    // Any other value is an AKn literal the dropdown already offered.
+    let resolved: string | null;
+    if (next === '' || next === 'none') {
+      resolved = null;
+    } else if (next === '__new__') {
+      resolved = nextAltKeyGroup(allAttributes);
+    } else {
+      resolved = next;
+    }
+    if ((resolved ?? null) === (attr.altKeyGroup ?? null)) return;
+    await onUpdate({ altKeyGroup: resolved });
   }
 
   return (
@@ -534,6 +585,48 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
           locked={attr.isPrimaryKey}
           lockReason="Auto-set by PK — primary keys are always UNIQUE."
         />
+      </td>
+
+      {/* AK — alt key group picker. Columns sharing an AKn label form
+          one composite business key. Selecting "New group…" allocates
+          the next unused AKn on the entity (AK1 → AK2 → …). */}
+      <td className="border-b border-white/5 px-1 py-0.5 text-center align-middle">
+        <select
+          data-testid="attribute-ak-picker"
+          value={attr.altKeyGroup ?? ''}
+          onChange={(e) => void commitAltKeyGroup(e.target.value)}
+          disabled={isBusy}
+          onClick={(e) => e.stopPropagation()}
+          style={{ colorScheme: 'dark' }}
+          title={
+            attr.altKeyGroup
+              ? `Alt key group ${attr.altKeyGroup} — NN + UQ auto-enforced at DDL export.`
+              : 'Assign this column to an alt key group (composite business key).'
+          }
+          className={[
+            'w-full rounded-sm border px-1 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider',
+            'hover:border-white/20 focus:border-accent/40 focus:bg-surface-1/70 focus:outline-none',
+            attr.altKeyGroup
+              ? 'border-amber-400/40 bg-amber-500/10 text-amber-300'
+              : 'border-transparent bg-transparent text-text-secondary/50',
+          ].join(' ')}
+        >
+          <option value="" className="bg-surface-2 text-text-primary">
+            —
+          </option>
+          <option value="AK1" className="bg-surface-2 text-text-primary">
+            AK1
+          </option>
+          <option value="AK2" className="bg-surface-2 text-text-primary">
+            AK2
+          </option>
+          <option value="AK3" className="bg-surface-2 text-text-primary">
+            AK3
+          </option>
+          <option value="__new__" className="bg-surface-2 text-text-primary">
+            New group…
+          </option>
+        </select>
       </td>
 
       {/* Classification — dropdown. `color-scheme: dark` tells the OS

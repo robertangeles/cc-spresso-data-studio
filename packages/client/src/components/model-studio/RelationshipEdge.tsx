@@ -1,12 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import {
-  BaseEdge,
-  EdgeLabelRenderer,
-  getSmoothStepPath,
-  Position,
-  type EdgeProps,
-} from '@xyflow/react';
-import type { Cardinality, Notation } from '@cc/shared';
+import { BaseEdge, getSmoothStepPath, Position, type EdgeProps } from '@xyflow/react';
+import { formatCardinalityText, type Cardinality, type Notation } from '@cc/shared';
 
 /**
  * Step 6 — custom React Flow edge rendering an IE / IDEF1X cardinality
@@ -52,6 +46,13 @@ export interface RelationshipEdgeData extends Record<string, unknown> {
   targetEntityId: string;
   /** Relationship id so right-click can open the correct menu / panel. */
   relId: string;
+  /** Forward verb phrase (e.g. "manages"). Rendered centred on the
+   *  source-half of the line when both verbs are set, otherwise centred
+   *  on the whole line. */
+  verbForward?: string | null;
+  /** Inverse verb phrase (e.g. "is_managed_by"). When present with
+   *  verbForward, the two labels split the line in half. */
+  verbInverse?: string | null;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -150,36 +151,25 @@ export function outwardAngleFor(position: Position): number {
 /**
  * Build an SVG path string for a self-ref loop.
  *
- * React Flow gives us `(sx, sy)` at the handle position on the card
- * edge. Drawing a loop tangent to that point puts half the loop INSIDE
- * the entity card and hidden behind it. Instead we project the loop
- * OUTWARD past the card border and produce a full ear-shaped arc that
- * sits entirely outside the node bounds.
+ * Erwin / ER Studio convention: self-ref loops are 3-segment orthogonal
+ * corridors on the RIGHT side of the entity. Our canvas routes self-ref
+ * edges `right-top` (source) → `right-bottom` (target) — both handles
+ * sit on the right edge of the same entity, so the loop is drawn by
+ * stepping right from the source, dropping vertically to the target's
+ * Y, then stepping back left into the target. No curves; pure right
+ * angles, which reads unambiguously at any zoom level and mirrors the
+ * conventions a CDMP practitioner recognises from Erwin.
  *
- * The loop is anchored above the source handle and curves up + right
- * so it's visible in the canonical top-right quadrant regardless of
- * whether React Flow routed the same handle or two distinct handles
- * for a source-equals-target edge.
+ *    (sx, sy) ─► right 30px ──┐
+ *                             │  (vertical corridor)
+ *    (tx, ty) ◄── right 30px ─┘
  *
- * Kept pure + exported so S6-U20 can snapshot a known geometry.
+ * The exported signature stays `(sx, sy, tx, ty) → string` so callers
+ * and tests are unaffected; only the path body changes.
  */
 export function selfRefPath(sx: number, sy: number, tx: number, ty: number): string {
-  // Classic Erwin/ER Studio convention: self-ref loops project OUTWARD
-  // from the entity in a smooth D-shape. Our canvas routes self-ref
-  // edges `right` (source) → `top` (target), so the bezier starts at
-  // the right edge midpoint and ends at the top edge midpoint. The two
-  // control points pull the curve out into the top-right quadrant,
-  // creating a clean loop that hugs the corner without clipping the
-  // entity body.
-  // Tighter bulge than the initial pass — Erwin / ER Studio self-refs
-  // sit close to the corner, not in open space. 30px hugs the
-  // top-right corner without reading as a detached arc.
   const bulge = 30;
-  const c1x = sx + bulge; // pull right from source
-  const c1y = sy;
-  const c2x = tx;
-  const c2y = ty - bulge; // pull up from target
-  return `M ${sx} ${sy} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${tx} ${ty}`;
+  return `M ${sx} ${sy} L ${sx + bulge} ${sy} L ${tx + bulge} ${ty} L ${tx} ${ty}`;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -229,20 +219,18 @@ function RelationshipEdgeComponent(props: EdgeProps) {
 
   if (isSelfRef) {
     edgePath = selfRefPath(sourceX, sourceY, targetX, targetY);
-    // Label sits at the FAR corner of the loop (top-right of the
-    // entity), not its midpoint — pushing it all the way into the
-    // bulge prevents it from clipping the entity header. Mirror
-    // selfRefPath's bulge so the two stay in sync if tuned.
+    // 3-segment orthogonal corridor: both endpoints sit on the right
+    // edge (source at right-top, target at right-bottom). The label
+    // sits centred in the vertical corridor between them.
     const bulge = 30;
-    labelX = sourceX + bulge + 4;
-    labelY = targetY - bulge - 4;
-    // Source end: line leaves the right-edge handle going rightward.
-    // Rotate glyph 180° so its "tail" (bar / crow's foot) points OUT
-    // of the entity (to the right) instead of into it.
-    // Target end: line arrives at the top-edge handle from above.
-    // Rotate glyph -90° so the tail points UP, outside the entity.
+    labelX = (sourceX + targetX) / 2 + bulge;
+    labelY = (sourceY + targetY) / 2;
+    // Both endpoints emerge on the right edge of the entity; rotate
+    // each glyph 180° so the bar / crows-foot / circle markers extend
+    // outward (positive x, into the corridor) rather than inward into
+    // the card body.
     srcAngleDeg = 180;
-    tgtAngleDeg = -90;
+    tgtAngleDeg = 180;
   } else {
     const [smoothPath, sLabelX, sLabelY] = getSmoothStepPath({
       sourceX,
@@ -316,7 +304,10 @@ function RelationshipEdgeComponent(props: EdgeProps) {
         path={edgePath}
         style={{
           stroke,
-          strokeWidth: 1.25,
+          // Identifying relationships are visually heavier — a senior
+          // CDMP eye should spot the parent→weak-child hierarchy at a
+          // glance, matching Erwin / ER Studio stroke weights.
+          strokeWidth: d.isIdentifying ? 2.25 : 1.4,
           strokeDasharray: dashArray,
           opacity: shimmer ? 0.85 : 1,
           transition: 'opacity 200ms ease',
@@ -345,22 +336,209 @@ function RelationshipEdgeComponent(props: EdgeProps) {
         identifying={d.isIdentifying}
         testId={`rel-glyph-target-${id}`}
       />
-      {/* Optional name label */}
-      {typeof d.name === 'string' && d.name.length > 0 && (
-        <EdgeLabelRenderer>
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              pointerEvents: 'none',
-            }}
-            className="rounded border border-white/10 bg-surface-2/80 px-1.5 py-0.5 font-mono text-[10px] text-text-secondary backdrop-blur"
-          >
-            {String(d.name)}
-          </div>
-        </EdgeLabelRenderer>
-      )}
+      {/* Cardinality text labels — Erwin-style `1..*`, `0..1`, etc.
+          (IE) or federal-standard letters `Z`, `P`, `M`, `1` (IDEF1X).
+          The glyph alone is enough for a fluent practitioner, but the
+          small text removes ambiguity during mixed-seniority reviews
+          and matches the convention every enterprise modelling tool
+          has shipped since the 1990s. Text sits 30px past the glyph
+          anchor so it never clips the entity card border. */}
+      <CardinalityTextLabel
+        x={sourceX}
+        y={sourceY}
+        angleDeg={srcAngleDeg}
+        text={formatCardinalityText(d.sourceCardinality, notation)}
+        testId={`rel-card-source-${id}`}
+      />
+      <CardinalityTextLabel
+        x={targetX}
+        y={targetY}
+        angleDeg={tgtAngleDeg}
+        text={formatCardinalityText(d.targetCardinality, notation)}
+        testId={`rel-card-target-${id}`}
+      />
+      {/* Verb phrases — forward (rel.name) + inverse (rel.inverseName).
+          When both are set, each label sits at the midpoint of its own
+          half of the line so the reader can parse the relationship in
+          either direction without rotating their head. When only one
+          is set, fall back to a single centred label (the pre-Step-6
+          behaviour). */}
+      <VerbPhraseLabels
+        forward={d.verbForward ?? (typeof d.name === 'string' ? d.name : null)}
+        inverse={d.verbInverse ?? null}
+        sourceX={sourceX}
+        sourceY={sourceY}
+        targetX={targetX}
+        targetY={targetY}
+        isSelfRef={isSelfRef}
+        labelX={labelX}
+        labelY={labelY}
+        edgeId={id}
+      />
     </g>
+  );
+}
+
+/**
+ * Render the cardinality text (`1..*`, `Z`, `P`, etc.) next to an
+ * endpoint glyph. The `angleDeg` is the same rotation the glyph group
+ * uses; we use it to push the text OUTWARD along the edge tangent.
+ * The text itself is NOT rotated — practitioners read labels
+ * horizontally, so we pick a perpendicular offset (above the line)
+ * instead of rotating the glyph-plus-label as a unit.
+ *
+ * Offset convention (matches the glyph markup's local-space
+ * coordinates): glyphs sit at local x = -14 to -22 (outward along -x
+ * after the 180° rotation of a right-handle). We place the text at
+ * local x ≈ -30, y ≈ -10 so the label hovers above and outside the
+ * glyph without overlapping either the glyph or the entity card.
+ */
+function CardinalityTextLabel({
+  x,
+  y,
+  angleDeg,
+  text,
+  testId,
+}: {
+  x: number;
+  y: number;
+  angleDeg: number;
+  text: string;
+  testId: string;
+}) {
+  // Convert the glyph-group rotation to the actual outward unit vector
+  // in world space: the group's local -x axis is "outward" from the
+  // card, so the world-space outward vector is
+  //   (cos(angle + 180°), sin(angle + 180°)).
+  // Equivalently: (-cos(angle), -sin(angle)).
+  const rad = (angleDeg * Math.PI) / 180;
+  const outwardX = -Math.cos(rad);
+  const outwardY = -Math.sin(rad);
+  // Perpendicular-to-outward unit vector, rotated -90° so the label
+  // sits "above" the line (towards smaller y in screen space).
+  const perpX = outwardY;
+  const perpY = -outwardX;
+  // Push 30px outward (past the glyph) + 10px perpendicular (clear of
+  // the line itself).
+  const tx = x + outwardX * 30 + perpX * 10;
+  const ty = y + outwardY * 30 + perpY * 10;
+  return (
+    <text
+      x={tx}
+      y={ty}
+      fill="#8FA3B7"
+      fontSize={10}
+      fontFamily="var(--font-mono, ui-monospace, SFMono-Regular, monospace)"
+      textAnchor="middle"
+      dominantBaseline="middle"
+      data-testid={testId}
+      data-card-text={text}
+    >
+      {text}
+    </text>
+  );
+}
+
+/**
+ * Render verb phrase labels for a relationship.
+ *
+ * - Both verbs set → forward label on source-half midpoint, inverse on
+ *   target-half midpoint.
+ * - Only forward set → single label centred on the line (legacy
+ *   behaviour, preserved for self-refs and rels with no inverse).
+ * - Neither set → nothing rendered.
+ */
+function VerbPhraseLabels({
+  forward,
+  inverse,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  isSelfRef,
+  labelX,
+  labelY,
+  edgeId,
+}: {
+  forward: string | null;
+  inverse: string | null;
+  sourceX: number;
+  sourceY: number;
+  targetX: number;
+  targetY: number;
+  isSelfRef: boolean;
+  labelX: number;
+  labelY: number;
+  edgeId: string;
+}) {
+  const hasForward = typeof forward === 'string' && forward.length > 0;
+  const hasInverse = typeof inverse === 'string' && inverse.length > 0;
+  if (!hasForward && !hasInverse) return null;
+
+  // Rendered as SVG <text> inside the edge <g> rather than via
+  // EdgeLabelRenderer. Keeping the verb phrases in the same SVG tree
+  // as the line + glyphs means they participate in the same pan / zoom
+  // transform without needing the React Flow viewport portal, and they
+  // remain queryable in JSDOM snapshots (EdgeLabelRenderer's portal
+  // target doesn't exist in the minimal test harness).
+
+  // Self-ref fallback: put any present verb at the corridor centre.
+  // Inverse-only case is rare but supported — still centred.
+  if (isSelfRef || !hasInverse || !hasForward) {
+    const text = hasForward ? forward : inverse;
+    if (text === null) return null;
+    return (
+      <text
+        x={labelX}
+        y={labelY}
+        fill="#8FA3B7"
+        fontSize={10}
+        fontFamily="var(--font-mono, ui-monospace, SFMono-Regular, monospace)"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        data-testid={`rel-verb-single-${edgeId}`}
+      >
+        {text}
+      </text>
+    );
+  }
+
+  // Both verbs present — split the line into halves. Forward sits at
+  // the midpoint of the source→midpoint segment; inverse at the
+  // midpoint of midpoint→target.
+  const midX = (sourceX + targetX) / 2;
+  const midY = (sourceY + targetY) / 2;
+  const fwdX = (sourceX + midX) / 2;
+  const fwdY = (sourceY + midY) / 2;
+  const invX = (midX + targetX) / 2;
+  const invY = (midY + targetY) / 2;
+  return (
+    <>
+      <text
+        x={fwdX}
+        y={fwdY}
+        fill="#8FA3B7"
+        fontSize={10}
+        fontFamily="var(--font-mono, ui-monospace, SFMono-Regular, monospace)"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        data-testid={`rel-verb-forward-${edgeId}`}
+      >
+        {forward}
+      </text>
+      <text
+        x={invX}
+        y={invY}
+        fill="#8FA3B7"
+        fontSize={10}
+        fontFamily="var(--font-mono, ui-monospace, SFMono-Regular, monospace)"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        data-testid={`rel-verb-inverse-${edgeId}`}
+      >
+        {inverse}
+      </text>
+    </>
   );
 }
 

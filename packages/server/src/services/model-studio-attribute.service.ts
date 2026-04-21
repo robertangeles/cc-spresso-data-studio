@@ -31,7 +31,7 @@ import { assertCanAccessModel } from './model-studio-authz.service.js';
 import { recordChange } from './model-studio-changelog.service.js';
 import { enqueueEmbedding } from './model-studio-embedding.service.js';
 import { providerRegistry } from './ai/index.js';
-import { normalizeAttributeFlags } from './model-studio-attribute-flags.js';
+import { AltKeyGroupFormatError, normalizeAttributeFlags } from './model-studio-attribute-flags.js';
 
 /**
  * Step 5 — Attribute CRUD + Synthetic Data (D9).
@@ -206,14 +206,24 @@ export async function createAttribute(
   const nextOrdinal = Number(maxOrdinal) + 1;
 
   try {
-    // Apply flag invariants: PK ⇒ NN + UQ; PK + FK can coexist.
-    // See normalizeAttributeFlags docstring for the full rule set.
-    const flags = normalizeAttributeFlags({
-      isPrimaryKey: dto.isPrimaryKey,
-      isForeignKey: dto.isForeignKey,
-      isNullable: dto.isNullable,
-      isUnique: dto.isUnique,
-    });
+    // Apply flag invariants: PK ⇒ NN + UQ; PK + FK can coexist; BK
+    // group ⇒ NN + UQ (Direction A #4). See normalizeAttributeFlags
+    // docstring for the full rule set.
+    let flags;
+    try {
+      flags = normalizeAttributeFlags({
+        isPrimaryKey: dto.isPrimaryKey,
+        isForeignKey: dto.isForeignKey,
+        isNullable: dto.isNullable,
+        isUnique: dto.isUnique,
+        altKeyGroup: dto.altKeyGroup ?? null,
+      });
+    } catch (err) {
+      if (err instanceof AltKeyGroupFormatError) {
+        throw new ValidationError({ altKeyGroup: [err.message] });
+      }
+      throw err;
+    }
 
     const [created] = await db
       .insert(dataModelAttributes)
@@ -233,6 +243,7 @@ export async function createAttribute(
         defaultValue: dto.defaultValue ?? null,
         classification: dto.classification ?? null,
         transformationLogic: dto.transformationLogic ?? null,
+        altKeyGroup: flags.altKeyGroup,
         ordinalPosition: nextOrdinal,
         metadata: dto.metadata ?? {},
         tags: dto.tags ?? [],
@@ -308,24 +319,35 @@ export async function updateAttribute(
     }
   }
 
-  // Apply flag invariants: PK ⇒ NN + UQ; PK + FK can coexist. Sticky
-  // NN/UQ when PK is cleared. The normaliser receives the patch's
-  // flag fields merged with the current row's flags and returns the
-  // final effective shape. See model-studio-attribute-flags.ts.
-  const normalisedFlags = normalizeAttributeFlags(
-    {
-      isPrimaryKey: patch.isPrimaryKey,
-      isForeignKey: patch.isForeignKey,
-      isNullable: patch.isNullable,
-      isUnique: patch.isUnique,
-    },
-    {
-      isPrimaryKey: before.isPrimaryKey,
-      isForeignKey: before.isForeignKey,
-      isNullable: before.isNullable,
-      isUnique: before.isUnique,
-    },
-  );
+  // Apply flag invariants: PK ⇒ NN + UQ; PK + FK can coexist; BK
+  // group ⇒ NN + UQ (Direction A #4). Sticky NN/UQ when PK or BK is
+  // cleared. The normaliser receives the patch's flag fields merged
+  // with the current row's flags and returns the final effective
+  // shape. See model-studio-attribute-flags.ts.
+  let normalisedFlags;
+  try {
+    normalisedFlags = normalizeAttributeFlags(
+      {
+        isPrimaryKey: patch.isPrimaryKey,
+        isForeignKey: patch.isForeignKey,
+        isNullable: patch.isNullable,
+        isUnique: patch.isUnique,
+        altKeyGroup: patch.altKeyGroup,
+      },
+      {
+        isPrimaryKey: before.isPrimaryKey,
+        isForeignKey: before.isForeignKey,
+        isNullable: before.isNullable,
+        isUnique: before.isUnique,
+        altKeyGroup: before.altKeyGroup,
+      },
+    );
+  } catch (err) {
+    if (err instanceof AltKeyGroupFormatError) {
+      throw new ValidationError({ altKeyGroup: [err.message] });
+    }
+    throw err;
+  }
 
   // Only write flags if any flag field was in the patch OR the normaliser
   // produced a drift from current (e.g. PK was already true but the client
@@ -335,7 +357,8 @@ export async function updateAttribute(
     patch.isPrimaryKey !== undefined ||
     patch.isForeignKey !== undefined ||
     patch.isNullable !== undefined ||
-    patch.isUnique !== undefined;
+    patch.isUnique !== undefined ||
+    patch.altKeyGroup !== undefined;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.name !== undefined) updates.name = patch.name;
@@ -350,6 +373,7 @@ export async function updateAttribute(
     updates.isPrimaryKey = normalisedFlags.isPrimaryKey;
     updates.isForeignKey = normalisedFlags.isForeignKey;
     updates.isUnique = normalisedFlags.isUnique;
+    updates.altKeyGroup = normalisedFlags.altKeyGroup;
   }
   if (patch.defaultValue !== undefined) updates.defaultValue = patch.defaultValue;
   if (patch.classification !== undefined) updates.classification = patch.classification;

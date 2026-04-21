@@ -82,6 +82,39 @@ export function GeneralTab({ attribute, onUpdate }: GeneralTabProps) {
         />
       </div>
 
+      <div className="sm:col-span-2">
+        <FieldLabel label="Alt Key Group" hint="Composite business key — NN + UQ auto-enforced." />
+        <select
+          data-testid="attribute-general-ak-picker"
+          value={attribute.altKeyGroup ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value;
+            const next = raw === '' ? null : raw;
+            if ((next ?? null) === (attribute.altKeyGroup ?? null)) return;
+            void onUpdate({ altKeyGroup: next });
+          }}
+          style={{ colorScheme: 'dark' }}
+          className="w-full rounded-md border border-white/10 bg-surface-1/50 px-2.5 py-1.5 font-mono text-xs text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
+        >
+          <option value="" className="bg-surface-2 text-text-primary">
+            None
+          </option>
+          <option value="AK1" className="bg-surface-2 text-text-primary">
+            AK1
+          </option>
+          <option value="AK2" className="bg-surface-2 text-text-primary">
+            AK2
+          </option>
+          <option value="AK3" className="bg-surface-2 text-text-primary">
+            AK3
+          </option>
+        </select>
+        <p className="mt-1 text-[10px] text-text-secondary/60">
+          Columns sharing an alt key group form one composite business key. NN + UQ are
+          auto-enforced.
+        </p>
+      </div>
+
       <div className="sm:col-span-2 grid grid-cols-3 gap-2 rounded-md border border-white/5 bg-surface-1/30 p-2">
         <MetaCell label="Ordinal" value={attribute.ordinalPosition} />
         <MetaCell

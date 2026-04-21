@@ -1,28 +1,37 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { KeyRound } from 'lucide-react';
-import type { NamingLintRule } from '@cc/shared';
+import type { Layer, NamingLintRule } from '@cc/shared';
 import { OrphanBadge } from './OrphanBadge';
+import { EntityHeader } from './EntityHeader';
+import { AttributeFlagCell } from './AttributeFlagCell';
 
 /**
  * Custom React Flow node for a Model Studio entity.
  *
- * Visual rules (Infection Virus):
- *  - Glass card with backdrop blur, depth shadow on hover.
- *  - Selected → amber glow ring.
- *  - Naming-lint violation on the displayed name → amber underline.
- *  - Step 5: primary-key attributes render above a divider line, then
- *    the remaining attributes below. A "+N more" tag appears when
- *    either group overflows the MAX_VISIBLE cap.
- *  - Step 6: attribute-level handles (invisible) on every row. The
- *    four entity-level handles remain as fallbacks when a modeller
- *    drags from the card body rather than a specific row.
- *  - Step 6: subscribes to `rel:hover` — when the source or target
- *    id of a hovered edge matches this node, apply an amber pulsing
- *    ring for 1.5s (D-R2).
- *  - Step 6: D-R5 orphan badge rendered when `relCount === 0`, toggled
- *    by `showOrphanBadge` (passed in via the node's `data` so the
- *    canvas can respect the per-user preference).
+ * Step 6 Direction A rewrite — the composer pattern. EntityNode owns
+ * hover/selection/rel-hover plumbing and delegates pure visual pieces
+ * to `<EntityHeader>` (name + displayId + optional lint underline)
+ * and `<AttributeLine>` (which in turn delegates flags to
+ * `<AttributeFlagCell>`). The header no longer renders the "P" layer
+ * chip or a "no business name" placeholder — Direction A removed both.
+ *
+ * Handles:
+ *   - Four entity-level handles: `top`, `bottom`, `left`, `right-top`
+ *     (the old `right` id was split so self-ref edges can route
+ *     `right-top → right-bottom` on the same entity). `right-bottom`
+ *     is a dedicated target handle stacked below the mid-point at
+ *     `top: 70%` so γ's 3-segment orthogonal loop lands on the same
+ *     side of the card as Erwin convention expects.
+ *   - Per-attribute invisible handles remain as hit targets for
+ *     future attribute-to-attribute routing.
+ *
+ * Conceptual-layer BK branch:
+ *   - When `layer === 'conceptual'` AND at least one attribute carries
+ *     an `altKeyGroup` AND the only PK is a surrogate (uuid / integer
+ *     family), the surrogate PKs are filtered out of the visible
+ *     attribute list and the BK attrs form the primary identifier
+ *     group. Otherwise PKs render above the divider as they always
+ *     have. See `primaryIdentifierAttrIds` helper below.
  */
 
 export interface EntityNodeAttribute {
@@ -30,6 +39,10 @@ export interface EntityNodeAttribute {
   name: string;
   dataType: string | null;
   isPrimaryKey: boolean;
+  isForeignKey?: boolean;
+  isNullable?: boolean;
+  isUnique?: boolean;
+  altKeyGroup?: string | null;
   ordinalPosition: number;
 }
 
@@ -38,8 +51,10 @@ export interface EntityNodeAttribute {
 export interface EntityNodeData extends Record<string, unknown> {
   name: string;
   businessName: string | null;
-  layer: 'conceptual' | 'logical' | 'physical';
+  layer: Layer;
   lint: NamingLintRule[];
+  /** Step 6 Direction A — server-assigned display id (`E001`, …). */
+  displayId?: string | null;
   /** Attribute summaries for rendering PKs above the divider and the
    *  remainder below. Undefined when the canvas has not yet loaded
    *  attributes for this entity (lazy-load on panel-open for now). */
@@ -54,17 +69,61 @@ export interface EntityNodeProps extends NodeProps {
   data: EntityNodeData;
 }
 
-const LAYER_BADGE: Record<EntityNodeData['layer'], { label: string; tone: string }> = {
-  conceptual: { label: 'C', tone: 'bg-blue-500/30 text-blue-200 border-blue-400/40' },
-  logical: { label: 'L', tone: 'bg-emerald-500/30 text-emerald-200 border-emerald-400/40' },
-  physical: { label: 'P', tone: 'bg-amber-500/30 text-amber-200 border-amber-400/40' },
-};
-
 const MAX_VISIBLE_PER_GROUP = 5;
+
+/** Data types that carry no business meaning on their own — matches
+ *  the server-side lint's surrogate list so the conceptual-layer
+ *  hide-surrogate-PK branch stays in lock-step with BK linting. */
+const SURROGATE_TYPES: ReadonlySet<string> = new Set([
+  'uuid',
+  'integer',
+  'int',
+  'int4',
+  'int8',
+  'bigint',
+  'serial',
+  'bigserial',
+  'smallint',
+]);
+
+/**
+ * Compute the set of attribute ids that form the entity's primary
+ * identifier FOR DISPLAY (not a schema-level concept). On the
+ * conceptual layer, when a BK exists AND the only PK is surrogate,
+ * the BK is the primary identifier and the surrogate PK is hidden.
+ * Returns a tuple of `(primaryIds, shouldHideSurrogatePks)`.
+ */
+function computePrimaryIdentifier(
+  layer: Layer,
+  attrs: EntityNodeAttribute[],
+): { primaryIds: Set<string>; hideSurrogatePks: boolean } {
+  const pkAttrs = attrs.filter((a) => a.isPrimaryKey);
+  const akAttrs = attrs.filter(
+    (a) => typeof a.altKeyGroup === 'string' && a.altKeyGroup.length > 0,
+  );
+
+  // Default — PKs are the primary identifier; surrogate keys stay
+  // visible on logical/physical layers.
+  if (layer !== 'conceptual') {
+    return { primaryIds: new Set(pkAttrs.map((a) => a.id)), hideSurrogatePks: false };
+  }
+  if (akAttrs.length === 0) {
+    return { primaryIds: new Set(pkAttrs.map((a) => a.id)), hideSurrogatePks: false };
+  }
+  // Conceptual layer + BK exists. If the only PK is surrogate, hide
+  // it and promote the BK to primary-identifier status. Composite PKs
+  // and natural PKs (e.g. varchar ISBN) stay visible — the PK itself
+  // is already the business key in those cases.
+  const onlySurrogatePk =
+    pkAttrs.length === 1 && SURROGATE_TYPES.has((pkAttrs[0].dataType ?? '').trim().toLowerCase());
+  if (!onlySurrogatePk) {
+    return { primaryIds: new Set(pkAttrs.map((a) => a.id)), hideSurrogatePks: false };
+  }
+  return { primaryIds: new Set(akAttrs.map((a) => a.id)), hideSurrogatePks: true };
+}
 
 function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
   const violation = data.lint.find((l) => l.severity === 'violation');
-  const badge = LAYER_BADGE[data.layer];
 
   // D-R2 — listen for rel:hover and pulse the border when this node is
   // an endpoint of the hovered edge.
@@ -115,13 +174,25 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
     };
   }, [id]);
 
-  // Split attributes into PKs (top) and non-PKs (bottom). Each group
-  // is already stably sorted because the canvas feeds them in
-  // ordinal_position order.
-  const attrs = data.attributes ?? [];
-  const pks = attrs.filter((a) => a.isPrimaryKey);
-  const nonPks = attrs.filter((a) => !a.isPrimaryKey);
-  const hasAttrs = attrs.length > 0;
+  const allAttrs = data.attributes ?? [];
+  const { primaryIds, hideSurrogatePks } = useMemo(
+    () => computePrimaryIdentifier(data.layer, allAttrs),
+    [data.layer, allAttrs],
+  );
+
+  // Build the visible attribute list. On the conceptual-layer BK
+  // branch, surrogate PKs are filtered out entirely so the card reads
+  // "name is the identifier here" at a glance.
+  const visibleAttrs = useMemo(() => {
+    if (!hideSurrogatePks) return allAttrs;
+    return allAttrs.filter((a) => !a.isPrimaryKey);
+  }, [allAttrs, hideSurrogatePks]);
+
+  // Primary-identifier group (above the divider) = attrs whose id is
+  // in `primaryIds`. Non-primary = everything else in the visible set.
+  const primaryAttrs = visibleAttrs.filter((a) => primaryIds.has(a.id));
+  const nonPrimaryAttrs = visibleAttrs.filter((a) => !primaryIds.has(a.id));
+  const hasAttrs = visibleAttrs.length > 0;
 
   return (
     <div
@@ -147,9 +218,10 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
       {/*
         Entity-level handles get stable `id`s so the canvas can route
         self-referential edges (source + target are the same entity) to
-        two DIFFERENT anchor points. Without these ids React Flow
-        collapses source==target to the same default anchor and the
-        self-ref arc renderer can't span a loop. See ModelStudioCanvas
+        two DIFFERENT anchor points. The old `right` handle id was split
+        into `right-top` (source) and `right-bottom` (target) so the
+        3-segment orthogonal self-ref loop routes on the right side
+        of the entity, matching Erwin convention. See ModelStudioCanvas
         edges memo where `sourceHandle`/`targetHandle` are stamped on
         self-ref edges.
       */}
@@ -187,11 +259,29 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
         }}
       />
       <Handle
-        id="right"
+        id="right-top"
         type="source"
         position={Position.Right}
         className="!h-2.5 !w-2.5 !border-0 !bg-accent"
         style={{
+          opacity: isHovered ? 1 : 0,
+          boxShadow: '0 0 6px rgba(255,214,10,0.55)',
+          transition: 'opacity 120ms ease-out',
+        }}
+      />
+      {/*
+        Self-ref target handle — stacked below mid-point at 70% so the
+        source (`right-top`, mid) and target (`right-bottom`) sit on the
+        same right edge with enough vertical separation for γ's
+        orthogonal loop to read clearly.
+      */}
+      <Handle
+        id="right-bottom"
+        type="target"
+        position={Position.Right}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent"
+        style={{
+          top: '70%',
           opacity: isHovered ? 1 : 0,
           boxShadow: '0 0 6px rgba(255,214,10,0.55)',
           transition: 'opacity 120ms ease-out',
@@ -203,58 +293,43 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
         <OrphanBadge entityId={id} relCount={data.relCount ?? 0} />
       )}
 
-      <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2">
-        <span
-          className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tracking-wider ${badge.tone}`}
-          title={`${data.layer} layer`}
-          aria-label={`${data.layer} layer`}
-        >
-          {badge.label}
-        </span>
-        <span
-          data-testid="entity-node-name"
-          className={[
-            'truncate text-sm font-semibold text-text-primary',
-            violation ? 'underline decoration-amber-400 decoration-wavy underline-offset-4' : '',
-          ].join(' ')}
-          title={violation?.message}
-        >
-          {data.name || 'untitled'}
-        </span>
-      </div>
-      {data.businessName ? (
-        <div className="px-3 pb-2 text-xs text-text-secondary truncate" title={data.businessName}>
-          {data.businessName}
-        </div>
-      ) : (
-        <div className="px-3 pb-2 text-xs text-text-secondary/50 italic">no business name</div>
-      )}
+      <EntityHeader
+        name={data.name}
+        businessName={data.businessName}
+        layer={data.layer}
+        displayId={data.displayId ?? null}
+        hasLintViolation={Boolean(violation)}
+      />
 
       {hasAttrs && (
         <div data-testid="entity-node-attributes" className="border-t border-white/10">
-          {pks.length > 0 && (
-            <ul data-testid="entity-node-pk-group" className="px-3 py-1.5 space-y-0.5">
-              {pks.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
-                <AttributeLine key={a.id} attr={a} isPk />
+          {primaryAttrs.length > 0 && (
+            <ul
+              data-testid="entity-node-pk-group"
+              data-primary-kind={hideSurrogatePks ? 'bk' : 'pk'}
+              className="px-3 py-1.5 space-y-0.5"
+            >
+              {primaryAttrs.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
+                <AttributeLine key={a.id} attr={a} isPrimary />
               ))}
-              {pks.length > MAX_VISIBLE_PER_GROUP && (
+              {primaryAttrs.length > MAX_VISIBLE_PER_GROUP && (
                 <li className="text-[10px] text-text-secondary italic">
-                  +{pks.length - MAX_VISIBLE_PER_GROUP} more
+                  +{primaryAttrs.length - MAX_VISIBLE_PER_GROUP} more
                 </li>
               )}
             </ul>
           )}
-          {pks.length > 0 && nonPks.length > 0 && (
+          {primaryAttrs.length > 0 && nonPrimaryAttrs.length > 0 && (
             <div data-testid="entity-node-pk-divider" className="border-t border-white/10" />
           )}
-          {nonPks.length > 0 && (
+          {nonPrimaryAttrs.length > 0 && (
             <ul data-testid="entity-node-nonpk-group" className="px-3 py-1.5 space-y-0.5">
-              {nonPks.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
-                <AttributeLine key={a.id} attr={a} isPk={false} />
+              {nonPrimaryAttrs.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
+                <AttributeLine key={a.id} attr={a} isPrimary={false} />
               ))}
-              {nonPks.length > MAX_VISIBLE_PER_GROUP && (
+              {nonPrimaryAttrs.length > MAX_VISIBLE_PER_GROUP && (
                 <li className="text-[10px] text-text-secondary italic">
-                  +{nonPks.length - MAX_VISIBLE_PER_GROUP} more
+                  +{nonPrimaryAttrs.length - MAX_VISIBLE_PER_GROUP} more
                 </li>
               )}
             </ul>
@@ -265,24 +340,33 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
   );
 }
 
-function AttributeLine({ attr, isPk }: { attr: EntityNodeAttribute; isPk: boolean }) {
+function AttributeLine({ attr, isPrimary }: { attr: EntityNodeAttribute; isPrimary: boolean }) {
+  const altKey = attr.altKeyGroup ?? null;
+  const isPk = attr.isPrimaryKey;
+  const isFk = attr.isForeignKey === true;
+  // NN/UQ are normalised downstream when altKeyGroup is set (composite
+  // UNIQUE + NOT NULL are auto-coerced by the server normaliser). The
+  // cell reads the flag directly so the canvas narrates exactly what
+  // the server enforces.
+  const isNn = attr.isNullable === false;
+  const isUq = attr.isUnique === true;
+
   return (
     <li
       data-testid="entity-node-attribute"
       data-is-pk={isPk ? 'true' : 'false'}
+      data-is-primary={isPrimary ? 'true' : 'false'}
       className="relative flex items-center gap-1.5 text-[11px]"
     >
-      {isPk ? (
-        <KeyRound className="h-3 w-3 shrink-0 text-accent" aria-label="Primary key" />
-      ) : (
-        <span className="inline-block h-3 w-3 shrink-0" />
-      )}
-      <span className="truncate text-text-primary font-medium">{attr.name}</span>
+      <span className="truncate font-mono text-text-primary font-medium">{attr.name}</span>
       {attr.dataType && (
-        <span className="ml-auto shrink-0 text-text-secondary/70 text-[10px] font-mono">
+        <span className="shrink-0 font-mono text-text-secondary/70 text-[10px]">
           {attr.dataType}
         </span>
       )}
+      <span className="ml-auto shrink-0">
+        <AttributeFlagCell isPk={isPk} isFk={isFk} isNn={isNn} isUq={isUq} altKeyGroup={altKey} />
+      </span>
       {/* Attribute-level handles retained as hit targets for attr-to-
           attr routing (Step-7 layer_links + future precision drag)
           but rendered fully invisible. Senior-practitioner target:

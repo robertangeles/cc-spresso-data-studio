@@ -15,6 +15,7 @@ const entity = (id: string, name: string): EntitySummary => ({
   description: null,
   layer: 'logical',
   entityType: 'standard',
+  displayId: null,
   metadata: {},
   tags: [],
   createdAt: '2026-04-20T00:00:00.000Z',

@@ -213,6 +213,95 @@ const CAMEL_OR_PASCAL_CASE = /[a-z][A-Z]|^[A-Z][a-z]+[A-Z]/;
 // `belongs_to_customer`, `customer_to_invoice`, `line_items_of_order`).
 const RELATIONSHIP_PATTERN_HINTS: readonly string[] = ['_to_', 'has_', 'belongs_to_', '_of_'];
 
+// ============================================================
+// Step 6 Direction A — entity-level business-key lint.
+// ============================================================
+
+/**
+ * Minimal attribute shape the BK lint needs. Declared locally so this
+ * file doesn't have to take a direct dependency on the heavier
+ * server-side `DataModelAttribute` type. Callers that already have
+ * Drizzle rows can pass them through — structural typing does the rest.
+ */
+export interface BusinessKeyLintAttribute {
+  isPrimaryKey: boolean;
+  dataType?: string | null;
+  altKeyGroup?: string | null;
+}
+
+/** Minimal entity shape the BK lint needs — name + layer. Mirrors the
+ *  identifier-lint signature so callers can reuse existing row types. */
+export interface BusinessKeyLintEntity {
+  name: string;
+  layer: Layer;
+}
+
+/** Data types that Spresso considers "surrogate" — machine-generated
+ *  identifiers with no business meaning on their own. The lint only
+ *  fires on entities whose single PK column is one of these types; an
+ *  entity with a natural PK (e.g. varchar ISBN) is exempt because the
+ *  PK itself is already the business key. Case-insensitive match. */
+const SURROGATE_PK_TYPES: ReadonlySet<string> = new Set([
+  'uuid',
+  'integer',
+  'int',
+  'int4',
+  'int8',
+  'bigint',
+  'serial',
+  'bigserial',
+  'smallint',
+  'smallserial',
+]);
+
+/**
+ * Warn when an entity has a surrogate PK but no attribute carries an
+ * alt-key (business-key) group. The concern is conceptual, not
+ * physical: surrogate keys are invisible to the business, so without
+ * at least one AK group there is no human-recognisable identifier for
+ * the row — a problem in the conceptual layer and in any BI export.
+ *
+ * Returns `[]` when:
+ *   - the entity has no PK at all (nothing to complain about — the
+ *     modeller may still be sketching);
+ *   - the PK is composite (composite PKs are already business-shaped
+ *     in practice);
+ *   - the single PK column's type is NOT a surrogate (natural PK);
+ *   - any attribute already has a non-null `altKeyGroup` set.
+ *
+ * Severity is `info` so the UI can render a subtle advisory rather
+ * than a blocker — the modeller always has the final call on whether
+ * a surrogate-only model is acceptable.
+ */
+export function lintEntityForBusinessKey(
+  _entity: BusinessKeyLintEntity,
+  attributes: readonly BusinessKeyLintAttribute[],
+): NamingLintRule[] {
+  const pkColumns = attributes.filter((a) => a.isPrimaryKey);
+  if (pkColumns.length === 0) return [];
+
+  // Composite PK → the business key is the composite itself; skip.
+  if (pkColumns.length > 1) return [];
+
+  const pk = pkColumns[0];
+  const dataType = pk.dataType?.trim().toLowerCase() ?? '';
+  if (!SURROGATE_PK_TYPES.has(dataType)) return [];
+
+  const hasAkGroup = attributes.some(
+    (a) => typeof a.altKeyGroup === 'string' && a.altKeyGroup.length > 0,
+  );
+  if (hasAkGroup) return [];
+
+  return [
+    {
+      rule: 'entity_missing_business_key',
+      severity: 'info',
+      message:
+        'Entity has a PK but no business key — add an alt-key group (AK1) so the conceptual layer has a human-recognisable identifier.',
+    },
+  ];
+}
+
 /**
  * Lint a relationship name on a given layer.
  *

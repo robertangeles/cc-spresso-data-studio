@@ -2048,6 +2048,12 @@ export const dataModelEntities = pgTable(
     description: text('description'),
     layer: varchar('layer', { length: 20 }).notNull(),
     entityType: varchar('entity_type', { length: 20 }).notNull().default('standard'),
+    // Step 6 Direction A — human-readable monotonic ID per model
+    // (`E001`, `E002`, …). Surfaced top-right of the entity card in
+    // the cathedral visual. Nullable because the add-column migration
+    // backfills existing rows via a single window-function UPDATE; new
+    // rows are assigned in `createEntity` inside a transaction.
+    displayId: varchar('display_id', { length: 20 }),
     metadata: jsonb('metadata').notNull().default('{}'),
     tags: jsonb('tags').notNull().default('[]'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2128,6 +2134,13 @@ export const dataModelAttributes = pgTable(
     // attribute property editor. Null when no transformation is
     // documented.
     transformationLogic: text('transformation_logic'),
+    // Step 6 Direction A — alt-key (business-key) grouping label.
+    // `AK1`, `AK2`, …, `null`. Attributes sharing the same non-null
+    // group form ONE composite UNIQUE constraint (enforced at the
+    // DDL-export layer; normaliser auto-coerces NN+UQ on every row
+    // that carries a group). Format enforced at the zod layer as
+    // `/^AK\d+$/`.
+    altKeyGroup: varchar('alt_key_group', { length: 10 }),
     metadata: jsonb('metadata').notNull().default('{}'),
     tags: jsonb('tags').notNull().default('[]'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2141,6 +2154,13 @@ export const dataModelAttributes = pgTable(
     // Index: filter "all PII columns in this model" style queries
     // for governance dashboards. Partial index to skip null rows.
     index('idx_data_model_attributes_classification').on(t.classification),
+    // Step 6 Direction A — partial index on alt-key group. Used by the
+    // DDL exporter to load all attrs participating in a given AK group
+    // within an entity so a composite UNIQUE constraint can be emitted.
+    // Skipped null rows because most columns have no AK group.
+    index('idx_data_model_attributes_ak_group')
+      .on(t.entityId, t.altKeyGroup)
+      .where(sql`alt_key_group IS NOT NULL`),
   ],
 );
 
@@ -2194,6 +2214,11 @@ export const dataModelRelationships = pgTable(
       .notNull()
       .references(() => dataModelEntities.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 128 }),
+    // Step 6 Direction A — inverse verb phrase (target → source
+    // direction). Pair with `name` (source → target) so the edge
+    // renders both phrases (e.g. "manages" / "is_managed_by").
+    // Optional; a rel with a single forward verb still renders fine.
+    inverseName: varchar('inverse_name', { length: 128 }),
     sourceCardinality: varchar('source_cardinality', { length: 20 }).notNull(),
     targetCardinality: varchar('target_cardinality', { length: 20 }).notNull(),
     isIdentifying: boolean('is_identifying').notNull().default(false),

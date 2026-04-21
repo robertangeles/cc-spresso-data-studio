@@ -55,6 +55,10 @@ const FIELD_LABELS: Record<string, string> = {
   layer: 'Layer',
   sourceEntityId: 'Source entity',
   targetEntityId: 'Target entity',
+  // Step 6 Direction A fields
+  altKeyGroup: 'Alt key group',
+  inverseName: 'Inverse verb phrase',
+  displayId: 'Display id',
 };
 
 /** Fields that carry large free-form text. We summarise size rather
@@ -330,6 +334,20 @@ function relCard(raw: unknown): string {
 function describeFieldChange(field: string, prev: unknown, next: unknown): string {
   const label = FIELD_LABELS[field] ?? humaniseKey(field);
 
+  // Step 6 Direction A — BK / inverse-verb / display-id phrases.
+  // Rendered as first-class English rather than generic field diffs so
+  // the audit trail reads as "Flagged x as AK1" (not "Alt key group
+  // changed from null to AK1").
+  if (field === 'altKeyGroup') {
+    return describeAltKeyGroupChange(prev, next);
+  }
+  if (field === 'inverseName') {
+    return describeInverseNameChange(prev, next);
+  }
+  if (field === 'displayId') {
+    return describeDisplayIdChange(prev, next);
+  }
+
   // Booleans — phrase as state toggles when it reads naturally.
   if (typeof prev === 'boolean' || typeof next === 'boolean') {
     return describeBooleanChange(field, label, prev, next);
@@ -356,6 +374,44 @@ function describeFieldChange(field: string, prev: unknown, next: unknown): strin
   if (prev == null && next != null) return `${label} set to ${nextRendered}.`;
   if (prev != null && next == null) return `${label} cleared (was ${prevRendered}).`;
   return `${label} changed from ${prevRendered} to ${nextRendered}.`;
+}
+
+/** Step 6 Direction A — BK alt-key-group transitions. Four legal shapes:
+ *   null      → AKn    "Flagged <attr> as AKn" (but attr name lives on
+ *                      the row header, not in this phrase — the audit
+ *                      tab prefixes every phrase with the object name).
+ *   AKn       → null   "Cleared alt key group"
+ *   AK1       → AK2    "Moved from AK1 to AK2"
+ *   anything else falls through to a generic phrase. */
+function describeAltKeyGroupChange(prev: unknown, next: unknown): string {
+  const p = typeof prev === 'string' && prev.length > 0 ? prev : null;
+  const n = typeof next === 'string' && next.length > 0 ? next : null;
+  if (p == null && n != null) return `Flagged as ${code(n)}.`;
+  if (p != null && n == null) return 'Cleared alt key group.';
+  if (p != null && n != null) return `Moved from ${code(p)} to ${code(n)}.`;
+  return 'Alt key group unchanged.';
+}
+
+/** Step 6 Direction A — inverse verb phrase (target → source label). */
+function describeInverseNameChange(prev: unknown, next: unknown): string {
+  const p = typeof prev === 'string' && prev.length > 0 ? prev : null;
+  const n = typeof next === 'string' && next.length > 0 ? next : null;
+  if (p == null && n != null) return `Set inverse verb phrase to ${code(n)}.`;
+  if (p != null && n == null) return `Cleared inverse verb phrase (was ${code(p)}).`;
+  if (p != null && n != null) return `Renamed inverse verb phrase to ${code(n)}.`;
+  return 'Inverse verb phrase unchanged.';
+}
+
+/** Step 6 Direction A — server-assigned display id (`E001`, `E002`, …).
+ *  Display ids are monotonic + immutable once assigned, so in practice
+ *  only the `null → En` transition fires in production. */
+function describeDisplayIdChange(prev: unknown, next: unknown): string {
+  const p = typeof prev === 'string' && prev.length > 0 ? prev : null;
+  const n = typeof next === 'string' && next.length > 0 ? next : null;
+  if (p == null && n != null) return `Assigned display id ${code(n)}.`;
+  if (p != null && n == null) return `Cleared display id (was ${code(p)}).`;
+  if (p != null && n != null) return `Reassigned display id from ${code(p)} to ${code(n)}.`;
+  return 'Display id unchanged.';
 }
 
 function describeBooleanChange(field: string, label: string, prev: unknown, next: unknown): string {

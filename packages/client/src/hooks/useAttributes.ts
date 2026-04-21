@@ -36,6 +36,10 @@ export interface AttributeSummary {
   defaultValue: string | null;
   classification: string | null;
   transformationLogic: string | null;
+  /** Step 6 Direction A — alt-key group label (`AK1`, `AK2`, …) when
+   *  this attribute participates in a composite business key. `null`
+   *  when the attribute is not part of a BK. */
+  altKeyGroup: string | null;
   ordinalPosition: number;
   metadata: Record<string, unknown>;
   tags: string[];

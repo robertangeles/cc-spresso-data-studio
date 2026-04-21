@@ -627,6 +627,36 @@ describe('Model Studio — inference threshold (S6-I10 surrogate)', () => {
 });
 
 // --------------------------------------------------------------------
+// Step 6 Direction A — inverse verb phrase echo-back.
+// --------------------------------------------------------------------
+
+describe('Model Studio — Direction A relationships', () => {
+  it('S6-DA-I4: POST /relationships with inverseName="is_managed_by" → 201 + row.inverseName echoed', async () => {
+    const res = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId,
+        targetEntityId: thirdEntityId,
+        name: 'manages',
+        inverseName: 'is_managed_by',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as ApiResponse<
+      RelationshipDTO & { inverseName: string | null }
+    >;
+    expect(body.success).toBe(true);
+    expect(body.data.name).toBe('manages');
+    expect(body.data.inverseName).toBe('is_managed_by');
+  });
+});
+
+// --------------------------------------------------------------------
 // Noise suppression: keep the file importing both `users` and
 // `organisations` + `dataModels` so TS does not prune them — we rely
 // on those for the afterAll cleanup in future iterations.

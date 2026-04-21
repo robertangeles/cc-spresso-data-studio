@@ -74,6 +74,8 @@ export interface RelationshipPanelProps {
     relId: string,
     input: {
       name?: string | null;
+      /** Step 6 Direction A — inverse verb phrase (target → source). */
+      inverseName?: string | null;
       sourceCardinality?: Cardinality;
       targetCardinality?: Cardinality;
       isIdentifying?: boolean;
@@ -556,11 +558,13 @@ function GeneralRelTab({
 }) {
   const { toast } = useToast();
   const [name, setName] = useState<string>(relationship.name ?? '');
+  const [inverseName, setInverseName] = useState<string>(relationship.inverseName ?? '');
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setName(relationship.name ?? '');
-  }, [relationship.id, relationship.name]);
+    setInverseName(relationship.inverseName ?? '');
+  }, [relationship.id, relationship.name, relationship.inverseName]);
 
   const lint: NamingLintRule[] = lintRelationshipName(name, relationship.layer);
   const warning = lint.find((l) => l.severity === 'violation' || l.severity === 'warning');
@@ -575,6 +579,17 @@ function GeneralRelTab({
     }
     toast('Relationship updated', 'success');
   }, [name, relationship, onUpdate, onConflict, toast]);
+
+  const commitInverseName = useCallback(async () => {
+    const next = inverseName.trim() ? inverseName.trim() : null;
+    if (next === (relationship.inverseName ?? null)) return;
+    const result = await onUpdate(relationship.id, { inverseName: next }, relationship.version);
+    if (isVersionConflictResult(result)) {
+      onConflict();
+      return;
+    }
+    toast('Inverse verb phrase updated', 'success');
+  }, [inverseName, relationship, onUpdate, onConflict, toast]);
 
   return (
     <div className="flex flex-col gap-4 px-4 py-4">
@@ -618,6 +633,23 @@ function GeneralRelTab({
             {warning.message}
           </p>
         )}
+      </Row>
+      <Row
+        label="Inverse verb phrase (optional)"
+        hint="Reads the relationship from target → source."
+      >
+        <input
+          data-testid="relationship-inverse-name-input"
+          value={inverseName}
+          onChange={(e) => setInverseName(e.target.value)}
+          onBlur={commitInverseName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+          }}
+          placeholder="e.g. is_placed_by, is_managed_by"
+          autoComplete="off"
+          className="w-full rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-1.5 font-mono text-sm text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
+        />
       </Row>
     </div>
   );

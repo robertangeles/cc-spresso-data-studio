@@ -180,11 +180,16 @@ function InnerCanvas({ modelId, layer }: Props) {
           businessName: e.businessName,
           layer: e.layer,
           lint: e.lint,
+          displayId: e.displayId,
           attributes: entityAttrs?.map((a) => ({
             id: a.id,
             name: a.name,
             dataType: a.dataType,
             isPrimaryKey: a.isPrimaryKey,
+            isForeignKey: a.isForeignKey,
+            isNullable: a.isNullable,
+            isUnique: a.isUnique,
+            altKeyGroup: a.altKeyGroup,
             ordinalPosition: a.ordinalPosition,
           })),
           relCount: relCountByEntity.get(e.id) ?? 0,
@@ -274,7 +279,9 @@ function InnerCanvas({ modelId, layer }: Props) {
           target: r.targetEntityId,
           type: 'relationship',
           selected: r.id === selectedRelId,
-          ...(selfRef ? { zIndex: 1000, sourceHandle: 'right', targetHandle: 'top' } : {}),
+          ...(selfRef
+            ? { zIndex: 1000, sourceHandle: 'right-top', targetHandle: 'right-bottom' }
+            : {}),
           data: {
             sourceCardinality: r.sourceCardinality,
             targetCardinality: r.targetCardinality,
@@ -286,6 +293,8 @@ function InnerCanvas({ modelId, layer }: Props) {
             targetEntityId: r.targetEntityId,
             relId: r.id,
             ...(r.name ? { name: r.name } : {}),
+            verbForward: r.name ?? null,
+            verbInverse: r.inverseName ?? null,
           },
         };
       });
@@ -882,7 +891,7 @@ function InnerCanvas({ modelId, layer }: Props) {
           variant={BackgroundVariant.Dots}
           gap={24}
           size={1}
-          color="rgba(255, 214, 10, 0.10)"
+          color="rgba(148, 148, 160, 0.20)"
         />
         <Controls
           position="bottom-right"

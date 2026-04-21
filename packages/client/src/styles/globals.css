@@ -2,8 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── JetBrains Mono (bundled) ─── Step 6 Direction A typography. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src:
+    local('JetBrains Mono'),
+    local('JetBrainsMono-Regular'),
+    url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src:
+    local('JetBrains Mono Medium'),
+    local('JetBrainsMono-Medium'),
+    url('/fonts/JetBrainsMono-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src:
+    local('JetBrains Mono SemiBold'),
+    local('JetBrainsMono-SemiBold'),
+    url('/fonts/JetBrainsMono-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
+    /* Typography — bundled mono stack */
+    --font-mono: 'JetBrains Mono', 'IBM Plex Mono', Menlo, Consolas, 'Courier New', monospace;
+
     /* Surfaces — layered depth system */
     --surface-0: #0a0a0b;
     --surface-1: #111113;

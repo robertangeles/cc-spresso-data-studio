@@ -250,6 +250,13 @@ export async function createRelationship(
           sourceEntityId: input.sourceEntityId,
           targetEntityId: input.targetEntityId,
           name: normalised.normalized.name,
+          // Step 6 Direction A — inverse verb phrase. Trim to match
+          // the zod-trimmed forward name; empty string collapses to
+          // null so the edge renderer knows there is no reverse phrase.
+          inverseName:
+            input.inverseName == null || input.inverseName.trim() === ''
+              ? null
+              : input.inverseName.trim(),
           sourceCardinality: normalised.normalized.sourceCardinality!,
           targetCardinality: normalised.normalized.targetCardinality!,
           isIdentifying: input.isIdentifying,
@@ -435,6 +442,15 @@ export async function updateRelationship(
         version: nextVersion,
       };
       if (patch.name !== undefined) setPayload.name = normalised.normalized.name;
+      // Step 6 Direction A — inverse verb phrase. Null / empty /
+      // whitespace-only collapses to null so the edge renderer knows
+      // the reverse phrase is absent.
+      if (patch.inverseName !== undefined) {
+        setPayload.inverseName =
+          patch.inverseName == null || patch.inverseName.trim() === ''
+            ? null
+            : patch.inverseName.trim();
+      }
       if (patch.sourceEntityId !== undefined) setPayload.sourceEntityId = patch.sourceEntityId;
       if (patch.targetEntityId !== undefined) setPayload.targetEntityId = patch.targetEntityId;
       if (patch.sourceCardinality !== undefined)

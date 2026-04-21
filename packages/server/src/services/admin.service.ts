@@ -8,6 +8,11 @@ import {
   addCanvasStatesNotationColumn,
   addRelationshipsVersionAndIndexes,
 } from '../db/migrations/step6-relationships.js';
+import {
+  addAttributesAltKeyGroupColumn,
+  addEntitiesDisplayIdColumn,
+  addRelationshipsInverseNameColumn,
+} from '../db/migrations/step6-direction-a.js';
 
 // --- AI Provider: OpenRouter is the single gateway ---
 
@@ -88,6 +93,13 @@ export async function seedAIProviders(): Promise<void> {
   // the applied_migrations audit trail accurate.
   await runOnce('add-canvas-states-notation-column', addCanvasStatesNotationColumn);
   await runOnce('add-relationships-version-and-indexes', addRelationshipsVersionAndIndexes);
+
+  // Step 6 Direction A — BK/AK groups, inverse verb phrases, display IDs.
+  // Column ADDs are idempotent (`IF NOT EXISTS`); the display_id backfill
+  // is scoped to `WHERE display_id IS NULL` so re-runs are harmless.
+  await runOnce('add-attributes-alt-key-group', addAttributesAltKeyGroupColumn);
+  await runOnce('add-relationships-inverse-name', addRelationshipsInverseNameColumn);
+  await runOnce('add-entities-display-id', addEntitiesDisplayIdColumn);
 }
 
 /** One-time idempotent migration: convert short model IDs to OpenRouter format */

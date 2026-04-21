@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, afterEach } from 'vitest';
+import { render, screen, cleanup } from '@testing-library/react';
+
+afterEach(() => {
+  cleanup();
+});
 import type { Cardinality, Notation } from '@cc/shared';
 import {
   RelationshipEdge,
@@ -134,20 +138,36 @@ describe('idef1xSymbol — table-driven lookup', () => {
   });
 });
 
-describe('selfRefPath — arc geometry (S6-U20)', () => {
-  it('returns an SVG path starting with M and containing a cubic (C) bezier', () => {
-    // Self-ref now routes right(source)→top(target) and draws a single
-    // cubic bezier D-loop between them — see selfRefPath for geometry.
-    const path = selfRefPath(100, 200, 60, 160);
+describe('selfRefPath — 3-segment orthogonal loop (S6-U20 Direction A)', () => {
+  it('returns an SVG path starting with M and containing exactly three L commands', () => {
+    // Direction A: self-ref now routes right-top(source)→right-bottom
+    // (target) and draws a 3-segment orthogonal corridor. No curves.
+    const path = selfRefPath(100, 200, 100, 260);
     expect(path).toMatch(/^M /);
-    expect(path).toMatch(/ C /);
+    const lMatches = path.match(/ L /g) ?? [];
+    expect(lMatches.length).toBe(3);
+    // No bezier or arc commands — the corridor is strictly orthogonal.
+    expect(path).not.toMatch(/ C /);
+    expect(path).not.toMatch(/ A /);
   });
 
-  it('start + end points differ — self-ref must not be a zero-length curve', () => {
-    const path = selfRefPath(100, 200, 60, 160);
-    // Path must END at the target coords, not the source.
-    expect(path.endsWith('60 160')).toBe(true);
-    expect(path.endsWith('100 200')).toBe(false);
+  it('ends at the target coordinates', () => {
+    const path = selfRefPath(100, 200, 100, 260);
+    expect(path.endsWith('100 260')).toBe(true);
+  });
+
+  it('every consecutive pair of points is axis-aligned (no diagonals)', () => {
+    const path = selfRefPath(100, 200, 100, 260);
+    // Parse the commands and their coordinates in order.
+    const tokens = path.split(/[ML]\s+/).filter(Boolean);
+    const points = tokens.map((t) => t.trim().split(/\s+/).map(Number) as [number, number]);
+    expect(points.length).toBe(4); // M + 3 L
+    for (let i = 1; i < points.length; i += 1) {
+      const [px, py] = points[i - 1]!;
+      const [qx, qy] = points[i]!;
+      // Consecutive points must share EITHER x OR y (orthogonal).
+      expect(px === qx || py === qy).toBe(true);
+    }
   });
 
   it('is deterministic for a given source+target pair', () => {
@@ -188,20 +208,20 @@ describe('RelationshipEdge — IDEF1X visual snapshots (S6-U19)', () => {
   }
 });
 
-describe('RelationshipEdge — self-ref rendering (S6-U20)', () => {
-  it('renders a self-ref cubic-bezier path when source === target', () => {
+describe('RelationshipEdge — self-ref rendering (S6-U20 Direction A)', () => {
+  it('renders a 3-segment orthogonal self-ref corridor when source === target', () => {
     const data = baseData('ie', 'one', 'many', false);
     data.isSelfRef = true;
     data.targetEntityId = data.sourceEntityId;
     const { container } = renderEdge(data);
     const root = container.querySelector('[data-testid="relationship-edge-edge-test"]');
     expect(root?.getAttribute('data-self-ref')).toBe('true');
-    // selfRefPath now draws a single cubic bezier D-loop between the
-    // `right` source handle and the `top` target handle — check for
-    // the C (cubic) command, not A (arc). See selfRefPath geometry.
+    // Direction A: path is orthogonal — contains L commands, NOT C or A.
     const path = container.querySelector('path[d]');
     const d = path?.getAttribute('d') ?? '';
-    expect(d).toMatch(/ C /);
+    expect(d).toMatch(/ L /);
+    expect(d).not.toMatch(/ C /);
+    expect(d).not.toMatch(/ A /);
   });
 });
 
@@ -233,5 +253,91 @@ describe('RelationshipEdge — identifying stroke style', () => {
     expect(anyActuallyDashed).toBe(false);
     // Quiet unused-var lint when the filter above returned undefined.
     void styled;
+  });
+
+  it('identifying edge draws a thicker line than non-identifying (Direction A)', () => {
+    // Per Direction A brief: identifying = 2.25, non-identifying = 1.4.
+    const idRender = renderEdge(baseData('ie', 'one', 'many', true));
+    const nonIdRender = renderEdge(baseData('ie', 'one', 'many', false));
+    const idStyle =
+      idRender.container.querySelector('path.react-flow__edge-path')?.getAttribute('style') ?? '';
+    const nonIdStyle =
+      nonIdRender.container.querySelector('path.react-flow__edge-path')?.getAttribute('style') ??
+      '';
+    expect(idStyle).toMatch(/stroke-width:\s*2\.25/);
+    expect(nonIdStyle).toMatch(/stroke-width:\s*1\.4/);
+  });
+});
+
+describe('RelationshipEdge — cardinality text labels (Direction A)', () => {
+  it('renders IE notation text `1..*` for source=one_or_many', () => {
+    const { container } = renderEdge(baseData('ie', 'one_or_many', 'many', true));
+    const sourceLabel = container.querySelector('[data-testid="rel-card-source-edge-test"]');
+    expect(sourceLabel).toBeTruthy();
+    expect(sourceLabel?.getAttribute('data-card-text')).toBe('1..*');
+    expect(sourceLabel?.textContent).toBe('1..*');
+  });
+
+  it('renders IE notation text `0..1` for source=zero_or_one', () => {
+    const { container } = renderEdge(baseData('ie', 'zero_or_one', 'many', true));
+    const sourceLabel = container.querySelector('[data-testid="rel-card-source-edge-test"]');
+    expect(sourceLabel?.getAttribute('data-card-text')).toBe('0..1');
+  });
+
+  it('renders IDEF1X letter `P` for source=one_or_many', () => {
+    const { container } = renderEdge(baseData('idef1x', 'one_or_many', 'many', true));
+    const sourceLabel = container.querySelector('[data-testid="rel-card-source-edge-test"]');
+    expect(sourceLabel?.getAttribute('data-card-text')).toBe('P');
+  });
+
+  it('renders IDEF1X letter `Z` for source=zero_or_one', () => {
+    const { container } = renderEdge(baseData('idef1x', 'zero_or_one', 'many', true));
+    const sourceLabel = container.querySelector('[data-testid="rel-card-source-edge-test"]');
+    expect(sourceLabel?.getAttribute('data-card-text')).toBe('Z');
+  });
+
+  it('renders both source and target cardinality text labels', () => {
+    const { container } = renderEdge(baseData('ie', 'one', 'many', true));
+    expect(container.querySelector('[data-testid="rel-card-source-edge-test"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="rel-card-target-edge-test"]')).toBeTruthy();
+  });
+});
+
+describe('RelationshipEdge — verb phrases (Direction A)', () => {
+  // EdgeLabelRenderer portals its children into React Flow's viewport
+  // div, so the labels live in document.body (not inside our test
+  // container). Use `screen` / `document` to assert visibility.
+
+  it('renders forward AND inverse labels when both are set', () => {
+    const data = baseData('ie', 'one', 'many', true);
+    data.verbForward = 'manages';
+    data.verbInverse = 'is_managed_by';
+    renderEdge(data);
+    const forward = screen.queryByTestId('rel-verb-forward-edge-test');
+    const inverse = screen.queryByTestId('rel-verb-inverse-edge-test');
+    expect(forward).toBeTruthy();
+    expect(inverse).toBeTruthy();
+    expect(forward?.textContent).toBe('manages');
+    expect(inverse?.textContent).toBe('is_managed_by');
+  });
+
+  it('renders a single centred label when only forward is set', () => {
+    const data = baseData('ie', 'one', 'many', true);
+    data.verbForward = 'manages';
+    data.verbInverse = null;
+    renderEdge(data);
+    expect(screen.queryByTestId('rel-verb-single-edge-test')).toBeTruthy();
+    expect(screen.queryByTestId('rel-verb-forward-edge-test')).toBeFalsy();
+    expect(screen.queryByTestId('rel-verb-inverse-edge-test')).toBeFalsy();
+  });
+
+  it('renders nothing when neither verb is set', () => {
+    const data = baseData('ie', 'one', 'many', true);
+    data.verbForward = null;
+    data.verbInverse = null;
+    renderEdge(data);
+    expect(screen.queryByTestId('rel-verb-single-edge-test')).toBeFalsy();
+    expect(screen.queryByTestId('rel-verb-forward-edge-test')).toBeFalsy();
+    expect(screen.queryByTestId('rel-verb-inverse-edge-test')).toBeFalsy();
   });
 });

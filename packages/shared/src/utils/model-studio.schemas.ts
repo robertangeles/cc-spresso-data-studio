@@ -240,6 +240,34 @@ export const entityUpdateSchema = z
   });
 export type EntityUpdate = z.infer<typeof entityUpdateSchema>;
 
+/** Step 6 Direction A — canonical entity output shape the API returns.
+ *  `displayId` is server-generated on create (`E001`, `E002`, …) and
+ *  not user-settable. Exposed here so the client can render the ID
+ *  chip top-right of the entity card. */
+export const entitySchema = z.object({
+  id: uuidParam,
+  dataModelId: uuidParam,
+  name: entityNameSchema,
+  businessName: businessNameSchema.nullable().optional(),
+  description: z.string().nullable().optional(),
+  layer: LAYER,
+  entityType: ENTITY_TYPE,
+  /** Server-assigned monotonic display ID, shape `^E\d+$` (e.g. `E001`).
+   *  Optional because pre-backfill rows may still be null for a brief
+   *  window between the `ALTER TABLE` and the backfill UPDATE — the
+   *  runOnce migration wraps both in a single boot-time step so this
+   *  is a transient concern, not a steady-state one. */
+  displayId: z
+    .string()
+    .regex(/^E\d+$/, 'displayId must match /^E\\d+$/')
+    .optional(),
+  metadata: metadataSchema.default({}),
+  tags: tagsSchema.default([]),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type Entity = z.infer<typeof entitySchema>;
+
 export const entityIdParamsSchema = z.object({
   id: uuidParam,
   entityId: uuidParam,
@@ -326,6 +354,17 @@ const transformationLogicSchema = z
   .string()
   .max(20_000, 'Transformation logic must be 20,000 characters or fewer');
 
+/** Step 6 Direction A — alt-key (business-key) grouping label. Shape
+ *  `AKn` where `n` is one or more digits (`AK1`, `AK2`, `AK10`). Zod
+ *  matches the server-side normaliser regex exactly so rejected input
+ *  fails consistently no matter the entry point. Empty string is NOT
+ *  accepted here — callers use `null` to clear the group. */
+const altKeyGroupSchema = z
+  .string()
+  .regex(/^AK\d+$/, 'altKeyGroup must match /^AK\\d+$/ (e.g. AK1, AK2, AK10)')
+  .nullable()
+  .optional();
+
 export const attributeCreateSchema = z
   .object({
     name: attributeNameSchema,
@@ -346,6 +385,11 @@ export const attributeCreateSchema = z
     defaultValue: defaultValueSchema.optional().nullable(),
     classification: ATTRIBUTE_CLASSIFICATION.optional().nullable(),
     transformationLogic: transformationLogicSchema.optional().nullable(),
+    /** Step 6 Direction A — business-key / alt-key group label. When set,
+     *  the normaliser auto-coerces `isNullable=false` + `isUnique=true`
+     *  on this attribute (composite UNIQUE is emitted at DDL-export
+     *  time across all attrs in the entity sharing the same group). */
+    altKeyGroup: altKeyGroupSchema,
     metadata: metadataSchema.optional(),
     tags: tagsSchema.optional(),
   })
@@ -371,6 +415,10 @@ export const attributeUpdateSchema = z
     defaultValue: defaultValueSchema.nullable().optional(),
     classification: ATTRIBUTE_CLASSIFICATION.nullable().optional(),
     transformationLogic: transformationLogicSchema.nullable().optional(),
+    /** Step 6 Direction A — business-key / alt-key group label.
+     *  `null` clears the group; an `AKn` value adds/moves the attribute
+     *  into that group. See `attributeCreateSchema` for the invariant. */
+    altKeyGroup: altKeyGroupSchema,
     metadata: metadataSchema.optional(),
     tags: tagsSchema.optional(),
   })
@@ -528,6 +576,18 @@ const relationshipNameSchema = z
   .nullable()
   .optional();
 
+/** Step 6 Direction A — inverse verb phrase (target → source). Pair
+ *  with `name` so the edge renders both forward and reverse reading
+ *  directions (e.g. `name="manages"`, `inverseName="is_managed_by"`).
+ *  Same 128-char cap as `name` for symmetry; nullable because a rel
+ *  with only a forward verb is legitimate. */
+const relationshipInverseNameSchema = z
+  .string()
+  .trim()
+  .max(128, 'Inverse name must be 128 characters or fewer')
+  .nullable()
+  .optional();
+
 /** Canonical relationship row as the API returns it. */
 export const relationshipSchema = z.object({
   id: uuidParam,
@@ -535,6 +595,7 @@ export const relationshipSchema = z.object({
   sourceEntityId: uuidParam,
   targetEntityId: uuidParam,
   name: relationshipNameSchema,
+  inverseName: relationshipInverseNameSchema,
   sourceCardinality: CARDINALITY,
   targetCardinality: CARDINALITY,
   isIdentifying: z.boolean(),
@@ -554,6 +615,8 @@ export const createRelationshipSchema = z
     sourceEntityId: uuidParam,
     targetEntityId: uuidParam,
     name: relationshipNameSchema,
+    /** Step 6 Direction A — optional inverse verb phrase. */
+    inverseName: relationshipInverseNameSchema,
     sourceCardinality: CARDINALITY,
     targetCardinality: CARDINALITY,
     isIdentifying: z.boolean(),
@@ -571,6 +634,8 @@ export const updateRelationshipSchema = z
     sourceEntityId: uuidParam.optional(),
     targetEntityId: uuidParam.optional(),
     name: relationshipNameSchema,
+    /** Step 6 Direction A — optional inverse verb phrase. */
+    inverseName: relationshipInverseNameSchema,
     sourceCardinality: CARDINALITY.optional(),
     targetCardinality: CARDINALITY.optional(),
     isIdentifying: z.boolean().optional(),
