@@ -319,20 +319,21 @@
 
 #### Server integration (EXPANSION)
 
-| ID     | Route                                      | Case                                  | Expected                  | Priority |
-| ------ | ------------------------------------------ | ------------------------------------- | ------------------------- | -------- |
-| S6-I3  | `PATCH /rels/:id`                          | Stale version                         | 409 `VERSION_CONFLICT`    | P1       |
-| S6-I4  | `PATCH /rels/:id` isIdentifying false→true | Composite PKs propagated + audit rows | 200 + DB verified         | P1       |
-| S6-I5  | `DELETE /rels/:id` (was identifying)       | Propagated PKs unwound + audit rows   | 200 + DB verified         | P1       |
-| S6-I6  | `POST /rels` cross-model forged body       | src.modelId ≠ tgt.modelId             | 422                       | P1       |
-| S6-I7  | `POST /rels` self-ref                      | source===target                       | 201 (3A)                  | P1       |
-| S6-I8  | `GET /rels` IDOR attempt                   | Other org's modelId                   | 403                       | P1       |
-| S6-I9  | `POST /infer` on zero-FK model             | No FK attrs                           | 200 + `{ proposals: [] }` | P1       |
-| S6-I10 | `POST /infer` on >2000-attr model          | Large model                           | 202 + `{ jobId }` (5A)    | P1       |
-| S6-I11 | `POST /rels` metadata > 4 KB               | Oversized JSONB                       | 422                       | P2       |
-| S6-I12 | Changelog write failure (forced)           | Mocked DB error mid-TX                | Whole TX rolls back       | P1       |
-| S6-I13 | `GET /admin/.../diagnostics`               | Orphan propagated attr seeded         | lists orphan              | P1       |
-| S6-I14 | `GET /admin/.../explain` (Mermaid)         | 5-entity model                        | returns Mermaid ER text   | P2       |
+| ID     | Route                                      | Case                                  | Expected                     | Priority |
+| ------ | ------------------------------------------ | ------------------------------------- | ---------------------------- | -------- |
+| S6-I3  | `PATCH /rels/:id`                          | Stale version                         | 409 `VERSION_CONFLICT`       | P1       |
+| S6-I4  | `PATCH /rels/:id` isIdentifying false→true | Composite PKs propagated + audit rows | 200 + DB verified            | P1       |
+| S6-I5  | `DELETE /rels/:id` (was identifying)       | Propagated PKs unwound + audit rows   | 200 + DB verified            | P1       |
+| S6-I6  | `POST /rels` cross-model forged body       | src.modelId ≠ tgt.modelId             | 422                          | P1       |
+| S6-I7  | `POST /rels` self-ref                      | source===target                       | 201 (3A)                     | P1       |
+| S6-I8  | `GET /rels` IDOR attempt                   | Other org's modelId                   | 403                          | P1       |
+| S6-I9  | `POST /infer` on zero-FK model             | No FK attrs                           | 200 + `{ proposals: [] }`    | P1       |
+| S6-I10 | `POST /infer` on >2000-attr model          | Large model                           | 202 + `{ jobId }` (5A)       | P1       |
+| S6-I11 | `POST /rels` metadata > 4 KB               | Oversized JSONB                       | 422                          | P2       |
+| S6-I12 | Changelog write failure (forced)           | Mocked DB error mid-TX                | Whole TX rolls back          | P1       |
+| S6-I13 | `GET /admin/.../diagnostics`               | Orphan propagated attr seeded         | lists orphan                 | P1       |
+| S6-I14 | `GET /admin/.../explain` (Mermaid)         | 5-entity model                        | returns Mermaid ER text      | P2       |
+| S6-I15 | `PUT /canvas-state` with `notation=ie`     | Patch #4 — schema accepts notation    | 200 (no "Validation failed") | P1       |
 
 #### Client unit (EXPANSION)
 

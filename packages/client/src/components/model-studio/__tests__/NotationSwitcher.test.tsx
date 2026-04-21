@@ -22,6 +22,7 @@ vi.mock('../../../lib/api', () => ({ api: mocks }));
 
 import { NotationSwitcher } from '../NotationSwitcher';
 import { ToastProvider } from '../../ui/Toast';
+import { UndoStackProvider } from '../../../hooks/useUndoStack';
 
 // Use the real BroadcastChannel if present; no cross-tab assertion here.
 const originalBC = globalThis.BroadcastChannel;
@@ -83,7 +84,9 @@ describe('NotationSwitcher — smoke', () => {
   it('renders IE and IDEF1X pills with role=radio', () => {
     render(
       <ToastProvider>
-        <NotationSwitcher modelId="m1" layer="logical" />
+        <UndoStackProvider modelId="m1">
+          <NotationSwitcher modelId="m1" layer="logical" />
+        </UndoStackProvider>
       </ToastProvider>,
     );
     expect(screen.getByTestId('notation-pill-ie')).toBeTruthy();
@@ -94,7 +97,9 @@ describe('NotationSwitcher — smoke', () => {
   it('clicking IDEF1X triggers a PUT with notation=idef1x', async () => {
     render(
       <ToastProvider>
-        <NotationSwitcher modelId="m1" layer="logical" />
+        <UndoStackProvider modelId="m1">
+          <NotationSwitcher modelId="m1" layer="logical" />
+        </UndoStackProvider>
       </ToastProvider>,
     );
     // Let useNotation settle its initial GET.

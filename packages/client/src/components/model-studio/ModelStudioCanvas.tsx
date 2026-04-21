@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -37,6 +37,8 @@ import { EdgeContextMenu } from './EdgeContextMenu';
 import { NotationSwitcher } from './NotationSwitcher';
 import { TidyButton } from './TidyButton';
 import { useNotation } from '../../hooks/useNotation';
+import { UndoStackProvider, useUndoStack, NotUndoableError } from '../../hooks/useUndoStack';
+import { UndoRedoButtons } from './UndoRedoButtons';
 import type { AuditEvent } from '../../lib/auditFormatter';
 import '@xyflow/react/dist/style.css';
 
@@ -55,7 +57,9 @@ interface Props {
 export function ModelStudioCanvas(props: Props) {
   return (
     <ReactFlowProvider>
-      <InnerCanvas {...props} />
+      <UndoStackProvider modelId={props.modelId}>
+        <InnerCanvas {...props} />
+      </UndoStackProvider>
     </ReactFlowProvider>
   );
 }
@@ -75,6 +79,7 @@ function InnerCanvas({ modelId, layer }: Props) {
   const bridge = useRelationshipSyncBridge();
   const { toast } = useToast();
   const rf = useReactFlow();
+  const undo = useUndoStack();
 
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [selectedRelId, setSelectedRelId] = useState<string | null>(null);
@@ -149,20 +154,26 @@ function InnerCanvas({ modelId, layer }: Props) {
     return m;
   }, [rels.relationships]);
 
-  // "Canonical" nodes — the shape React Flow should render, derived purely
-  // from external state (entities, attributes, selection, orphan badges).
-  // We do NOT use this directly as `nodes` on ReactFlow; React Flow v12
-  // needs to own node identity during drag gestures, so we seed a
-  // `useNodesState` from this and merge updates in a sync effect below.
-  const canonicalNodes: Node<EntityNodeData>[] = useMemo(() => {
+  // "Structural" nodes — identity + data shape derived purely from
+  // external state (entities, attributes, selection, orphan badges).
+  // CRITICAL: `canvas.state.nodePositions` is intentionally NOT in this
+  // dep list. Positions flow through React Flow's own `useNodesState`
+  // via the sync effect below, and are seeded once on initial load via
+  // `hasSeededPositions`. Including positions here causes every
+  // `canvas.save` (drag-end, viewport pan) to re-seed node identities,
+  // which makes React Flow re-measure mid-gesture and produces the
+  // scroll/pan bouncing jank reported after commit 7801bc5.
+  const structuralNodes: Node<EntityNodeData>[] = useMemo(() => {
     const visible = ent.entities.filter((e) => e.layer === layer);
     return visible.map((e) => {
-      const pos = canvas.state.nodePositions[e.id] ?? { x: 0, y: 0 };
       const entityAttrs = attrs.attributesByEntity[e.id];
       return {
         id: e.id,
         type: 'entity',
-        position: pos,
+        // Placeholder — real position is patched in by the sync effect
+        // below (live drag state) or the one-time seed effect (persisted
+        // canvas state). Never trust this value.
+        position: { x: 0, y: 0 },
         selected: e.id === selectedEntityId,
         data: {
           name: e.name,
@@ -184,7 +195,6 @@ function InnerCanvas({ modelId, layer }: Props) {
   }, [
     ent.entities,
     layer,
-    canvas.state.nodePositions,
     selectedEntityId,
     attrs.attributesByEntity,
     relCountByEntity,
@@ -197,43 +207,83 @@ function InnerCanvas({ modelId, layer }: Props) {
   // state change.
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState<Node<EntityNodeData>>([]);
 
-  // Sync external (canonical) → local. Preserve positions of nodes that
-  // still exist so an in-flight drag is not clobbered by a data refresh.
+  // Sync structural identity → local. Position precedence:
+  //   1. live drag position already held by React Flow (`existing`)
+  //   2. persisted canvas position (first render before seed effect has run)
+  //   3. (0,0) fallback
+  // We do not re-seed from `canvas.state.nodePositions` here on every
+  // save — that causes the pan/drag bounce. Positions are owned by
+  // React Flow from this point on; canvas saves are one-way.
   useEffect(() => {
     setNodes((prev) => {
       const prevById = new Map(prev.map((n) => [n.id, n]));
-      return canonicalNodes.map((c) => {
-        const existing = prevById.get(c.id);
-        if (!existing) return c;
-        // Keep the live position (drag-aware); refresh everything else.
-        return { ...c, position: existing.position };
+      return structuralNodes.map((s) => {
+        const existing = prevById.get(s.id);
+        const persistedPos = canvas.state.nodePositions[s.id];
+        const position = existing?.position ?? persistedPos ?? { x: 0, y: 0 };
+        return { ...s, position };
       });
     });
-  }, [canonicalNodes, setNodes]);
+    // Positions flow through useNodesState — do NOT add
+    // `canvas.state.nodePositions` to this dep list. See comment on
+    // `structuralNodes`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [structuralNodes, setNodes]);
+
+  // One-time positional seed: when canvas.isLoading transitions to false,
+  // patch persisted positions into React Flow's internal state once.
+  // Subsequent `canvas.save` calls (drag-end, tidy-layout, new-entity)
+  // update `canvas.state.nodePositions` but do NOT re-seed here — those
+  // positions already live in React Flow's state from the interaction
+  // that produced them.
+  const hasSeededPositions = useRef(false);
+  useEffect(() => {
+    if (canvas.isLoading) return;
+    if (hasSeededPositions.current) return;
+    hasSeededPositions.current = true;
+    setNodes((prev) =>
+      prev.map((n) => {
+        const pos = canvas.state.nodePositions[n.id];
+        return pos ? { ...n, position: pos } : n;
+      }),
+    );
+  }, [canvas.isLoading, canvas.state.nodePositions, setNodes]);
 
   // Edges.
+  //
+  // Self-ref note (#6): EntityNode's entity-level handles are
+  // unkeyed (no `id` prop), so React Flow resolves them positionally
+  // rather than by string id. We can't redirect the target endpoint
+  // to a different handle from the canvas. Instead `selfRefPath` in
+  // RelationshipEdge projects the arc OUTWARD from the collapsed
+  // source handle, and we pin self-ref edges above node z-index so
+  // the projected arc isn't clipped behind the card body.
   const edges: Edge<RelationshipEdgeData>[] = useMemo(() => {
     return rels.relationships
       .filter((r) => r.layer === layer)
-      .map((r) => ({
-        id: r.id,
-        source: r.sourceEntityId,
-        target: r.targetEntityId,
-        type: 'relationship',
-        selected: r.id === selectedRelId,
-        data: {
-          sourceCardinality: r.sourceCardinality,
-          targetCardinality: r.targetCardinality,
-          isIdentifying: r.isIdentifying,
-          notation,
-          isSelfRef: r.sourceEntityId === r.targetEntityId,
-          isNewlyCreated: r.id === newlyCreatedRelId,
-          sourceEntityId: r.sourceEntityId,
-          targetEntityId: r.targetEntityId,
-          relId: r.id,
-          ...(r.name ? { name: r.name } : {}),
-        },
-      }));
+      .map((r) => {
+        const selfRef = r.sourceEntityId === r.targetEntityId;
+        return {
+          id: r.id,
+          source: r.sourceEntityId,
+          target: r.targetEntityId,
+          type: 'relationship',
+          selected: r.id === selectedRelId,
+          ...(selfRef ? { zIndex: 1000 } : {}),
+          data: {
+            sourceCardinality: r.sourceCardinality,
+            targetCardinality: r.targetCardinality,
+            isIdentifying: r.isIdentifying,
+            notation,
+            isSelfRef: selfRef,
+            isNewlyCreated: r.id === newlyCreatedRelId,
+            sourceEntityId: r.sourceEntityId,
+            targetEntityId: r.targetEntityId,
+            relId: r.id,
+            ...(r.name ? { name: r.name } : {}),
+          },
+        };
+      });
   }, [rels.relationships, layer, selectedRelId, notation, newlyCreatedRelId]);
 
   // Clear the shimmer flag after the animation window closes.
@@ -257,12 +307,23 @@ function InnerCanvas({ modelId, layer }: Props) {
       const next = applyNodeChanges(changes, nodes);
       const nextPositions: Record<string, { x: number; y: number }> = {};
       for (const n of next) nextPositions[n.id] = { x: n.position.x, y: n.position.y };
-      canvas.save({
-        nodePositions: nextPositions,
-        viewport: canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 },
+      const previousPositions = { ...canvas.state.nodePositions };
+      const viewport = canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 };
+      // Undo-wrapped: capture the pre-drag position map so Cmd+Z
+      // snaps nodes back where they started. `canvas.save` is
+      // optimistic + local, so replaying it on undo/redo produces
+      // the expected visible motion.
+      void undo.execute({
+        label: 'Move entity',
+        do: async () => {
+          canvas.save({ nodePositions: nextPositions, viewport });
+        },
+        undo: async () => {
+          canvas.save({ nodePositions: previousPositions, viewport });
+        },
       });
     },
-    [canvas, nodes, onNodesChangeInternal],
+    [canvas, nodes, onNodesChangeInternal, undo],
   );
 
   const handleMoveEnd = useCallback(
@@ -279,21 +340,38 @@ function InnerCanvas({ modelId, layer }: Props) {
     async (event: React.MouseEvent) => {
       const flowPos = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY });
       try {
-        const created = await ent.create({
-          name: DEFAULT_ENTITY_NAME,
-          layer,
-          entityType: 'standard',
-        });
-        canvas.save({
-          nodePositions: { ...canvas.state.nodePositions, [created.id]: flowPos },
-          viewport: canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 },
+        const created = await undo.execute({
+          label: 'Create entity',
+          do: async () => {
+            const e = await ent.create({
+              name: DEFAULT_ENTITY_NAME,
+              layer,
+              entityType: 'standard',
+            });
+            canvas.save({
+              nodePositions: { ...canvas.state.nodePositions, [e.id]: flowPos },
+              viewport: canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 },
+            });
+            return e;
+          },
+          undo: async (_snap, createdEntity) => {
+            // Entity create IS undoable because we own the cascade
+            // context (no attrs + no rels yet at creation time).
+            await ent.remove(createdEntity.id, { cascade: true });
+            const rest = { ...canvas.state.nodePositions };
+            delete rest[createdEntity.id];
+            canvas.save({
+              nodePositions: rest,
+              viewport: canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 },
+            });
+          },
         });
         setSelectedEntityId(created.id);
       } catch {
         /* errors surface via ent.error */
       }
     },
-    [rf, ent, layer, canvas],
+    [rf, ent, layer, canvas, undo],
   );
 
   const handleNodeClick: NodeMouseHandler<Node<EntityNodeData>> = useCallback((_evt, node) => {
@@ -339,13 +417,19 @@ function InnerCanvas({ modelId, layer }: Props) {
         layer,
       };
       try {
-        const created = await rels.create(payload);
+        const created = await undo.execute({
+          label: 'Create relationship',
+          do: () => rels.create(payload),
+          undo: async (_snap, rel) => {
+            await rels.remove(rel.id);
+          },
+        });
         setNewlyCreatedRelId(created.id);
       } catch {
         /* handled by useRelationships toast */
       }
     },
-    [rels, layer, toast, resolveEntityId],
+    [rels, layer, toast, resolveEntityId, undo],
   );
 
   const handleEdgeContextMenu: EdgeMouseHandler = useCallback(
@@ -383,9 +467,26 @@ function InnerCanvas({ modelId, layer }: Props) {
   const updateSelected = useCallback(
     async (patch: { name?: string; businessName?: string | null; description?: string | null }) => {
       if (!selectedEntityId) return;
-      await ent.update(selectedEntityId, patch);
+      // Snapshot the current entity so we can revert field-by-field.
+      const current = ent.entities.find((e) => e.id === selectedEntityId);
+      if (!current) return;
+      const inversePatch: {
+        name?: string;
+        businessName?: string | null;
+        description?: string | null;
+      } = {};
+      if (patch.name !== undefined) inversePatch.name = current.name;
+      if (patch.businessName !== undefined) inversePatch.businessName = current.businessName;
+      if (patch.description !== undefined) inversePatch.description = current.description;
+      await undo.execute({
+        label: 'Update entity',
+        do: () => ent.update(selectedEntityId, patch),
+        undo: async () => {
+          await ent.update(selectedEntityId, inversePatch);
+        },
+      });
     },
-    [ent, selectedEntityId],
+    [ent, selectedEntityId, undo],
   );
 
   const autoDescribeSelected = useCallback(async () => {
@@ -397,46 +498,127 @@ function InnerCanvas({ modelId, layer }: Props) {
   const deleteSelected = useCallback(
     async (cascade: boolean) => {
       if (!selectedEntityId) return;
-      await ent.remove(selectedEntityId, { cascade });
-      const rest = { ...canvas.state.nodePositions };
-      delete rest[selectedEntityId];
-      canvas.save({
-        nodePositions: rest,
-        viewport: canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 },
+      // Entity delete routes through the stack with a NotUndoableError
+      // so Cmd+Z clears the stack (can't undo older actions against
+      // an inconsistent model after a cascading delete). See
+      // alignment-step6-patch.md §2.3.
+      const entityIdForDelete = selectedEntityId;
+      await undo.execute({
+        label: 'Delete entity',
+        do: async () => {
+          await ent.remove(entityIdForDelete, { cascade });
+          const rest = { ...canvas.state.nodePositions };
+          delete rest[entityIdForDelete];
+          canvas.save({
+            nodePositions: rest,
+            viewport: canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 },
+          });
+        },
+        undo: async () => {
+          throw new NotUndoableError('Entity deletion is not reversible in MVP');
+        },
       });
       setSelectedEntityId(null);
     },
-    [ent, selectedEntityId, canvas],
+    [ent, selectedEntityId, canvas, undo],
   );
 
-  // Attribute handlers.
+  // Attribute handlers — every mutation flows through `undo.execute`.
   const attributeCreate = useCallback(
     (dto: Parameters<typeof attrs.create>[1]) => {
       if (!selectedEntityId) return Promise.reject(new Error('No entity selected'));
-      return attrs.create(selectedEntityId, dto);
+      const entityId = selectedEntityId;
+      return undo.execute({
+        label: 'Create attribute',
+        do: () => attrs.create(entityId, dto),
+        undo: async (_snap, createdAttr) => {
+          await attrs.remove(entityId, createdAttr.id);
+        },
+      });
     },
-    [attrs, selectedEntityId],
+    [attrs, selectedEntityId, undo],
   );
   const attributeUpdate = useCallback(
     (attrId: string, patch: Parameters<typeof attrs.update>[2]) => {
       if (!selectedEntityId) return Promise.reject(new Error('No entity selected'));
-      return attrs.update(selectedEntityId, attrId, patch);
+      const entityId = selectedEntityId;
+      // Snapshot the current attribute so the inverse writes back the
+      // exact previous field values for every patched key.
+      const list = attrs.getFor(entityId);
+      const current = list.find((a) => a.id === attrId);
+      if (!current) return Promise.reject(new Error('Attribute not found'));
+      const inversePatch: Record<string, unknown> = {};
+      for (const k of Object.keys(patch) as (keyof typeof patch)[]) {
+        inversePatch[k as string] = (current as unknown as Record<string, unknown>)[k as string];
+      }
+      return undo.execute({
+        label: 'Update attribute',
+        do: () => attrs.update(entityId, attrId, patch),
+        undo: async () => {
+          await attrs.update(entityId, attrId, inversePatch as typeof patch);
+        },
+      });
     },
-    [attrs, selectedEntityId],
+    [attrs, selectedEntityId, undo],
   );
   const attributeDelete = useCallback(
     async (attrId: string) => {
       if (!selectedEntityId) return;
-      await attrs.remove(selectedEntityId, attrId);
+      const entityId = selectedEntityId;
+      // Capture the full DTO before the delete so the inverse can
+      // reconstruct the row. The recreated row gets a new UUID —
+      // acceptable because the stack doesn't track downstream refs.
+      const list = attrs.getFor(entityId);
+      const snapshot = list.find((a) => a.id === attrId);
+      if (!snapshot) return;
+      await undo.execute({
+        label: 'Delete attribute',
+        do: async () => {
+          await attrs.remove(entityId, attrId);
+        },
+        undo: async () => {
+          // AttributeSummary.classification is widened to `string | null`
+          // at the hook boundary; AttributeCreate narrows to a literal
+          // enum. The value came from the server so it's valid — cast
+          // through the inferred enum of the create input.
+          type CreateInput = Parameters<typeof attrs.create>[1];
+          await attrs.create(entityId, {
+            name: snapshot.name,
+            businessName: snapshot.businessName,
+            description: snapshot.description,
+            dataType: snapshot.dataType,
+            length: snapshot.length,
+            precision: snapshot.precision,
+            scale: snapshot.scale,
+            isNullable: snapshot.isNullable,
+            isPrimaryKey: snapshot.isPrimaryKey,
+            isForeignKey: snapshot.isForeignKey,
+            isUnique: snapshot.isUnique,
+            defaultValue: snapshot.defaultValue,
+            classification: snapshot.classification as CreateInput['classification'],
+            transformationLogic: snapshot.transformationLogic,
+          });
+        },
+      });
     },
-    [attrs, selectedEntityId],
+    [attrs, selectedEntityId, undo],
   );
   const attributeReorder = useCallback(
     async (orderedIds: string[]) => {
       if (!selectedEntityId) return;
-      await attrs.reorder(selectedEntityId, orderedIds);
+      const entityId = selectedEntityId;
+      const previousOrder = attrs.getFor(entityId).map((a) => a.id);
+      await undo.execute({
+        label: 'Reorder attributes',
+        do: async () => {
+          await attrs.reorder(entityId, orderedIds);
+        },
+        undo: async () => {
+          await attrs.reorder(entityId, previousOrder);
+        },
+      });
     },
-    [attrs, selectedEntityId],
+    [attrs, selectedEntityId, undo],
   );
 
   const generateSyntheticForSelected = useCallback(async () => {
@@ -455,7 +637,9 @@ function InnerCanvas({ modelId, layer }: Props) {
     }
   }, [attrs, selectedEntityId]);
 
-  // Relationship mutations piped through the panel.
+  // Relationship mutations piped through the panel — all flow through
+  // the shared undo stack. Update is snapshot-and-revert; delete
+  // captures the full DTO + creates a fresh rel on inverse (new UUID).
   const relUpdate = useCallback(
     async (
       relId: string,
@@ -467,59 +651,151 @@ function InnerCanvas({ modelId, layer }: Props) {
       },
       clientVersion: number,
     ) => {
-      return rels.update(relId, patch, clientVersion);
+      const current = rels.relationships.find((r) => r.id === relId);
+      if (!current) return rels.update(relId, patch, clientVersion);
+      const inversePatch: typeof patch = {};
+      if (patch.name !== undefined) inversePatch.name = current.name;
+      if (patch.sourceCardinality !== undefined)
+        inversePatch.sourceCardinality = current.sourceCardinality;
+      if (patch.targetCardinality !== undefined)
+        inversePatch.targetCardinality = current.targetCardinality;
+      if (patch.isIdentifying !== undefined) inversePatch.isIdentifying = current.isIdentifying;
+      const label =
+        patch.isIdentifying === true
+          ? 'Mark relationship as identifying'
+          : patch.isIdentifying === false
+            ? 'Clear identifying flag'
+            : 'Update relationship';
+      return undo.execute({
+        label,
+        do: () => rels.update(relId, patch, clientVersion),
+        undo: async (_snap, res) => {
+          // On VERSION_CONFLICT the forward returned a conflict marker,
+          // not an updated rel — nothing to undo.
+          if (isVersionConflictResult(res)) return;
+          await rels.update(relId, inversePatch, res.version);
+        },
+      });
     },
-    [rels],
+    [rels, undo],
   );
 
   const relDelete = useCallback(
     async (relId: string) => {
-      await rels.remove(relId);
+      const snapshot = rels.relationships.find((r) => r.id === relId);
+      if (!snapshot) return;
+      await undo.execute({
+        label: 'Delete relationship',
+        do: async () => {
+          await rels.remove(relId);
+        },
+        undo: async () => {
+          await rels.create({
+            sourceEntityId: snapshot.sourceEntityId,
+            targetEntityId: snapshot.targetEntityId,
+            name: snapshot.name,
+            sourceCardinality: snapshot.sourceCardinality,
+            targetCardinality: snapshot.targetCardinality,
+            isIdentifying: snapshot.isIdentifying,
+            layer: snapshot.layer,
+          });
+        },
+      });
       setSelectedRelId(null);
     },
-    [rels],
+    [rels, undo],
   );
 
   const relConflict = useCallback(() => {
     void rels.loadAll();
   }, [rels]);
 
-  // Context-menu actions bound to edgeMenu.rel.
+  // Context-menu actions bound to edgeMenu.rel. All flow through the
+  // shared undo stack so Cmd+Z reverses them like any other mutation.
   const contextRename = useCallback(
     async (name: string | null) => {
       if (!edgeMenu) return;
-      const res = await rels.update(edgeMenu.rel.id, { name }, edgeMenu.rel.version);
+      const previous = edgeMenu.rel.name;
+      const rel = edgeMenu.rel;
+      const res = await undo.execute({
+        label: 'Rename relationship',
+        do: () => rels.update(rel.id, { name }, rel.version),
+        undo: async (_snap, r) => {
+          if (isVersionConflictResult(r)) return;
+          await rels.update(rel.id, { name: previous }, r.version);
+        },
+      });
       if (isVersionConflictResult(res)) void rels.loadAll();
     },
-    [edgeMenu, rels],
+    [edgeMenu, rels, undo],
   );
   const contextFlip = useCallback(async () => {
     if (!edgeMenu) return;
-    const res = await rels.update(
-      edgeMenu.rel.id,
-      {
-        sourceEntityId: edgeMenu.rel.targetEntityId,
-        targetEntityId: edgeMenu.rel.sourceEntityId,
-        sourceCardinality: edgeMenu.rel.targetCardinality,
-        targetCardinality: edgeMenu.rel.sourceCardinality,
+    const rel = edgeMenu.rel;
+    const res = await undo.execute({
+      label: 'Flip relationship direction',
+      do: () =>
+        rels.update(
+          rel.id,
+          {
+            sourceEntityId: rel.targetEntityId,
+            targetEntityId: rel.sourceEntityId,
+            sourceCardinality: rel.targetCardinality,
+            targetCardinality: rel.sourceCardinality,
+          },
+          rel.version,
+        ),
+      undo: async (_snap, r) => {
+        if (isVersionConflictResult(r)) return;
+        await rels.update(
+          rel.id,
+          {
+            sourceEntityId: rel.sourceEntityId,
+            targetEntityId: rel.targetEntityId,
+            sourceCardinality: rel.sourceCardinality,
+            targetCardinality: rel.targetCardinality,
+          },
+          r.version,
+        );
       },
-      edgeMenu.rel.version,
-    );
+    });
     if (isVersionConflictResult(res)) void rels.loadAll();
-  }, [edgeMenu, rels]);
+  }, [edgeMenu, rels, undo]);
   const contextToggleIdentifying = useCallback(async () => {
     if (!edgeMenu) return;
-    const res = await rels.update(
-      edgeMenu.rel.id,
-      { isIdentifying: !edgeMenu.rel.isIdentifying },
-      edgeMenu.rel.version,
-    );
+    const rel = edgeMenu.rel;
+    const nextFlag = !rel.isIdentifying;
+    const res = await undo.execute({
+      label: nextFlag ? 'Mark relationship as identifying' : 'Clear identifying flag',
+      do: () => rels.update(rel.id, { isIdentifying: nextFlag }, rel.version),
+      undo: async (_snap, r) => {
+        if (isVersionConflictResult(r)) return;
+        await rels.update(rel.id, { isIdentifying: rel.isIdentifying }, r.version);
+      },
+    });
     if (isVersionConflictResult(res)) void rels.loadAll();
-  }, [edgeMenu, rels]);
+  }, [edgeMenu, rels, undo]);
   const contextDelete = useCallback(async () => {
     if (!edgeMenu) return;
-    await rels.remove(edgeMenu.rel.id);
-  }, [edgeMenu, rels]);
+    const snapshot = edgeMenu.rel;
+    await undo.execute({
+      label: 'Delete relationship',
+      do: async () => {
+        await rels.remove(snapshot.id);
+      },
+      undo: async () => {
+        await rels.create({
+          sourceEntityId: snapshot.sourceEntityId,
+          targetEntityId: snapshot.targetEntityId,
+          name: snapshot.name,
+          sourceCardinality: snapshot.sourceCardinality,
+          targetCardinality: snapshot.targetCardinality,
+          isIdentifying: snapshot.isIdentifying,
+          layer: snapshot.layer,
+        });
+      },
+    });
+  }, [edgeMenu, rels, undo]);
 
   const toggleOrphanBadges = (next: boolean) => {
     setShowOrphanBadges(next);
@@ -542,9 +818,11 @@ function InnerCanvas({ modelId, layer }: Props) {
 
   return (
     <div className="relative h-full w-full">
-      {/* Canvas header — notation toggle, orphan toggle, tidy, infer. */}
+      {/* Canvas header — notation toggle, orphan toggle, tidy, infer,
+          undo/redo. */}
       <div className="pointer-events-auto absolute left-3 top-3 z-20 flex items-center gap-2">
         <NotationSwitcher modelId={modelId} layer={layer} />
+        <UndoRedoButtons />
         <TidyButton nodes={nodes} edges={edges} onLayout={applyTidyLayout} />
         <label className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-surface-2/70 px-2 py-1 text-[11px] text-text-secondary backdrop-blur-xl">
           <input

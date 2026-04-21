@@ -14,7 +14,7 @@ flags via `useModelStudioFlag(name)` and degrades gracefully when off.
 
 | Flag                                 | Default | Purpose                                              | Step shipped | Sample of what it gates                                                                                                                         |
 | ------------------------------------ | ------- | ---------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MODEL_STUDIO_RELATIONSHIPS_ENABLED` | `false` | Step-6 relationships + IE/IDEF1X + notation switcher | Step 6       | `POST /models/:id/relationships`, canvas edges, RelationshipPanel, NotationSwitcher, InferRelationshipsPanel, Mermaid export, admin diagnostics |
+| `MODEL_STUDIO_RELATIONSHIPS_ENABLED` | `true`  | Step-6 relationships + IE/IDEF1X + notation switcher | Step 6       | `POST /models/:id/relationships`, canvas edges, RelationshipPanel, NotationSwitcher, InferRelationshipsPanel, Mermaid export, admin diagnostics |
 
 Flags planned for future steps (not yet shipped):
 
@@ -30,10 +30,23 @@ Flags planned for future steps (not yet shipped):
 
 ## How to flip a flag
 
+> **`MODEL_STUDIO_RELATIONSHIPS_ENABLED` is default-on since 2026-04-21.**
+> `.env.example` now ships with `=true`, so every new clone + every
+> production env that follows the documented template gets the feature
+> live. Setting `=false` is the **rollback path**. The
+> `relationshipsEnabledGate` middleware stays in the tree as a kill
+> switch — it still blocks the route whenever the env var is absent or
+> any value other than `'true'`, so a missing env var does NOT
+> magically enable the feature at runtime; the default lives in the
+> example env file and the deploy templates, not in the middleware.
+
 ### Local dev
 
-1. `echo "MODEL_STUDIO_RELATIONSHIPS_ENABLED=true" >> .env` (ensure
-   **no UTF-16 encoding** — see lesson #28 for the gotcha).
+1. `.env.example` ships with `MODEL_STUDIO_RELATIONSHIPS_ENABLED=true`.
+   New clones copy it into `.env` and the feature is live out of the
+   box. To **disable** for testing the gate, flip to
+   `MODEL_STUDIO_RELATIONSHIPS_ENABLED=false` (ensure **no UTF-16
+   encoding** — see lesson #28 for the gotcha).
 2. `npx kill-port 3006`
 3. `pnpm -C packages/server dev`
 4. Verify: curl a flag-gated route with auth and confirm you get the
@@ -41,15 +54,16 @@ Flags planned for future steps (not yet shipped):
 
 ### Render (production)
 
-1. Dashboard → service → Environment → Add
-   `MODEL_STUDIO_RELATIONSHIPS_ENABLED=true`.
-2. Render redeploys automatically.
+1. Ensure `MODEL_STUDIO_RELATIONSHIPS_ENABLED=true` is set on the
+   service (this is now the documented default in `.env.example`).
+2. To **disable** (rollback), Dashboard → service → Environment →
+   set `MODEL_STUDIO_RELATIONSHIPS_ENABLED=false`, redeploy.
 3. Smoke-check via an authed curl against the public URL.
 
 ### Rollback
 
-Set the flag to `false` or delete the env var. Affected routes return
-404 on the next request. Client polls and re-gates UI within ~30 s.
+Set the flag to `false`. Affected routes return 404 on the next
+request. Client polls and re-gates UI within ~30 s.
 
 ---
 

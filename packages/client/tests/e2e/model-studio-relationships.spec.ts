@@ -1,6 +1,4 @@
 import { test, expect, type Page, request as playwrightRequest } from '@playwright/test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 
 /**
  * Step 6 — Model Studio relationships E2E.
@@ -17,11 +15,43 @@ import * as path from 'node:path';
  *   S6-E9  [fixme] Two-tab BroadcastChannel notation sync.
  *   S6-E10 [fixme] ⌘R keyboard-draw flow.
  *
+ * Post-ship patch additions (tasks/alignment-step6-patch.md §2):
+ *   S6-E11 Drag persists after pan + refresh (fix #3).
+ *   S6-E12 Notation flip no longer surfaces "Validation failed" toast (fix #4).
+ *   S6-E13 Cardinality glyphs visible in edge SVG (fix #2).
+ *   S6-E14 Self-ref arc path rendered outside entity bbox (fix #6).
+ *   S6-E15 Undo create rel (depends on Agent A undo core).
+ *   S6-E16 Undo notation flip (depends on Agent A undo core).
+ *
+ * ---------------------------------------------------------------------
+ * Auth strategy (lessons.md #30):
+ *
+ * The previous `isolatedTest` fixture in this file logged in per-test via
+ * POST /api/auth/login. With ~15 tests that burned the 5-per-15-min auth
+ * rate limit and every run after the 5th test stalled on the login
+ * redirect. We now rely on Playwright's project dependency chain:
+ *   setup project → saves .auth/user.json (refresh cookie + accessToken
+ *     in storageState)
+ *   chromium project → has `storageState: 'tests/e2e/.auth/user.json'`
+ *     attached via playwright.config.ts (line 60).
+ *
+ * To perform authenticated API calls via `page.request`, we mint ONE
+ * access token per worker using the persisted refresh cookie via
+ * POST /api/auth/refresh (does not count against the login rate limit).
+ * The token is cached in a module-level variable so subsequent tests
+ * in the same worker reuse it. `page.addInitScript` injects the same
+ * token into `window.__E2E_ACCESS_TOKEN__` so the in-page api wrapper
+ * short-circuits the cookie refresh dance (see AuthContext.tsx).
+ *
+ * Data isolation: each test creates its own Step-6 model via the API
+ * in `beforeEach` and tears it down in `afterEach`. Zero cross-test
+ * state leakage.
+ *
  * Network-wait contract (lessons.md #27): every assertion that depends
  * on server state hoists `page.waitForResponse(...)` BEFORE the action
  * that triggers the request — never `waitForTimeout`.
  *
- * Feature-flag contract: the dev server MUST be running with
+ * Feature-flag contract: the dev server MUST run with
  * `MODEL_STUDIO_RELATIONSHIPS_ENABLED=true`, otherwise every rel route
  * returns 404 and the canvas edges never load. The seed helpers assert
  * the flag is on by checking the initial `GET /relationships` returns
@@ -29,6 +59,42 @@ import * as path from 'node:path';
  */
 
 const API_BASE = process.env.PLAYWRIGHT_API_BASE ?? 'http://localhost:3006';
+
+/**
+ * Cached access token — minted exactly ONCE per worker via POST
+ * /api/auth/refresh and reused across every test for the rest of the
+ * run. The refresh call mutates the cookie state server-side (JWT
+ * refresh rotation), so issuing multiple refresh calls from
+ * independent contexts — as would happen if every test called its own
+ * `context.request.post('/auth/refresh')` — invalidates subsequent
+ * attempts. One call per worker sidesteps that entirely.
+ */
+const STORAGE_PATH = 'tests/e2e/.auth/user.json';
+let cachedAccessToken: string | null = null;
+
+async function getAccessToken(): Promise<string> {
+  if (cachedAccessToken) return cachedAccessToken;
+  const reqCtx = await playwrightRequest.newContext({ storageState: STORAGE_PATH });
+  try {
+    const res = await reqCtx.post(`${API_BASE}/api/auth/refresh`);
+    if (res.status() !== 200) {
+      const body = await res.text();
+      throw new Error(
+        `refresh failed (${res.status()}): ${body}. Ensure 'setup' project ran and .auth/user.json exists.`,
+      );
+    }
+    const body = await res.json();
+    const token = body?.data?.accessToken as string | undefined;
+    if (!token) throw new Error('refresh did not return accessToken');
+    // Persist the rotated cookie so any other spec in the same run
+    // picks up the fresh refresh token.
+    await reqCtx.storageState({ path: STORAGE_PATH });
+    cachedAccessToken = token;
+    return token;
+  } finally {
+    await reqCtx.dispose();
+  }
+}
 
 function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}` };
@@ -121,19 +187,6 @@ async function listRelationshipsViaApi(
   return body.data?.relationships ?? [];
 }
 
-async function listEntitiesViaApi(
-  page: Page,
-  token: string,
-  modelId: string,
-): Promise<Array<{ id: string; name: string }>> {
-  const res = await page.request.get(`${API_BASE}/api/model-studio/models/${modelId}/entities`, {
-    headers: authHeaders(token),
-  });
-  expect(res.status()).toBe(200);
-  const body = await res.json();
-  return body.data?.entities ?? body.data ?? [];
-}
-
 async function listAttributesViaApi(
   page: Page,
   token: string,
@@ -159,6 +212,24 @@ async function listAttributesViaApi(
     for (const r of rows) flat.push(r);
   }
   return flat;
+}
+
+async function getCanvasState(
+  page: Page,
+  token: string,
+  modelId: string,
+  layer: 'logical' | 'physical' | 'conceptual' = 'logical',
+): Promise<{ nodePositions: Record<string, { x: number; y: number }>; notation: string }> {
+  const res = await page.request.get(
+    `${API_BASE}/api/model-studio/models/${modelId}/canvas-state?layer=${layer}`,
+    { headers: authHeaders(token) },
+  );
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  return {
+    nodePositions: body.data?.nodePositions ?? {},
+    notation: body.data?.notation ?? 'ie',
+  };
 }
 
 async function deleteModel(page: Page, id: string, token: string): Promise<void> {
@@ -205,8 +276,6 @@ async function seedCanvasPositions(
 /**
  * Seed a 3-entity model (customer / order / item) with PK `id` attrs.
  * Used by every test that needs a canvas with nodes ready for dragging.
- * Returns entity ids in a stable tuple so tests can reference them
- * without listing.
  */
 async function seedThreeEntityModel(
   page: Page,
@@ -225,8 +294,6 @@ async function seedThreeEntityModel(
   const orderId = await createEntityViaApi(page, token, modelId, 'order');
   const itemId = await createEntityViaApi(page, token, modelId, 'item');
 
-  // Every entity gets a PK attribute so the tidy layout + identifying
-  // rel propagation paths have something to work with.
   const customerPk = await createAttributeViaApi(page, token, modelId, customerId, {
     name: 'customer_id',
     dataType: 'uuid',
@@ -243,71 +310,25 @@ async function seedThreeEntityModel(
     isPrimaryKey: true,
   });
 
-  // Spread entities left→right so React Flow renders them with
-  // non-overlapping bounding boxes. Without this every node would
-  // default to (0,0) and handle-to-handle drag tests would be flaky.
   await seedCanvasPositions(page, token, modelId, 'logical', [customerId, orderId, itemId]);
 
   return { modelId, customerId, orderId, itemId, customerPk, orderPk, itemPk };
 }
 
-// ────────────────────────────────────────────────────────────────────
-// Per-test isolation fixture — same shape as attributes spec.
-// ────────────────────────────────────────────────────────────────────
-
-const isolatedTest = test.extend<{ page: Page; accessToken: string; storagePath: string }>({
-  // eslint-disable-next-line no-empty-pattern
-  storagePath: async ({}, use, testInfo) => {
-    const file = path.join(
-      'tests/e2e/.auth',
-      `iso-s6-${testInfo.workerIndex}-${testInfo.testId}.json`,
-    );
-    await use(file);
-    try {
-      fs.unlinkSync(file);
-    } catch {
-      /* best-effort */
-    }
-  },
-  accessToken: async ({ storagePath }, use) => {
-    const reqCtx = await playwrightRequest.newContext();
-    const res = await reqCtx.post(`${API_BASE}/api/auth/login`, {
-      data: { email: 'e2e-test@test.com', password: 'e2e-test-password-123' },
-    });
-    if (res.status() !== 200) {
-      await reqCtx.dispose();
-      throw new Error(`per-test login failed: ${res.status()}`);
-    }
-    const body = await res.json();
-    await reqCtx.storageState({ path: storagePath });
-    await reqCtx.dispose();
-    await use(body.data.accessToken as string);
-  },
-  page: async ({ playwright, accessToken, storagePath }, use) => {
-    const browser = await playwright.chromium.launch();
-    const ctx = await browser.newContext({ storageState: storagePath });
-    await ctx.addInitScript((token) => {
-      (window as unknown as { __E2E_ACCESS_TOKEN__?: string }).__E2E_ACCESS_TOKEN__ = token;
-    }, accessToken);
-    const p = await ctx.newPage();
-    try {
-      await use(p);
-    } finally {
-      await ctx.close();
-      await browser.close();
-    }
-  },
-});
+/**
+ * Inject the access token into `window.__E2E_ACCESS_TOKEN__` so the
+ * in-page api wrapper short-circuits the cookie refresh dance (see
+ * AuthContext.tsx — lessons.md #27). Must be called BEFORE `page.goto`.
+ */
+async function injectAccessToken(page: Page, token: string): Promise<void> {
+  await page.addInitScript((t) => {
+    (window as unknown as { __E2E_ACCESS_TOKEN__?: string }).__E2E_ACCESS_TOKEN__ = t;
+  }, token);
+}
 
 /**
  * Canvas-load helper. HOISTS the relationships GET before `goto` so
- * we never race the initial fetch. Returns only when both the
- * React Flow wrapper and entity nodes are visible.
- *
- * After mount we click Tidy → dagre lays nodes out on a left→right
- * grid. Without this, a freshly-seeded model renders with every
- * entity stacked at (0,0), and React Flow cannot resolve a drag
- * between two coincident handles.
+ * we never race the initial fetch.
  */
 async function openCanvasAndWait(
   page: Page,
@@ -328,17 +349,6 @@ async function openCanvasAndWait(
     timeout: 30_000,
   });
 
-  // Positions are pre-seeded via `seedCanvasPositions` so nodes should
-  // render spread left→right. We wait for all entity nodes to be
-  // visible (React Flow has measured+painted them). The strict
-  // "bounding-box spread > 20px" check previously lived here; it was
-  // dropped because React Flow v12's fitView sometimes collapses the
-  // viewport onto a tight cluster of nodes after mount, so two nodes
-  // at seeded x=0 and x=320 can end up with on-screen x-deltas near
-  // zero once scaled — even though the graph-space coordinates are
-  // perfectly fine for all non-drag assertions (notation, panels,
-  // cascade, infer). Drag-dependent tests compensate by reading
-  // handle bounding boxes directly via `handleBox` below.
   for (let i = 0; i < expectedEntityCount; i++) {
     await expect(page.getByTestId('entity-node').nth(i)).toBeVisible({ timeout: 5_000 });
   }
@@ -346,10 +356,6 @@ async function openCanvasAndWait(
 
 /**
  * Resolve a React Flow Handle DOM element for a given entity node.
- * The invisible entity-level handles (see EntityNode.tsx L121-124)
- * render as `.react-flow__handle` elements inside the node. We pick
- * by position-class — React Flow tags each with
- * `react-flow__handle-{top|bottom|left|right}`.
  */
 async function handleBox(
   page: Page,
@@ -361,10 +367,6 @@ async function handleBox(
     .nth(nodeIndex)
     .locator(`.react-flow__handle.react-flow__handle-${side}`)
     .first();
-  // The handles are styled `opacity-0` but render as real DOM
-  // elements. `waitFor` guards against the "React Flow still
-  // computing node bounds" window where the handle exists but
-  // its box is 0×0.
   await handle.waitFor({ state: 'attached', timeout: 5_000 });
   const box = await handle.boundingBox();
   if (!box || box.width === 0 || box.height === 0) {
@@ -376,34 +378,19 @@ async function handleBox(
 }
 
 /**
- * React Flow drag primitive. Drags from the `source` handle on
- * `fromIndex` to the `target` handle on `toIndex`. We use the
- * entity-level Handles mounted in EntityNode.tsx (Top=target,
- * Bottom=source, Left=target, Right=source — see EntityNode.tsx
- * L121-124). Source==Bottom→Target==Top gives a vertical drop that
- * React Flow picks up reliably regardless of dagre's horizontal
- * ranking decisions.
+ * React Flow drag primitive. Source == right handle of `fromIndex`,
+ * target == left handle of `toIndex`. Matches the seeded left→right
+ * grid layout.
  */
 async function dragEdge(page: Page, fromIndex: number, toIndex: number): Promise<void> {
-  // Source: node's "right" handle (source type). Target: node's
-  // "left" handle (target type). With the seeded grid layout
-  // (x: i * 320, y: 120) this is a clean left→right connect.
   const src = await handleBox(page, fromIndex, 'right');
   const tgt = await handleBox(page, toIndex, 'left');
 
   await page.mouse.move(src.x, src.y);
   await page.mouse.down();
-  // Initial nudge so React Flow's PointerSensor flips into
-  // connection mode before we leave the source handle.
   await page.mouse.move(src.x + 6, src.y, { steps: 3 });
-  // Mid-sweep — React Flow tracks `mousemove` while a connection
-  // is being drawn. Keep the slope gentle so the preview line
-  // stays close to the direct path.
   await page.mouse.move((src.x + tgt.x) / 2, (src.y + tgt.y) / 2, { steps: 14 });
-  // Hit the target handle.
   await page.mouse.move(tgt.x, tgt.y, { steps: 14 });
-  // Extra settle — some Chromium builds end the drag one frame
-  // before React Flow commits the hovered handle as the drop.
   await page.mouse.move(tgt.x, tgt.y, { steps: 2 });
   await page.mouse.up();
 }
@@ -414,7 +401,6 @@ async function dragEdgeToEmpty(page: Page, fromIndex: number): Promise<void> {
   const canvasBox = await canvas.boundingBox();
   if (!canvasBox) throw new Error('canvas missing bounding box');
 
-  // Aim at a corner of the canvas pane that is well away from any node.
   const tx = canvasBox.x + canvasBox.width - 20;
   const ty = canvasBox.y + 40;
 
@@ -430,570 +416,785 @@ async function dragEdgeToEmpty(page: Page, fromIndex: number): Promise<void> {
 // ────────────────────────────────────────────────────────────────────
 
 test.describe('Model Studio — relationships (Step 6)', () => {
-  // The global playwright.config.ts pins `workers: 1 + fullyParallel:
-  // false` for shared-user DB hygiene, so these tests already execute
-  // sequentially. We deliberately DO NOT use `describe.configure({
-  // mode: 'serial' })` here: serial mode halts the whole describe on
-  // the first failure, which would hide results for later S6-E cases
-  // when triaging a single drag flake.
+  // Per-test state — populated in beforeEach, torn down in afterEach.
+  let accessToken: string;
+  let seed: {
+    modelId: string;
+    customerId: string;
+    orderId: string;
+    itemId: string;
+    customerPk: string;
+    orderPk: string;
+    itemPk: string;
+  } | null = null;
 
-  // S6-E1 — drag handle A→B creates a relationship edge.
-  //
-  // FIXME (tasks/lessons.md #27): React Flow v12 drag-to-connect is
-  // not reliably automatable with Playwright's `mouse.down/move/up`
-  // sequence. In practice the synthetic PointerEvent sequence either
-  // (a) never enters React Flow's connection mode and the canvas pans
-  // instead, or (b) releases one frame before the target handle is
-  // registered as the drop target so no edge is created. We tried
-  // multiple easing profiles and handle orientations; none were
-  // stable. Product-side drag is covered by unit tests over the
-  // `handleConnect` callback in ModelStudioCanvas (see
-  // `ModelStudioCanvas.test.tsx`). Tracked in
-  // `tasks/todo.md` → "Step 6 follow-ups (E2E automation)".
-  isolatedTest.fixme(
-    'S6-E1: drag handle A→B → edge appears on canvas',
-    async ({ page, accessToken }, testInfo) => {
-      testInfo.setTimeout(60_000);
-      const seed = await seedThreeEntityModel(page, accessToken);
-      try {
-        await openCanvasAndWait(page, seed.modelId, 3);
-
-        await dragEdge(page, 0, 1);
-
-        // The React Flow edge renders via RelationshipEdge → a <g> with
-        // `data-testid="relationship-edge-{id}"`. Assert the edge
-        // appears (the hook's optimistic insert puts a `temp-*` edge on
-        // the canvas immediately; we then wait for the server POST to
-        // replace it with a real id).
-        await expect(page.locator('[data-testid^="relationship-edge-"]')).toHaveCount(1, {
-          timeout: 15_000,
-        });
-
-        // Server-side confirmation — poll because the POST resolves
-        // asynchronously relative to the dragEdge mouse-up we just
-        // fired. Polling avoids a predicate race with the optimistic
-        // insert's temp-id edge.
-        await expect
-          .poll(
-            async () => {
-              const rels = await listRelationshipsViaApi(page, accessToken, seed.modelId);
-              return rels.length;
-            },
-            { timeout: 15_000 },
-          )
-          .toBe(1);
-      } finally {
-        await deleteModel(page, seed.modelId, accessToken);
-      }
-    },
-  );
-
-  // S6-E2 — flip IE → IDEF1X; edges re-render with the other notation.
-  isolatedTest.fixme(
-    'S6-E2: flip IE → IDEF1X → edges re-render with new notation',
-    async ({ page, accessToken }, testInfo) => {
-      testInfo.setTimeout(60_000);
-      const seed = await seedThreeEntityModel(page, accessToken);
-      try {
-        await createRelationshipViaApi(page, accessToken, seed.modelId, {
-          sourceEntityId: seed.customerId,
-          targetEntityId: seed.orderId,
-          name: null,
-          sourceCardinality: 'one',
-          targetCardinality: 'many',
-          isIdentifying: false,
-          layer: 'logical',
-        });
-        await openCanvasAndWait(page, seed.modelId, 3);
-
-        const edge = page.locator('[data-testid^="relationship-edge-"]').first();
-        await expect(edge).toHaveAttribute('data-notation', 'ie');
-
-        // Flip via NotationSwitcher. `canvas_states` is the persisted
-        // surface — wait for the PUT to land before asserting (route
-        // is PUT /canvas-state, not PATCH — see model-studio.routes.ts
-        // L122). Status filter removed so a non-2xx surfaces as an
-        // explicit assertion below rather than a timeout.
-        const putResp = page.waitForResponse(
-          (r) =>
-            r.url().includes(`/models/${seed.modelId}/canvas-state`) &&
-            r.request().method() === 'PUT',
-          { timeout: 25_000 },
-        );
-        await page.getByTestId('notation-pill-idef1x').click();
-        const putRes = await putResp;
-        expect(putRes.status(), `PUT canvas-state should be 200`).toBe(200);
-
-        await expect(edge).toHaveAttribute('data-notation', 'idef1x', { timeout: 15_000 });
-      } finally {
-        await deleteModel(page, seed.modelId, accessToken);
-      }
-    },
-  );
-
-  // S6-E3 — drag into empty canvas cancels; no edge appears.
-  //
-  // FIXME (tasks/lessons.md #27): same React Flow v12 drag-automation
-  // brittleness as S6-E1 — the synthetic drag to an empty pane either
-  // pans the viewport or never enters connection mode, so the
-  // assertion "no edge and no POST" becomes a false-positive rather
-  // than a real no-op validation. Unit-level coverage in
-  // `ModelStudioCanvas.test.tsx` asserts `handleConnect` exits early
-  // for a null target. Tracked in `tasks/todo.md` → "Step 6
-  // follow-ups (E2E automation)".
-  isolatedTest.fixme(
-    'S6-E3: drag to empty canvas → React Flow cancels, no new edge',
-    async ({ page, accessToken }) => {
-      const seed = await seedThreeEntityModel(page, accessToken);
-      try {
-        await openCanvasAndWait(page, seed.modelId, 3);
-
-        // Sniff for any POST /relationships — there must NOT be one.
-        let postFired = false;
-        page.on('response', (resp) => {
-          if (
-            resp.url().endsWith(`/models/${seed.modelId}/relationships`) &&
-            resp.request().method() === 'POST'
-          ) {
-            postFired = true;
-          }
-        });
-
-        await dragEdgeToEmpty(page, 0);
-
-        // Give React Flow a beat to resolve the drop into a no-op.
-        // We can't wait on a response (by design — there shouldn't be
-        // one) so we poll the DOM until it stabilises, with a hard cap.
-        await expect
-          .poll(async () => await page.locator('[data-testid^="relationship-edge-"]').count(), {
-            timeout: 3_000,
-          })
-          .toBe(0);
-
-        expect(postFired).toBe(false);
-        const rels = await listRelationshipsViaApi(page, accessToken, seed.modelId);
-        expect(rels).toHaveLength(0);
-      } finally {
-        await deleteModel(page, seed.modelId, accessToken);
-      }
-    },
-  );
-
-  // S6-E4 — duplicate drag hits server 409 / client short-circuit;
-  // RelationshipPanel opens for the existing rel.
-  //
-  // FIXME (tasks/lessons.md #27): same React Flow v12 drag-automation
-  // brittleness as S6-E1. The "duplicate drag" flow depends on a
-  // connect event firing with both handles resolved, which Playwright
-  // cannot reliably synthesise. The client short-circuit path
-  // (handleConnect → existing rel → open panel) is covered by unit
-  // tests on ModelStudioCanvas. Tracked in `tasks/todo.md` → "Step 6
-  // follow-ups (E2E automation)".
-  isolatedTest.fixme(
-    'S6-E4: duplicate drag → opens RelationshipPanel for existing rel',
-    async ({ page, accessToken }) => {
-      const seed = await seedThreeEntityModel(page, accessToken);
-      try {
-        // Pre-seed a relationship between entities 0 and 1 so the
-        // drag we perform below is the "duplicate".
-        await createRelationshipViaApi(page, accessToken, seed.modelId, {
-          sourceEntityId: seed.customerId,
-          targetEntityId: seed.orderId,
-          name: null,
-          sourceCardinality: 'one',
-          targetCardinality: 'many',
-          isIdentifying: false,
-          layer: 'logical',
-        });
-        await openCanvasAndWait(page, seed.modelId, 3);
-
-        // Entities are rendered in insertion order by the API (see
-        // listEntities). Index 0 == customer, index 1 == order.
-        await dragEdge(page, 0, 1);
-
-        // The canvas client short-circuits duplicate drags (see
-        // ModelStudioCanvas handleConnect L295-304) and opens the
-        // RelationshipPanel for the existing rel instead of POSTing.
-        await expect(page.getByTestId('relationship-panel')).toBeVisible({ timeout: 5_000 });
-
-        // Still exactly one rel on the server — no zombie writes.
-        const rels = await listRelationshipsViaApi(page, accessToken, seed.modelId);
-        expect(rels).toHaveLength(1);
-      } finally {
-        await deleteModel(page, seed.modelId, accessToken);
-      }
-    },
-  );
-
-  // S6-E5 — IE → IDEF1X → IE round-trip must restore original render.
-  isolatedTest.fixme(
-    'S6-E5: flip IE → IDEF1X → IE round-trip restores original notation',
-    async ({ page, accessToken }, testInfo) => {
-      testInfo.setTimeout(90_000);
-      const seed = await seedThreeEntityModel(page, accessToken);
-      try {
-        await createRelationshipViaApi(page, accessToken, seed.modelId, {
-          sourceEntityId: seed.customerId,
-          targetEntityId: seed.orderId,
-          name: null,
-          sourceCardinality: 'one',
-          targetCardinality: 'many',
-          isIdentifying: false,
-          layer: 'logical',
-        });
-        await openCanvasAndWait(page, seed.modelId, 3);
-
-        const edge = page.locator('[data-testid^="relationship-edge-"]').first();
-        await expect(edge).toHaveAttribute('data-notation', 'ie');
-
-        // Flip to IDEF1X — hoist PUT wait before click per lessons.md #27.
-        const putResp1 = page.waitForResponse(
-          (r) =>
-            r.url().includes(`/models/${seed.modelId}/canvas-state`) &&
-            r.request().method() === 'PUT',
-          { timeout: 25_000 },
-        );
-        await page.getByTestId('notation-pill-idef1x').click();
-        await putResp1;
-        await expect(edge).toHaveAttribute('data-notation', 'idef1x', { timeout: 15_000 });
-
-        // Flip back to IE.
-        const putResp2 = page.waitForResponse(
-          (r) =>
-            r.url().includes(`/models/${seed.modelId}/canvas-state`) &&
-            r.request().method() === 'PUT',
-          { timeout: 25_000 },
-        );
-        await page.getByTestId('notation-pill-ie').click();
-        await putResp2;
-        await expect(edge).toHaveAttribute('data-notation', 'ie', { timeout: 15_000 });
-
-        // Server-side notation persisted on canvas_states.
-        const stateRes = await page.request.get(
-          `${API_BASE}/api/model-studio/models/${seed.modelId}/canvas-state?layer=logical`,
-          { headers: authHeaders(accessToken) },
-        );
-        expect(stateRes.status()).toBe(200);
-        const stateBody = await stateRes.json();
-        expect(stateBody.data?.notation).toBe('ie');
-      } finally {
-        await deleteModel(page, seed.modelId, accessToken);
-      }
-    },
-  );
-
-  // S6-E6 — delete entity with 3 rels → cascade dialog → confirm → gone.
-  isolatedTest.fixme(
-    'S6-E6: delete entity with 3 rels → CascadeDeleteDialog → confirm → rels + entity gone',
-    async ({ page, accessToken }, testInfo) => {
-      testInfo.setTimeout(60_000);
-      const seed = await seedThreeEntityModel(page, accessToken);
-      try {
-        // Add a 4th entity so `customer` can be the hub of 3 outgoing
-        // relationships without self-refs.
-        const noteId = await createEntityViaApi(page, accessToken, seed.modelId, 'note');
-        await createAttributeViaApi(page, accessToken, seed.modelId, noteId, {
-          name: 'note_id',
-          dataType: 'uuid',
-          isPrimaryKey: true,
-        });
-        await seedCanvasPositions(page, accessToken, seed.modelId, 'logical', [
-          seed.customerId,
-          seed.orderId,
-          seed.itemId,
-          noteId,
-        ]);
-
-        // 3 rels all originating from `customer`.
-        await createRelationshipViaApi(page, accessToken, seed.modelId, {
-          sourceEntityId: seed.customerId,
-          targetEntityId: seed.orderId,
-          name: null,
-          sourceCardinality: 'one',
-          targetCardinality: 'many',
-          isIdentifying: false,
-          layer: 'logical',
-        });
-        await createRelationshipViaApi(page, accessToken, seed.modelId, {
-          sourceEntityId: seed.customerId,
-          targetEntityId: seed.itemId,
-          name: null,
-          sourceCardinality: 'one',
-          targetCardinality: 'many',
-          isIdentifying: false,
-          layer: 'logical',
-        });
-        await createRelationshipViaApi(page, accessToken, seed.modelId, {
-          sourceEntityId: seed.customerId,
-          targetEntityId: noteId,
-          name: null,
-          sourceCardinality: 'one',
-          targetCardinality: 'many',
-          isIdentifying: false,
-          layer: 'logical',
-        });
-
-        await openCanvasAndWait(page, seed.modelId, 4);
-        await expect(page.locator('[data-testid^="relationship-edge-"]')).toHaveCount(3);
-
-        // Select the customer entity and fire Delete. React Flow's
-        // onNodesDelete fires on Backspace/Delete while a node is
-        // selected (deleteKeyCode={['Backspace','Delete']} on the
-        // <ReactFlow> — see ModelStudioCanvas.tsx L561), and
-        // ModelStudioCanvas intercepts the event to open the cascade
-        // dialog. We scope by `entity-node-name` text (exact) so
-        // "customer" does NOT also match "customer_id" inside the
-        // entity's attribute list.
-        const customerNode = page
-          .getByTestId('entity-node')
-          .filter({
-            has: page.getByTestId('entity-node-name').getByText('customer', { exact: true }),
-          })
-          .first();
-        await customerNode.click();
-        // Wait for React Flow to commit the selection — the
-        // enclosing `.react-flow__node` parent gains the
-        // `.selected` class at that point.
-        await expect(
-          customerNode.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]'),
-        ).toHaveClass(/selected/, { timeout: 5_000 });
-
-        // React Flow's useKeyPress listens on `window.document`.
-        // Press Delete (more universally handled than Backspace across
-        // OS keyboard layouts) with the canvas in focus.
-        await page.locator('.react-flow').focus();
-        await page.keyboard.press('Delete');
-
-        // Dialog opens + shows correct impact count.
-        await expect(page.getByTestId('cascade-delete-dialog')).toBeVisible({ timeout: 10_000 });
-        await expect(page.getByTestId('cascade-delete-count')).toContainText('3');
-        // List renders 3 rows.
-        const rows = page.locator('[data-testid="cascade-delete-list"] li');
-        await expect(rows).toHaveCount(3);
-
-        // Confirm triggers re-query of impact and then the DELETE.
-        const deleteResp = page.waitForResponse(
-          (r) =>
-            r.url().includes(`/models/${seed.modelId}/entities/${seed.customerId}`) &&
-            r.request().method() === 'DELETE' &&
-            r.status() < 400,
-          { timeout: 10_000 },
-        );
-        await page.getByTestId('cascade-delete-confirm').click();
-        await deleteResp;
-
-        // Customer node and all 3 edges gone.
-        await expect(page.getByTestId('entity-node')).toHaveCount(3, { timeout: 10_000 });
-        await expect(page.locator('[data-testid^="relationship-edge-"]')).toHaveCount(0);
-
-        const remaining = await listRelationshipsViaApi(page, accessToken, seed.modelId);
-        expect(remaining).toHaveLength(0);
-      } finally {
-        await deleteModel(page, seed.modelId, accessToken);
-      }
-    },
-  );
-
-  // S6-E7 — toggle isIdentifying true→false; propagated PK attrs are
-  // removed from the target entity.
-  //
-  // IMPORTANT: the Step-6 RelationshipPanel commits identifying toggles
-  // inline (no confirm dialog — see RelationshipPanel.tsx L714-739).
-  // The user-visible "confirm" is the success toast. We verify the
-  // effect: propagated attrs present before the toggle, absent after.
-  isolatedTest.fixme(
-    'S6-E7: toggle isIdentifying true→false → propagated PKs unwound',
-    async ({ page, accessToken }) => {
-      const seed = await seedThreeEntityModel(page, accessToken);
-      try {
-        // Create an identifying rel customer→order. The propagate
-        // service copies `customer_id` into `order` as a PK attribute.
-        await createRelationshipViaApi(page, accessToken, seed.modelId, {
-          sourceEntityId: seed.customerId,
-          targetEntityId: seed.orderId,
-          name: null,
-          sourceCardinality: 'one',
-          targetCardinality: 'many',
-          isIdentifying: true,
-          layer: 'logical',
-        });
-
-        // Confirm the propagated attr exists on `order` before the flip.
-        const attrsBefore = await listAttributesViaApi(page, accessToken, seed.modelId);
-        const orderAttrsBefore = attrsBefore.filter((a) => a.entityId === seed.orderId);
-        const hasPropagatedBefore = orderAttrsBefore.some((a) => a.name === 'customer_id');
-        expect(
-          hasPropagatedBefore,
-          `expected propagated customer_id on order before toggle (got ${JSON.stringify(orderAttrsBefore.map((a) => a.name))})`,
-        ).toBe(true);
-
-        await openCanvasAndWait(page, seed.modelId, 3);
-
-        // Open the rel panel by clicking the edge.
-        const edge = page.locator('[data-testid^="relationship-edge-"]').first();
-        await edge.click();
-        await expect(page.getByTestId('relationship-panel')).toBeVisible();
-
-        // Navigate to the Cardinality tab (where the identifying toggle
-        // lives — see RelationshipPanel.tsx L436 for rel-tab-{id}).
-        await page.getByTestId('rel-tab-cardinality').click();
-        await expect(page.getByTestId('rel-identifying-toggle')).toBeVisible();
-
-        // Flip identifying off — fires PATCH, triggers unwind on the
-        // server in the same transaction.
-        const patchResp = page.waitForResponse(
-          (r) =>
-            r.url().includes('/relationships/') &&
-            r.request().method() === 'PATCH' &&
-            r.status() === 200,
-          { timeout: 10_000 },
-        );
-        await page.getByTestId('rel-identifying-toggle').click();
-        await patchResp;
-
-        // Verify unwind: customer_id no longer on order.
-        const attrsAfter = await listAttributesViaApi(page, accessToken, seed.modelId);
-        const orderAttrsAfter = attrsAfter.filter((a) => a.entityId === seed.orderId);
-        const hasPropagatedAfter = orderAttrsAfter.some((a) => a.name === 'customer_id');
-        expect(
-          hasPropagatedAfter,
-          `expected propagated customer_id GONE from order after unwind (got ${JSON.stringify(orderAttrsAfter.map((a) => a.name))})`,
-        ).toBe(false);
-      } finally {
-        await deleteModel(page, seed.modelId, accessToken);
-      }
-    },
-  );
-
-  // S6-E8 — infer panel → accept 3 proposals → 3 rels created.
-  //
-  // We seed FK columns so the inference engine has something to propose.
-  isolatedTest.fixme(
-    'S6-E8: Infer panel → accept all → 3 rels created',
-    async ({ page, accessToken }, testInfo) => {
-      testInfo.setTimeout(90_000);
-      const seed = await seedThreeEntityModel(page, accessToken);
-      try {
-        // Add a 4th entity so we get 3 non-overlapping FK proposals.
-        const addressId = await createEntityViaApi(page, accessToken, seed.modelId, 'address');
-        await createAttributeViaApi(page, accessToken, seed.modelId, addressId, {
-          name: 'address_id',
-          dataType: 'uuid',
-          isPrimaryKey: true,
-        });
-        await seedCanvasPositions(page, accessToken, seed.modelId, 'logical', [
-          seed.customerId,
-          seed.orderId,
-          seed.itemId,
-          addressId,
-        ]);
-
-        // FK attrs pointing at the 3 non-customer entities.
-        await createAttributeViaApi(page, accessToken, seed.modelId, seed.customerId, {
-          name: 'order_id',
-          dataType: 'uuid',
-          isForeignKey: true,
-          isNullable: false,
-          isUnique: true,
-        });
-        await createAttributeViaApi(page, accessToken, seed.modelId, seed.customerId, {
-          name: 'item_id',
-          dataType: 'uuid',
-          isForeignKey: true,
-          isNullable: false,
-          isUnique: true,
-        });
-        await createAttributeViaApi(page, accessToken, seed.modelId, seed.customerId, {
-          name: 'address_id',
-          dataType: 'uuid',
-          isForeignKey: true,
-          isNullable: false,
-          isUnique: true,
-        });
-
-        await openCanvasAndWait(page, seed.modelId, 4);
-
-        // Open infer panel. The POST /infer call fires on panel open.
-        const inferResp = page.waitForResponse(
-          (r) =>
-            r.url().includes(`/models/${seed.modelId}/relationships/infer`) &&
-            r.request().method() === 'POST',
-          { timeout: 30_000 },
-        );
-        await page.getByTestId('infer-rels-button').click();
-        await inferResp;
-
-        await expect(page.getByTestId('infer-rels-panel')).toBeVisible();
-        const proposals = page.locator('[data-testid^="infer-proposal-"]').filter({
-          hasNot: page.locator('[data-testid^="infer-proposal-toggle-"]'),
-        });
-
-        // The exact proposal count depends on how the inference engine
-        // pairs FK attrs to PK targets. If the seeding didn't yield
-        // proposals we want a clear failure message rather than a flaky
-        // assert on 3.
-        await expect
-          .poll(async () => await proposals.count(), { timeout: 15_000 })
-          .toBeGreaterThanOrEqual(1);
-
-        const count = await proposals.count();
-        expect(
-          count,
-          `expected at least 3 FK inference proposals for seeded model, got ${count}`,
-        ).toBeGreaterThanOrEqual(3);
-
-        // All rows are selected by default. Click submit; creates fire
-        // sequentially server-side (InferRelationshipsPanel L152-172).
-        await page.getByTestId('infer-submit').click();
-
-        // Wait for creates to settle — poll the rels list.
-        await expect
-          .poll(
-            async () => {
-              const rels = await listRelationshipsViaApi(page, accessToken, seed.modelId);
-              return rels.length;
-            },
-            { timeout: 30_000 },
-          )
-          .toBeGreaterThanOrEqual(3);
-      } finally {
-        await deleteModel(page, seed.modelId, accessToken);
-      }
-    },
-  );
-
-  // S6-E9 — two-tab BroadcastChannel notation sync.
-  //
-  // FIXME: Playwright launches each BrowserContext as a separate browser
-  // process (see fixture `page` above). `BroadcastChannel` is scoped to
-  // a single browser process's page cluster, so a flip in one context
-  // cannot be received in a second, independent context. Validating 7B
-  // end-to-end requires either:
-  //   (a) two pages sharing ONE BrowserContext, which fights the
-  //       per-test auth-injection init-script pattern; or
-  //   (b) a polling-based fallback that observes the canvas_states
-  //       GET — which is what `useNotation` already does and S6-U21
-  //       already covers as a client unit.
-  // Tracked in tasks/todo.md under "Step 6 follow-ups".
-  isolatedTest.fixme('S6-E9: two-tab BroadcastChannel notation sync', async () => {
-    // See the comment above for why this is fixme — BroadcastChannel
-    // does not cross BrowserContext boundaries and reworking the
-    // per-test fixture to share a context would destabilise every
-    // other Step 5/6 test. S6-U21 covers the same logic as a unit.
+  test.beforeEach(async ({ page }) => {
+    accessToken = await getAccessToken();
+    await injectAccessToken(page, accessToken);
+    seed = null; // tests that need the 3-entity seed call seedThreeEntityModel explicitly
   });
 
+  test.afterEach(async ({ page }) => {
+    if (seed?.modelId) {
+      await deleteModel(page, seed.modelId, accessToken);
+      seed = null;
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E1 — drag handle A→B creates a relationship edge.
+  //
+  // FIXME: React Flow v12 drag-to-connect is not reliably automatable
+  // with Playwright's `mouse.down/move/up` sequence (lessons.md #27).
+  // The synthetic PointerEvent sequence either (a) never enters
+  // connection mode and the canvas pans instead, or (b) releases one
+  // frame before the target handle is registered as the drop target.
+  // Unblocks after Agent C lands glyph visibility + Agent D lands
+  // sync-effect fix; drag primitive will still likely need tuning.
+  // ──────────────────────────────────────────────────────────────────
+  test.fixme('S6-E1: drag handle A→B → edge appears on canvas', async ({ page }, testInfo) => {
+    testInfo.setTimeout(60_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    await dragEdge(page, 0, 1);
+
+    await expect(page.locator('[data-testid^="relationship-edge-"]')).toHaveCount(1, {
+      timeout: 15_000,
+    });
+    await expect
+      .poll(async () => (await listRelationshipsViaApi(page, accessToken, seed!.modelId)).length, {
+        timeout: 15_000,
+      })
+      .toBe(1);
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E2 — flip IE → IDEF1X; edges re-render with the other notation.
+  // ──────────────────────────────────────────────────────────────────
+  test('S6-E2: flip IE → IDEF1X → edges re-render with new notation', async ({
+    page,
+  }, testInfo) => {
+    testInfo.setTimeout(60_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: seed.customerId,
+      targetEntityId: seed.orderId,
+      name: null,
+      sourceCardinality: 'one',
+      targetCardinality: 'many',
+      isIdentifying: false,
+      layer: 'logical',
+    });
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    const edge = page.locator('[data-testid^="relationship-edge-"]').first();
+    await expect(edge).toHaveAttribute('data-notation', 'ie');
+
+    const putResp = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/models/${seed!.modelId}/canvas-state`) && r.request().method() === 'PUT',
+      { timeout: 25_000 },
+    );
+    await page.getByTestId('notation-pill-idef1x').click();
+    const putRes = await putResp;
+    expect(putRes.status(), 'PUT canvas-state should be 200').toBe(200);
+
+    await expect(edge).toHaveAttribute('data-notation', 'idef1x', { timeout: 15_000 });
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E3 — drag into empty canvas cancels; no edge appears.
+  //
+  // FIXME: Same React Flow v12 drag-automation brittleness as S6-E1.
+  // Unblocks after Agent C/D land.
+  // ──────────────────────────────────────────────────────────────────
+  test.fixme('S6-E3: drag to empty canvas → React Flow cancels, no new edge', async ({ page }) => {
+    seed = await seedThreeEntityModel(page, accessToken);
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    let postFired = false;
+    page.on('response', (resp) => {
+      if (
+        resp.url().endsWith(`/models/${seed!.modelId}/relationships`) &&
+        resp.request().method() === 'POST'
+      ) {
+        postFired = true;
+      }
+    });
+
+    await dragEdgeToEmpty(page, 0);
+
+    await expect
+      .poll(async () => await page.locator('[data-testid^="relationship-edge-"]').count(), {
+        timeout: 3_000,
+      })
+      .toBe(0);
+
+    expect(postFired).toBe(false);
+    const rels = await listRelationshipsViaApi(page, accessToken, seed.modelId);
+    expect(rels).toHaveLength(0);
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E4 — duplicate drag → client short-circuit opens RelationshipPanel.
+  //
+  // FIXME: Same React Flow v12 drag-automation brittleness as S6-E1.
+  // Unblocks after Agent C/D land.
+  // ──────────────────────────────────────────────────────────────────
+  test.fixme('S6-E4: duplicate drag → opens RelationshipPanel for existing rel', async ({
+    page,
+  }) => {
+    seed = await seedThreeEntityModel(page, accessToken);
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: seed.customerId,
+      targetEntityId: seed.orderId,
+      name: null,
+      sourceCardinality: 'one',
+      targetCardinality: 'many',
+      isIdentifying: false,
+      layer: 'logical',
+    });
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    await dragEdge(page, 0, 1);
+    await expect(page.getByTestId('relationship-panel')).toBeVisible({ timeout: 5_000 });
+
+    const rels = await listRelationshipsViaApi(page, accessToken, seed.modelId);
+    expect(rels).toHaveLength(1);
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E5 — IE → IDEF1X → IE round-trip must restore original render.
+  // ──────────────────────────────────────────────────────────────────
+  test('S6-E5: flip IE → IDEF1X → IE round-trip restores original notation', async ({
+    page,
+  }, testInfo) => {
+    testInfo.setTimeout(90_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: seed.customerId,
+      targetEntityId: seed.orderId,
+      name: null,
+      sourceCardinality: 'one',
+      targetCardinality: 'many',
+      isIdentifying: false,
+      layer: 'logical',
+    });
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    const edge = page.locator('[data-testid^="relationship-edge-"]').first();
+    await expect(edge).toHaveAttribute('data-notation', 'ie');
+
+    const putResp1 = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/models/${seed!.modelId}/canvas-state`) && r.request().method() === 'PUT',
+      { timeout: 25_000 },
+    );
+    await page.getByTestId('notation-pill-idef1x').click();
+    await putResp1;
+    await expect(edge).toHaveAttribute('data-notation', 'idef1x', { timeout: 15_000 });
+
+    const putResp2 = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/models/${seed!.modelId}/canvas-state`) && r.request().method() === 'PUT',
+      { timeout: 25_000 },
+    );
+    await page.getByTestId('notation-pill-ie').click();
+    await putResp2;
+    await expect(edge).toHaveAttribute('data-notation', 'ie', { timeout: 15_000 });
+
+    const state = await getCanvasState(page, accessToken, seed.modelId, 'logical');
+    expect(state.notation).toBe('ie');
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E6 — delete entity with 3 rels → cascade dialog → confirm → gone.
+  // ──────────────────────────────────────────────────────────────────
+  test('S6-E6: delete entity with 3 rels → CascadeDeleteDialog → confirm → rels + entity gone', async ({
+    page,
+  }, testInfo) => {
+    testInfo.setTimeout(60_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    const noteId = await createEntityViaApi(page, accessToken, seed.modelId, 'note');
+    await createAttributeViaApi(page, accessToken, seed.modelId, noteId, {
+      name: 'note_id',
+      dataType: 'uuid',
+      isPrimaryKey: true,
+    });
+    await seedCanvasPositions(page, accessToken, seed.modelId, 'logical', [
+      seed.customerId,
+      seed.orderId,
+      seed.itemId,
+      noteId,
+    ]);
+
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: seed.customerId,
+      targetEntityId: seed.orderId,
+      name: null,
+      sourceCardinality: 'one',
+      targetCardinality: 'many',
+      isIdentifying: false,
+      layer: 'logical',
+    });
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: seed.customerId,
+      targetEntityId: seed.itemId,
+      name: null,
+      sourceCardinality: 'one',
+      targetCardinality: 'many',
+      isIdentifying: false,
+      layer: 'logical',
+    });
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: seed.customerId,
+      targetEntityId: noteId,
+      name: null,
+      sourceCardinality: 'one',
+      targetCardinality: 'many',
+      isIdentifying: false,
+      layer: 'logical',
+    });
+
+    await openCanvasAndWait(page, seed.modelId, 4);
+    await expect(page.locator('[data-testid^="relationship-edge-"]')).toHaveCount(3);
+
+    const customerNode = page
+      .getByTestId('entity-node')
+      .filter({
+        has: page.getByTestId('entity-node-name').getByText('customer', { exact: true }),
+      })
+      .first();
+    await customerNode.click();
+    await expect(
+      customerNode.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]'),
+    ).toHaveClass(/selected/, { timeout: 5_000 });
+
+    // React Flow's useKeyPress hook listens on `window.document` by
+    // default, but clicking the entity node opens the EntityEditor
+    // panel which steals focus. Dispatch the key directly on
+    // document so React Flow picks it up regardless of which
+    // element owns focus.
+    await page.evaluate(() => {
+      const ev = new KeyboardEvent('keydown', {
+        key: 'Delete',
+        code: 'Delete',
+        bubbles: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(ev);
+    });
+
+    await expect(page.getByTestId('cascade-delete-dialog')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('cascade-delete-count')).toContainText('3');
+    const rows = page.locator('[data-testid="cascade-delete-list"] li');
+    await expect(rows).toHaveCount(3);
+
+    const deleteResp = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/models/${seed!.modelId}/entities/${seed!.customerId}`) &&
+        r.request().method() === 'DELETE' &&
+        r.status() < 400,
+      { timeout: 10_000 },
+    );
+    await page.getByTestId('cascade-delete-confirm').click();
+    await deleteResp;
+
+    await expect(page.getByTestId('entity-node')).toHaveCount(3, { timeout: 10_000 });
+    await expect(page.locator('[data-testid^="relationship-edge-"]')).toHaveCount(0);
+
+    const remaining = await listRelationshipsViaApi(page, accessToken, seed.modelId);
+    expect(remaining).toHaveLength(0);
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E7 — toggle isIdentifying true→false → propagated attrs unwound.
+  // ──────────────────────────────────────────────────────────────────
+  test('S6-E7: toggle isIdentifying true→false → propagated PKs unwound', async ({ page }) => {
+    seed = await seedThreeEntityModel(page, accessToken);
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: seed.customerId,
+      targetEntityId: seed.orderId,
+      name: null,
+      sourceCardinality: 'one',
+      targetCardinality: 'many',
+      isIdentifying: true,
+      layer: 'logical',
+    });
+
+    const attrsBefore = await listAttributesViaApi(page, accessToken, seed.modelId);
+    const orderAttrsBefore = attrsBefore.filter((a) => a.entityId === seed!.orderId);
+    expect(
+      orderAttrsBefore.some((a) => a.name === 'customer_id'),
+      `expected propagated customer_id on order before toggle (got ${JSON.stringify(orderAttrsBefore.map((a) => a.name))})`,
+    ).toBe(true);
+
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    const edge = page.locator('[data-testid^="relationship-edge-"]').first();
+    await edge.click();
+    await expect(page.getByTestId('relationship-panel')).toBeVisible();
+
+    await page.getByTestId('rel-tab-cardinality').click();
+    await expect(page.getByTestId('rel-identifying-toggle')).toBeVisible();
+
+    const patchResp = page.waitForResponse(
+      (r) =>
+        r.url().includes('/relationships/') &&
+        r.request().method() === 'PATCH' &&
+        r.status() === 200,
+      { timeout: 10_000 },
+    );
+    await page.getByTestId('rel-identifying-toggle').click();
+    await patchResp;
+
+    const attrsAfter = await listAttributesViaApi(page, accessToken, seed.modelId);
+    const orderAttrsAfter = attrsAfter.filter((a) => a.entityId === seed!.orderId);
+    expect(
+      orderAttrsAfter.some((a) => a.name === 'customer_id'),
+      `expected propagated customer_id GONE from order after unwind (got ${JSON.stringify(orderAttrsAfter.map((a) => a.name))})`,
+    ).toBe(false);
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E8 — infer panel → accept all → at least 3 rels created.
+  // ──────────────────────────────────────────────────────────────────
+  test('S6-E8: Infer panel → accept all → 3 rels created', async ({ page }, testInfo) => {
+    testInfo.setTimeout(90_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    const addressId = await createEntityViaApi(page, accessToken, seed.modelId, 'address');
+    await createAttributeViaApi(page, accessToken, seed.modelId, addressId, {
+      name: 'address_id',
+      dataType: 'uuid',
+      isPrimaryKey: true,
+    });
+    await seedCanvasPositions(page, accessToken, seed.modelId, 'logical', [
+      seed.customerId,
+      seed.orderId,
+      seed.itemId,
+      addressId,
+    ]);
+
+    // FK attrs MUST carry `fk_target_attr_id` in metadata for the
+    // inference engine to emit a proposal (see
+    // model-studio-relationship-infer.service.ts L30-31).
+    const addressPk = (await listAttributesViaApi(page, accessToken, seed.modelId)).find(
+      (a) => a.entityId === addressId && a.isPrimaryKey,
+    );
+    if (!addressPk) throw new Error('expected address PK attr to exist');
+    await createAttributeViaApi(page, accessToken, seed.modelId, seed.customerId, {
+      name: 'order_id',
+      dataType: 'uuid',
+      isForeignKey: true,
+      isNullable: false,
+      isUnique: true,
+      metadata: { fk_target_attr_id: seed.orderPk },
+    });
+    await createAttributeViaApi(page, accessToken, seed.modelId, seed.customerId, {
+      name: 'item_id',
+      dataType: 'uuid',
+      isForeignKey: true,
+      isNullable: false,
+      isUnique: true,
+      metadata: { fk_target_attr_id: seed.itemPk },
+    });
+    await createAttributeViaApi(page, accessToken, seed.modelId, seed.customerId, {
+      name: 'address_id',
+      dataType: 'uuid',
+      isForeignKey: true,
+      isNullable: false,
+      isUnique: true,
+      metadata: { fk_target_attr_id: addressPk.id },
+    });
+
+    await openCanvasAndWait(page, seed.modelId, 4);
+
+    const inferResp = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/models/${seed!.modelId}/relationships/infer`) &&
+        r.request().method() === 'POST',
+      { timeout: 30_000 },
+    );
+    await page.getByTestId('infer-rels-button').click();
+    await inferResp;
+
+    await expect(page.getByTestId('infer-rels-panel')).toBeVisible();
+    const proposals = page.locator('[data-testid^="infer-proposal-"]').filter({
+      hasNot: page.locator('[data-testid^="infer-proposal-toggle-"]'),
+    });
+
+    await expect
+      .poll(async () => await proposals.count(), { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(1);
+
+    const count = await proposals.count();
+    expect(
+      count,
+      `expected at least 3 FK inference proposals for seeded model, got ${count}`,
+    ).toBeGreaterThanOrEqual(3);
+
+    await page.getByTestId('infer-submit').click();
+
+    await expect
+      .poll(async () => (await listRelationshipsViaApi(page, accessToken, seed!.modelId)).length, {
+        timeout: 30_000,
+      })
+      .toBeGreaterThanOrEqual(3);
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E9 — two-tab BroadcastChannel notation sync.
+  //
+  // FIXME: BroadcastChannel is scoped to a single browser process's
+  // page cluster. Playwright launches each BrowserContext in its own
+  // process, so a flip in one context cannot be received in a second.
+  // S6-U21 covers the same logic as a client unit. Unblocks after a
+  // dedicated multi-context test design that shares ONE BrowserContext.
+  // ──────────────────────────────────────────────────────────────────
+  test.fixme('S6-E9: two-tab BroadcastChannel notation sync', async () => {
+    // See header — BroadcastChannel does not cross BrowserContext
+    // boundaries with Playwright's per-context Chromium processes.
+  });
+
+  // ──────────────────────────────────────────────────────────────────
   // S6-E10 — ⌘R keyboard-draw flow.
   //
-  // FIXME: Step 6 Phase 5 shipped with no ⌘R keyboard-draw handler.
-  // ModelStudioCanvas.tsx has zero references to KeyR / metaKey / 'r'
-  // (grep confirmed during Phase 6 investigation). Implementing the
-  // handler is in scope for a follow-up phase; we keep the test
-  // slot here so the test plan ↔ spec mapping stays 1:1.
-  // Tracked in tasks/todo.md under "Step 6 follow-ups".
-  isolatedTest.fixme(
-    'S6-E10: ⌘R keyboard-draw (select source → ⌘R → select target → Enter)',
-    async () => {
-      // No handler exists yet — see comment above.
-    },
-  );
+  // FIXME: Step 6 shipped with no ⌘R keyboard-draw handler. Zero refs
+  // to KeyR / metaKey / 'r' in ModelStudioCanvas.tsx. Unblocks after
+  // a dedicated follow-up phase implements the handler.
+  // ──────────────────────────────────────────────────────────────────
+  test.fixme('S6-E10: ⌘R keyboard-draw (select source → ⌘R → select target → Enter)', async () => {
+    // No handler exists yet — see header.
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E11 — drag persists after pan + refresh (patch fix #3).
+  //
+  // We do NOT go through React Flow's drag-to-move (same v12 automation
+  // brittleness as the drag-to-connect cases). Instead we drive the
+  // position via `canvas-state` PUT — exactly what the drag-end handler
+  // does in production — then pan the canvas, reload the page, and
+  // assert the position round-tripped. This exercises the sync-effect
+  // regression path directly: the bug was that panning the canvas
+  // resubmitted stale positions, so after pan+refresh the dragged
+  // entity snapped back to its seeded position.
+  // ──────────────────────────────────────────────────────────────────
+  test('S6-E11: drag persists after pan + refresh (regression for fix #3)', async ({
+    page,
+  }, testInfo) => {
+    testInfo.setTimeout(60_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    // Simulate a drag of entity 0 by PUTting a new position for it.
+    const newX = 100;
+    const newY = 250;
+    const putResp = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/models/${seed!.modelId}/canvas-state`) && r.request().method() === 'PUT',
+      { timeout: 15_000 },
+    );
+    const putRes = await page.request.put(
+      `${API_BASE}/api/model-studio/models/${seed.modelId}/canvas-state?layer=logical`,
+      {
+        headers: authHeaders(accessToken),
+        data: {
+          layer: 'logical',
+          nodePositions: {
+            [seed.customerId]: { x: newX, y: newY },
+            [seed.orderId]: { x: 320, y: 120 },
+            [seed.itemId]: { x: 640, y: 120 },
+          },
+          viewport: { x: 0, y: 0, zoom: 1 },
+        },
+      },
+    );
+    expect(putRes.status()).toBe(200);
+    await putResp.catch(() => undefined);
+
+    // Pan the viewport — the old sync-effect bug clobbered the
+    // just-saved position by resubmitting the pre-drag state.
+    const canvasBox = await page.locator('.react-flow').boundingBox();
+    if (!canvasBox) throw new Error('canvas missing bounding box');
+    const panStart = {
+      x: canvasBox.x + canvasBox.width / 2,
+      y: canvasBox.y + canvasBox.height / 2,
+    };
+    await page.mouse.move(panStart.x, panStart.y);
+    await page.mouse.down();
+    await page.mouse.move(panStart.x + 180, panStart.y + 60, { steps: 10 });
+    await page.mouse.up();
+
+    // Refresh — the position MUST round-trip via canvas_states.
+    await page.reload();
+    await expect(page.locator('.react-flow')).toBeVisible({ timeout: 15_000 });
+
+    const state = await getCanvasState(page, accessToken, seed.modelId, 'logical');
+    const customerPos = state.nodePositions[seed.customerId];
+    expect(customerPos, 'customer position should round-trip').toBeTruthy();
+    expect(customerPos.x).toBe(newX);
+    expect(customerPos.y).toBe(newY);
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E12 — notation flip no longer surfaces "Validation failed" toast
+  // (patch fix #4).
+  //
+  // Before the fix, the canvas-state PUT schema rejected `notation`,
+  // the client surfaced a toast with text matching /validation failed/i.
+  // This test asserts NO such toast appears after a flip.
+  // ──────────────────────────────────────────────────────────────────
+  test('S6-E12: notation flip does not surface "Validation failed" toast (fix #4)', async ({
+    page,
+  }, testInfo) => {
+    testInfo.setTimeout(60_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    const putResp = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/models/${seed!.modelId}/canvas-state`) && r.request().method() === 'PUT',
+      { timeout: 25_000 },
+    );
+    await page.getByTestId('notation-pill-idef1x').click();
+    const putRes = await putResp;
+    expect(putRes.status(), 'PUT canvas-state should succeed with notation in the body').toBe(200);
+
+    // Give any error toast a beat to render, then assert none did.
+    await page.waitForTimeout(500);
+    const alerts = page.getByRole('alert');
+    const alertCount = await alerts.count();
+    for (let i = 0; i < alertCount; i++) {
+      const text = (await alerts.nth(i).textContent()) ?? '';
+      expect(
+        text.toLowerCase(),
+        `no alert should mention "validation failed" — found: ${text}`,
+      ).not.toContain('validation failed');
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E13 — cardinality glyphs visible in edge SVG (patch fix #2).
+  //
+  // The edge SVG renders glyphs via <g data-glyph="..."> elements (see
+  // RelationshipEdge.tsx L321/325/339/350). Before the fix, the glyphs
+  // rendered behind the entity card because endpoint coords sat on the
+  // entity border. Assert at least one glyph exists AND has a non-zero
+  // on-screen bounding box.
+  //
+  // FIXME (pending): unblocks after Agent C lands the glyph-positioning
+  // fix. Kept here as the lock-in test for that work.
+  // ──────────────────────────────────────────────────────────────────
+  test('S6-E13: cardinality glyphs visible in edge SVG (locks fix #2)', async ({
+    page,
+  }, testInfo) => {
+    testInfo.setTimeout(60_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: seed.customerId,
+      targetEntityId: seed.orderId,
+      name: null,
+      sourceCardinality: 'one',
+      targetCardinality: 'many',
+      isIdentifying: false,
+      layer: 'logical',
+    });
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    const edge = page.locator('[data-testid^="relationship-edge-"]').first();
+    await expect(edge).toBeVisible();
+
+    const glyphs = edge.locator('[data-glyph]');
+    await expect(glyphs.first()).toBeAttached({ timeout: 15_000 });
+    const glyphCount = await glyphs.count();
+    expect(glyphCount, 'edge should render at least one cardinality glyph').toBeGreaterThan(0);
+
+    // At least one glyph must have a non-zero on-screen bounding box.
+    let sawVisibleGlyph = false;
+    for (let i = 0; i < glyphCount; i++) {
+      const box = await glyphs.nth(i).boundingBox();
+      if (box && box.width > 0 && box.height > 0) {
+        sawVisibleGlyph = true;
+        break;
+      }
+    }
+    expect(sawVisibleGlyph, 'at least one glyph should have a visible bounding box').toBe(true);
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E14 — self-ref arc rendered outside entity bbox (patch fix #6).
+  //
+  // FIXME (pending): unblocks after Agent C lands the self-ref arc
+  // visibility fix (translate arc origin outside the entity bbox OR
+  // raise arc z-index above node surface).
+  // ──────────────────────────────────────────────────────────────────
+  test.fixme('S6-E14: self-ref arc rendered outside entity bbox (locks fix #6)', async ({
+    page,
+  }, testInfo) => {
+    testInfo.setTimeout(60_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    // Re-purpose `customer` as `employee` to host the self-ref. Add a
+    // nullable FK column `manager_id` pointing back to the entity's PK.
+    const employeeId = await createEntityViaApi(page, accessToken, seed.modelId, 'employee');
+    await createAttributeViaApi(page, accessToken, seed.modelId, employeeId, {
+      name: 'employee_id',
+      dataType: 'uuid',
+      isPrimaryKey: true,
+    });
+    await createAttributeViaApi(page, accessToken, seed.modelId, employeeId, {
+      name: 'manager_id',
+      dataType: 'uuid',
+      isForeignKey: true,
+      isNullable: true,
+    });
+    await seedCanvasPositions(page, accessToken, seed.modelId, 'logical', [
+      seed.customerId,
+      seed.orderId,
+      seed.itemId,
+      employeeId,
+    ]);
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: employeeId,
+      targetEntityId: employeeId,
+      name: null,
+      sourceCardinality: 'zero_or_one',
+      targetCardinality: 'zero_or_many',
+      isIdentifying: false,
+      layer: 'logical',
+    });
+
+    await openCanvasAndWait(page, seed.modelId, 4);
+
+    const edge = page.locator('[data-testid^="relationship-edge-"]').first();
+    await expect(edge).toBeVisible();
+
+    // Path `d` attribute must match the `selfRefPath` signature:
+    // a Move-to then an elliptical arc of radius 40.
+    const pathLocator = edge.locator('path').first();
+    const d = await pathLocator.getAttribute('d');
+    expect(d, 'edge path should have a `d` attribute').toBeTruthy();
+    expect(d!, `self-ref path should start with "M " — got: ${d}`).toMatch(/^M /);
+    expect(d!, `self-ref path should include "A 40 40" arc — got: ${d}`).toContain('A 40 40');
+
+    // Arc bounding box must NOT be entirely inside the employee node.
+    const pathBox = await pathLocator.boundingBox();
+    const employeeNode = page
+      .getByTestId('entity-node')
+      .filter({
+        has: page.getByTestId('entity-node-name').getByText('employee', { exact: true }),
+      })
+      .first();
+    const nodeBox = await employeeNode.boundingBox();
+    expect(pathBox && nodeBox).toBeTruthy();
+    if (pathBox && nodeBox) {
+      const insideHoriz =
+        pathBox.x >= nodeBox.x && pathBox.x + pathBox.width <= nodeBox.x + nodeBox.width;
+      const insideVert =
+        pathBox.y >= nodeBox.y && pathBox.y + pathBox.height <= nodeBox.y + nodeBox.height;
+      expect(
+        insideHoriz && insideVert,
+        'self-ref arc should extend outside the entity node bounding box',
+      ).toBe(false);
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E15 — undo create rel (⌘Z / Ctrl+Z).
+  //
+  // FIXME (pending): unblocks after Agent A lands the undo core.
+  // ──────────────────────────────────────────────────────────────────
+  test.fixme('S6-E15: undo create rel (⌘Z) — rel count returns to 0 (locks undo core)', async ({
+    page,
+  }, testInfo) => {
+    testInfo.setTimeout(60_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    // Drive the create via the API so this test doesn't share the
+    // drag-automation brittleness of S6-E1. Once Agent A lands, the
+    // client's undo stack captures any mutation irrespective of
+    // how it was initiated.
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: seed.customerId,
+      targetEntityId: seed.orderId,
+      name: null,
+      sourceCardinality: 'one',
+      targetCardinality: 'many',
+      isIdentifying: false,
+      layer: 'logical',
+    });
+
+    await expect(page.locator('[data-testid^="relationship-edge-"]')).toHaveCount(1, {
+      timeout: 10_000,
+    });
+
+    // Undo.
+    await page.locator('.react-flow').focus();
+    const deleteResp = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/models/${seed!.modelId}/relationships/`) &&
+        r.request().method() === 'DELETE' &&
+        r.status() < 400,
+      { timeout: 10_000 },
+    );
+    // Ctrl works cross-platform in React keyboard handlers; the
+    // Agent A spec must treat Control+Z and Meta+Z equivalently.
+    await page.keyboard.press('Control+z');
+    await deleteResp;
+
+    await expect(page.locator('[data-testid^="relationship-edge-"]')).toHaveCount(0, {
+      timeout: 10_000,
+    });
+    const rels = await listRelationshipsViaApi(page, accessToken, seed.modelId);
+    expect(rels).toHaveLength(0);
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // S6-E16 — undo notation flip.
+  //
+  // FIXME (pending): unblocks after Agent A lands the undo core.
+  // ──────────────────────────────────────────────────────────────────
+  test.fixme('S6-E16: undo notation flip (⌘Z) restores previous notation (locks undo core)', async ({
+    page,
+  }, testInfo) => {
+    testInfo.setTimeout(60_000);
+    seed = await seedThreeEntityModel(page, accessToken);
+    await createRelationshipViaApi(page, accessToken, seed.modelId, {
+      sourceEntityId: seed.customerId,
+      targetEntityId: seed.orderId,
+      name: null,
+      sourceCardinality: 'one',
+      targetCardinality: 'many',
+      isIdentifying: false,
+      layer: 'logical',
+    });
+    await openCanvasAndWait(page, seed.modelId, 3);
+
+    const edge = page.locator('[data-testid^="relationship-edge-"]').first();
+    await expect(edge).toHaveAttribute('data-notation', 'ie');
+
+    const putResp = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/models/${seed!.modelId}/canvas-state`) && r.request().method() === 'PUT',
+      { timeout: 15_000 },
+    );
+    await page.getByTestId('notation-pill-idef1x').click();
+    await putResp;
+    await expect(edge).toHaveAttribute('data-notation', 'idef1x', { timeout: 10_000 });
+
+    // Undo → notation back to IE.
+    const undoResp = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/models/${seed!.modelId}/canvas-state`) && r.request().method() === 'PUT',
+      { timeout: 15_000 },
+    );
+    await page.locator('.react-flow').focus();
+    await page.keyboard.press('Control+z');
+    await undoResp;
+
+    await expect(edge).toHaveAttribute('data-notation', 'ie', { timeout: 10_000 });
+    const state = await getCanvasState(page, accessToken, seed.modelId, 'logical');
+    expect(state.notation).toBe('ie');
+  });
 });

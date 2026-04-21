@@ -1,5 +1,11 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react';
+import {
+  BaseEdge,
+  EdgeLabelRenderer,
+  getSmoothStepPath,
+  Position,
+  type EdgeProps,
+} from '@xyflow/react';
 import type { Cardinality, Notation } from '@cc/shared';
 
 /**
@@ -106,25 +112,72 @@ export function idef1xSymbol(cardinality: Cardinality): CardinalityGlyph {
 }
 
 // ────────────────────────────────────────────────────────────────────
+// Handle-direction → glyph rotation
+//
+// For orthogonal (smoothstep) routing the edge leaves the card along
+// the handle's axis. The glyph group is drawn with markers at negative
+// local-x coordinates (bar at x=-14, crows-foot fanning out to x=-14,
+// circles at x=-18/-22). Rotating the group so its local -x axis
+// points OUTWARD from the card places every glyph in the card's
+// exterior rather than inside/behind the entity card border (which
+// was the #2 root cause when combined with bezier's inward tangent).
+// ────────────────────────────────────────────────────────────────────
+
+export function outwardAngleFor(position: Position): number {
+  // Rotation maps local (−1, 0) onto the outward direction.
+  // Right handle: outward = +x  → rotate 180°
+  // Left  handle: outward = −x  → rotate   0°
+  // Top   handle: outward = −y  → rotate  90°
+  // Bottom handle: outward = +y → rotate −90°
+  switch (position) {
+    case Position.Right:
+      return 180;
+    case Position.Left:
+      return 0;
+    case Position.Top:
+      return 90;
+    case Position.Bottom:
+      return -90;
+    default:
+      return 0;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Self-reference arc geometry
 // ────────────────────────────────────────────────────────────────────
 
 /**
- * Build an SVG path string for a self-ref loop. Starts at (sx, sy),
- * arcs clockwise into a small top-right loop, lands back near the
- * start. Kept pure + exported so S6-U20 can snapshot a known geometry.
+ * Build an SVG path string for a self-ref loop.
+ *
+ * React Flow gives us `(sx, sy)` at the handle position on the card
+ * edge. Drawing a loop tangent to that point puts half the loop INSIDE
+ * the entity card and hidden behind it. Instead we project the loop
+ * OUTWARD past the card border and produce a full ear-shaped arc that
+ * sits entirely outside the node bounds.
+ *
+ * The loop is anchored above the source handle and curves up + right
+ * so it's visible in the canonical top-right quadrant regardless of
+ * whether React Flow routed the same handle or two distinct handles
+ * for a source-equals-target edge.
+ *
+ * Kept pure + exported so S6-U20 can snapshot a known geometry.
  */
 export function selfRefPath(sx: number, sy: number): string {
-  const radius = 40;
-  const startX = sx + 10;
+  // Push the anchor clearly outside the card border along the top-right
+  // diagonal. Empirically a 14px outward offset clears the 1.25px stroke
+  // + entity card border + any selected-glow.
+  const outwardOffset = 14;
+  const startX = sx + outwardOffset;
   const startY = sy - 4;
-  const endX = sx - 4;
-  const endY = sy - 10;
-  // Two quarter-arc segments forming an ear-shaped loop above+right of
-  // the anchor. Sweep flag 1 → clockwise.
-  const arc1X = startX + radius;
-  const arc1Y = startY - radius;
-  return `M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${arc1X} ${arc1Y} A ${radius} ${radius} 0 0 1 ${endX} ${endY}`;
+  const radius = 22;
+  // Two quarter arcs forming a closed-looking ear above and to the
+  // right of the source handle. Sweep flag 1 → clockwise.
+  const midX = startX + radius;
+  const midY = startY - radius;
+  const endX = sx + 4;
+  const endY = sy - outwardOffset;
+  return `M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${midX} ${midY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}`;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -159,6 +212,13 @@ function RelationshipEdgeComponent(props: EdgeProps) {
     notation === 'ie' ? ieSymbol(d.targetCardinality) : idef1xSymbol(d.targetCardinality);
 
   // Path geometry.
+  //
+  // #2 decision — orthogonal `getSmoothStepPath` replaces the bezier.
+  // Smoothstep leaves each endpoint along its handle's axis, which
+  // means the glyph tangent is deterministic (always axis-aligned)
+  // and matches the direction of the line leaving the card. That in
+  // turn lets us rotate the glyph so it renders OUTSIDE the card
+  // rather than behind it.
   let edgePath: string;
   let labelX: number;
   let labelY: number;
@@ -169,28 +229,31 @@ function RelationshipEdgeComponent(props: EdgeProps) {
     edgePath = selfRefPath(sourceX, sourceY);
     labelX = sourceX + 44;
     labelY = sourceY - 44;
+    // Source glyph aligned with the outward-right tangent at the loop's
+    // start; target glyph aligned with the outward-upward tangent at
+    // the loop's end so both glyphs render outside the node bounds.
     srcAngleDeg = 0;
-    tgtAngleDeg = 90;
+    tgtAngleDeg = -90;
   } else {
-    const [bezierPath, bLabelX, bLabelY] = getBezierPath({
+    const [smoothPath, sLabelX, sLabelY] = getSmoothStepPath({
       sourceX,
       sourceY,
       sourcePosition,
       targetX,
       targetY,
       targetPosition,
+      borderRadius: 8,
     });
-    edgePath = bezierPath;
-    labelX = bLabelX;
-    labelY = bLabelY;
-    // Angle of the straight-line approximation is close enough for
-    // glyph orientation. Exact tangent would require sampling the bezier.
-    const dx = targetX - sourceX;
-    const dy = targetY - sourceY;
-    const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-    // Source glyph points outward from source (opposite of bearing).
-    srcAngleDeg = angle + 180;
-    tgtAngleDeg = angle;
+    edgePath = smoothPath;
+    labelX = sLabelX;
+    labelY = sLabelY;
+    // With orthogonal routing the path leaves each endpoint along the
+    // handle's axis. Use the handle position to produce an exact
+    // outward-pointing tangent. Glyph markup lives on negative-x
+    // local coords, so rotating the glyph group by `outwardAngle`
+    // projects the glyph OUTSIDE the card.
+    srcAngleDeg = outwardAngleFor(sourcePosition);
+    tgtAngleDeg = outwardAngleFor(targetPosition);
   }
 
   const stroke = d.isIdentifying ? 'var(--tw-colors-accent, #FFD60A)' : '#8FA3B7';
@@ -250,19 +313,25 @@ function RelationshipEdgeComponent(props: EdgeProps) {
           transition: 'opacity 200ms ease',
         }}
       />
-      {/* Source-end glyph */}
+      {/* Source-end glyph — anchored at the card-edge handle, rotated
+          so the glyph markers project OUTWARD from the card. For
+          self-ref edges the anchor is the start of the loop (sits just
+          outside the source handle) so the glyph clears the border. */}
       <GlyphMarker
-        x={sourceX}
-        y={sourceY}
+        x={isSelfRef ? sourceX + 14 : sourceX}
+        y={isSelfRef ? sourceY - 4 : sourceY}
         angleDeg={srcAngleDeg}
         glyph={srcGlyph}
         identifying={d.isIdentifying}
         testId={`rel-glyph-source-${id}`}
       />
-      {/* Target-end glyph */}
+      {/* Target-end glyph — for non-self-ref edges we use the target
+          handle; for self-ref the arc terminates above the source, so
+          we anchor the target glyph at the end of the loop and rotate
+          it so its markers point UP (away from the card). */}
       <GlyphMarker
-        x={isSelfRef ? sourceX - 20 : targetX}
-        y={isSelfRef ? sourceY - 40 : targetY}
+        x={isSelfRef ? sourceX + 4 : targetX}
+        y={isSelfRef ? sourceY - 14 : targetY}
         angleDeg={tgtAngleDeg}
         glyph={tgtGlyph}
         identifying={d.isIdentifying}

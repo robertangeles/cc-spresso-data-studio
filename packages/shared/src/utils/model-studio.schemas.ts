@@ -158,6 +158,12 @@ export type CanvasStateQuery = z.infer<typeof canvasStateQuerySchema>;
 export const canvasStatePutSchema = z
   .object({
     layer: LAYER,
+    // Optional because only the notation-flip path sends it; the
+    // drag/pan/zoom path writes positions+viewport with no notation
+    // change. Keeping the field optional preserves that contract while
+    // letting `useNotation` PUT the flipped value through the same
+    // endpoint instead of inventing a parallel route.
+    notation: NOTATION.optional(),
     nodePositions: nodePositionsSchema,
     viewport: viewportSchema,
   })

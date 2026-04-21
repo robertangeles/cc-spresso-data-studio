@@ -133,29 +133,54 @@ the project memory at `project_model_studio_state.md` — use it.
 
 ## Step 6 follow-ups (deferred from Phase 6 Playwright build)
 
-- [ ] **S6-E1 / E2 / E3 / E4 / E5 / E6 / E7 / E8 — full E2E suite.**
-      All 10 cases currently `.fixme` in
+- [ ] **Entity-delete undo via soft-delete / restore endpoint.** Step 6 ships undo/redo for rel CRUD, attr CRUD, entity create+update, notation flip, and canvas drag. Entity DELETE is intentionally not reversible in MVP (cascades across attrs, rels, layer_links, canvas positions — replay requires either tombstones across the whole schema OR ID-preserving restore endpoints). See tasks/alignment-step6-patch.md §2.3 for the decision + rationale.
+
+- [x] Step 6 Showcase seed script — packages/server/src/scripts/seed-step6-showcase.ts. Run with `pnpm -C packages/server db:seed-step6-showcase`. Idempotent via runOnce.
+
+- [x] **Fixture auth rescue (S6-E2 / E5 / E6 / E7 / E8 + new
+      E11/E12 unblocked).** Spec refactored to the `dependencies:
+    ['setup']` project chain — one login per run via `setup`,
+      one `POST /api/auth/refresh` per suite to mint an access token
+      for API calls. Zero per-test logins, zero rate-limit burn.
+      See the header comment of
+      `packages/client/tests/e2e/model-studio-relationships.spec.ts`
+      for full strategy.
+- [ ] **S6-E1 / E3 / E4 — React Flow v12 drag-to-connect automation.**
+      Still `.fixme` in
       `packages/client/tests/e2e/model-studio-relationships.spec.ts`.
-      Root cause observed during Phase 6: when the spec is run, the
-      auth `setup` project succeeds but subsequent test pages fail
-      `expect(page.locator('.react-flow')).toBeVisible()` within 30 s
-      — the canvas DOM never appears. Hypotheses (in order of
-      likelihood): (a) the per-test `isolatedTest` fixture's
-      per-test `/api/auth/login` burns through the auth rate limit
-      (5 per 15 min) and later tests get the browser into a
-      redirect-to-login loop; (b) `canvas_states` GET returns an
-      error for brand-new models, so the canvas renders an error
-      state instead of `.react-flow`; (c) some cross-test state
-      leak between `isolatedTest` fixtures. Debug in a dedicated
-      session: (1) add an `afterEach` that dumps the failing page's
-      body + console on screenshot for root cause, (2) try the S5
-      pattern of a single shared `BrowserContext` via
-      `dependencies: ['setup']` without per-test login, (3) confirm
-      the Phase 5 canvas renders for a fresh model without rels.
-      Drag-dependent (E1/E3/E4) additionally need the React Flow v12
-      handle-drag automation worked out — see earlier Phase 6 agent
-      investigation for the 3 tried approaches and why each was
-      brittle.
+      Playwright's `mouse.down/move/up` sequence is not a reliable
+      driver for React Flow v12's connection mode — the synthetic
+      PointerEvents either pan the canvas or release before the
+      target handle is registered as the drop target. Options to
+      explore in a dedicated follow-up session: (a) switch to
+      `page.dispatchEvent('pointermove')` with explicit PointerEvent
+      init dicts, (b) add a test-only keyboard command `Alt+C` on
+      the source handle that starts React Flow connection mode
+      without drag, (c) drive connection via the React Flow
+      `onConnectStart`/`onConnectEnd` internals using a `page.evaluate`
+      hook. Drag-dependent cases unblock after one of these lands.
+- [x] **S6-E13 — cardinality glyphs visible in edge SVG.** GREEN after
+      Agent C's smoothstep + outward-glyph fix. Playwright asserts
+      `[data-glyph]` elements render outside the entity node bbox.
+- [ ] **S6-E14 — self-ref arc assertion tuning.** Agent C's fix makes
+      the arc visible (screenshot confirmed — `agent-c-selfref.png`),
+      but the Playwright assertion Agent F wrote speculatively expected
+      a specific path `d` attribute format and doesn't match the final
+      two-arc geometry (`M sx sy A 22 22 0 0 1 ... A 22 22 0 0 1 ...`).
+      Needs an assertion re-tune: check for `data-self-ref="true"` +
+      assert the path starts with `M ` AND contains `A 22 22` instead
+      of the current tighter regex. Currently `.fixme` in
+      `packages/client/tests/e2e/model-studio-relationships.spec.ts`.
+- [ ] **S6-E15 — undo create rel (⌘Z) assertion tuning.** Agent A's
+      undo core is live (128/128 unit green incl. 11 undo tests), but
+      the Playwright keyboard-dispatch assertion needs adjustment —
+      `page.keyboard.press('Control+Z')` on the canvas may not reach
+      the document-level keydown handler while React Flow has focus.
+      Needs `document.dispatchEvent(new KeyboardEvent('keydown', ...))`
+      pattern (same technique Agent F used for E6's Delete key). Test
+      written; `.fixme`.
+- [ ] **S6-E16 — undo notation flip (⌘Z) assertion tuning.** Same
+      keyboard-dispatch root cause as E15. Same fix. `.fixme`.
 - [ ] **S6-E9 — two-tab BroadcastChannel notation sync E2E.** Currently
       `.fixme` in
       `packages/client/tests/e2e/model-studio-relationships.spec.ts`.

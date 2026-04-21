@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { Layer, Notation } from '@cc/shared';
 import { useNotation } from '../../hooks/useNotation';
+import { useUndoStack } from '../../hooks/useUndoStack';
 
 /**
  * Step 6 — IE / IDEF1X notation toggle mounted in the canvas header.
@@ -43,14 +44,28 @@ const OPTIONS: Array<{ value: Notation; label: string; tooltip: string }> = [
 
 export function NotationSwitcher({ modelId, layer, disabled }: NotationSwitcherProps) {
   const { notation, setNotation, isUpdating } = useNotation(modelId, layer);
+  // Undo/redo — pair each flip with its inverse. Using the snapshot at
+  // `execute` time (the notation BEFORE the flip) so redo after undo
+  // restores the target, not the source.
+  const undo = useUndoStack();
 
   const onSelect = useCallback(
     (next: Notation) => {
       if (disabled || isUpdating) return;
       if (next === notation) return;
-      void setNotation(next);
+      const previous = notation;
+      void undo.execute({
+        label: `Change notation to ${next.toUpperCase()}`,
+        snapshot: { previous },
+        do: async () => {
+          await setNotation(next);
+        },
+        undo: async (snap) => {
+          await setNotation(snap.previous);
+        },
+      });
     },
-    [disabled, isUpdating, notation, setNotation],
+    [disabled, isUpdating, notation, setNotation, undo],
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, current: Notation) => {

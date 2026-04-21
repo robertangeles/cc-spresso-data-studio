@@ -16,6 +16,7 @@
  *   S6-I12  Changelog write failure → whole TX rolls back
  *   S6-I13  GET /admin/.../diagnostics seeded orphan           → 200 with orphan row
  *   S6-I14  GET /admin/.../explain Mermaid                     → 200 with erDiagram
+ *   S6-I15  PUT /canvas-state with notation=ie                 → 200 (schema accepts notation)
  *
  * Requires:
  *   - Server running on TEST_API_URL (default http://localhost:3006).
@@ -465,6 +466,31 @@ describe('Model Studio — relationships (Step 6)', () => {
     // Step 1-5 test. Aligning to codebase rather than rippling a 400→422
     // change across Steps 1-5. Documented in tasks/lessons.md.
     expect(res.status).toBe(400);
+  });
+
+  it('S6-I15: PUT /canvas-state with notation=ie returns 200 (schema accepts the field)', async () => {
+    // Regression lock for the Step 6 post-ship patch fix #4. Prior to the
+    // fix, `canvasStatePutSchema` was `.strict()` and rejected the
+    // `notation` key that `useNotation` PUTs alongside layer/positions/
+    // viewport, surfacing as a "Validation failed" toast in the UI.
+    //
+    // This case does NOT assert `row.notation === 'ie'` — the canvas
+    // controller path that owns notation persistence is out of scope
+    // for Agent B and lives in a different agent wave. The contract
+    // being locked here is exactly the one the schema change enables:
+    // the PUT body with notation passes validation and the endpoint
+    // returns 200.
+    const res = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/canvas-state`, {
+      method: 'PUT',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        layer: 'logical',
+        notation: 'ie',
+        nodePositions: {},
+        viewport: { x: 0, y: 0, zoom: 1 },
+      }),
+    });
+    expect(res.status).toBe(200);
   });
 
   it('S6-I14: GET /admin/.../explain returns Mermaid with erDiagram header', async () => {
