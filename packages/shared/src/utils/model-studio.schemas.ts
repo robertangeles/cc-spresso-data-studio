@@ -671,6 +671,65 @@ export const relationshipIdParamsSchema = z.object({
 });
 export type RelationshipIdParams = z.infer<typeof relationshipIdParamsSchema>;
 
+// ============================================================
+// Relationship Key Columns — Erwin-style FK pairing (source PK →
+// target FK), including manual-pairing override for power users.
+//
+// A relationship of any isIdentifying flavour propagates each source
+// PK as an FK attribute on the target entity. The default pairing is
+// "auto-create" — the server creates a new FK attr named after the
+// source PK. Power users can override per source PK by picking an
+// existing target attribute; the server then tags that attr with
+// metadata.fk_for_rel_id + fk_for_source_attr_id and deletes any
+// stale auto-created FK for that same source PK.
+// ============================================================
+
+/** One request row in the setKeyColumns body. `targetAttributeId=null`
+ *  tells the server to auto-create (or retain) a generated FK attr
+ *  named after the source PK. A UUID tells the server to tag that
+ *  existing attr as the FK for this source PK. */
+export const relationshipKeyColumnPairInputSchema = z
+  .object({
+    sourceAttributeId: uuidParam,
+    targetAttributeId: uuidParam.nullable(),
+  })
+  .strict();
+export type RelationshipKeyColumnPairInput = z.infer<typeof relationshipKeyColumnPairInputSchema>;
+
+/** POST /models/:id/relationships/:relId/key-columns body. */
+export const relationshipKeyColumnsSetSchema = z
+  .object({
+    pairs: z.array(relationshipKeyColumnPairInputSchema).max(16),
+  })
+  .strict();
+export type RelationshipKeyColumnsSet = z.infer<typeof relationshipKeyColumnsSetSchema>;
+
+/** Reconciled pair returned by GET / POST responses. `isAutoCreated`
+ *  tells the client whether the target attr is server-managed (auto)
+ *  or a user-chosen existing attribute. */
+export const relationshipKeyColumnPairSchema = z
+  .object({
+    sourceAttributeId: uuidParam,
+    sourceAttributeName: z.string(),
+    targetAttributeId: uuidParam.nullable(),
+    targetAttributeName: z.string().nullable(),
+    isAutoCreated: z.boolean(),
+  })
+  .strict();
+export type RelationshipKeyColumnPair = z.infer<typeof relationshipKeyColumnPairSchema>;
+
+/** Response for both GET and POST. `needsBackfill` is true when the
+ *  source has N PKs but fewer than N propagated FKs exist on the
+ *  target — lets the client trigger a silent auto-backfill. */
+export const relationshipKeyColumnsResponseSchema = z
+  .object({
+    pairs: z.array(relationshipKeyColumnPairSchema),
+    needsBackfill: z.boolean(),
+    sourceHasNoPk: z.boolean(),
+  })
+  .strict();
+export type RelationshipKeyColumnsResponse = z.infer<typeof relationshipKeyColumnsResponseSchema>;
+
 /** Params for `/models/:id/entities/:entityId/impact` (cascade-delete
  *  preview). Shares shape with the entity-id params but re-declared
  *  here to keep Step 6 additions locally grouped. */

@@ -1,12 +1,16 @@
 import { and, asc, eq, or, sql } from 'drizzle-orm';
+import type { PgTransaction } from 'drizzle-orm/pg-core';
 import {
   type CreateRelationshipInput,
   type Layer,
   type NamingLintRule,
+  type RelationshipKeyColumnPair,
+  type RelationshipKeyColumnPairInput,
+  type RelationshipKeyColumnsResponse,
   type UpdateRelationshipInput,
 } from '@cc/shared';
 import { db } from '../db/index.js';
-import { dataModelEntities, dataModelRelationships } from '../db/schema.js';
+import { dataModelAttributes, dataModelEntities, dataModelRelationships } from '../db/schema.js';
 import {
   AppError,
   ConflictError,
@@ -21,8 +25,11 @@ import { enqueueEmbedding } from './model-studio-embedding.service.js';
 import {
   CyclicIdentifyingError,
   InvariantError,
-  propagateIdentifyingPKs,
-  unwindIdentifyingPKs,
+  propagateOneSourcePkToTarget,
+  propagateRelationshipFk,
+  reconcileFkIdentifyingFlag,
+  reconcileFkNullability,
+  unwindRelationshipFk,
 } from './model-studio-relationship-propagate.service.js';
 import { normalizeRelationship } from './model-studio-relationship-flags.js';
 
@@ -266,17 +273,45 @@ export async function createRelationship(
         })
         .returning();
 
-      if (input.isIdentifying) {
-        // Propagation runs inside the same TX — self-ref + cycle checks
-        // live in `detectCycleIdentifying`, which throws on violation
-        // and rolls back the rel insert via TX abort.
-        await propagateIdentifyingPKs(tx, {
+      // Key Columns upgrade (Step 6 follow-up) — every rel propagates
+      // source PKs as FK attrs on the target, not just identifying rels.
+      // `isPrimaryKey` on the propagated attr mirrors `isIdentifying`,
+      // and `isNullable` derives from the source cardinality. Self-ref
+      // + identifying-cycle checks run inside `propagateRelationshipFk`
+      // only when the rel is identifying, and a source with zero PKs
+      // throws `InvariantError('source_has_no_pk')` — the TX rolls back.
+      //
+      // Source-has-no-PK is soft-handled here: we swallow it so the rel
+      // itself still gets created (the client surfaces "source entity
+      // has no PK — add one to enable FK propagation" via the Key
+      // Columns panel). This matches the spec edge-case table.
+      try {
+        await propagateRelationshipFk(tx, {
           relId: row.id,
           modelId,
           sourceEntityId: input.sourceEntityId,
           targetEntityId: input.targetEntityId,
+          isIdentifying: input.isIdentifying,
+          sourceCardinality: normalised.normalized.sourceCardinality!,
           changedBy: userId,
         });
+      } catch (err) {
+        // Source-with-no-PK is soft on non-identifying rels: the rel
+        // survives so the user can add PKs later and backfill. For
+        // identifying rels we keep the strict behaviour — a child PK
+        // cannot be empty, so the rel MUST come with propagated PKs.
+        if (
+          err instanceof InvariantError &&
+          err.code === 'source_has_no_pk' &&
+          !input.isIdentifying
+        ) {
+          logger.info(
+            { relId: row.id, modelId },
+            'relationship.create — source has no PK; non-identifying rel created without FKs',
+          );
+        } else {
+          throw err;
+        }
       }
 
       await recordChange({
@@ -489,19 +524,69 @@ export async function updateRelationship(
       const next = rows[0];
 
       // Identifying transition handling — Erwin parity.
-      //   false→true → propagate PKs now.
-      //   true→false → unwind previously propagated attrs.
-      //   unchanged → no-op.
-      if (patch.isIdentifying === true && !before.isIdentifying) {
-        await propagateIdentifyingPKs(tx, {
+      //   false→true  → FKs already exist (per Key Columns upgrade): flip
+      //                 them to PKs + enforce NOT NULL. If no FKs exist
+      //                 yet (source had no PK at create time, now has
+      //                 one), propagate fresh.
+      //   true→false  → FKs survive but lose their PK flag + nullability
+      //                 reconciles against cardinality.
+      //   unchanged   → reconcile nullability only when cardinality
+      //                 changed.
+      const effectiveIdentifying =
+        patch.isIdentifying === undefined ? before.isIdentifying : patch.isIdentifying;
+      const effectiveSourceCardinality = patch.sourceCardinality ?? before.sourceCardinality;
+
+      if (patch.isIdentifying !== undefined && patch.isIdentifying !== before.isIdentifying) {
+        const flipped = await reconcileFkIdentifyingFlag(tx, {
           relId,
           modelId,
-          sourceEntityId: effectiveSource,
-          targetEntityId: effectiveTarget,
+          isIdentifying: effectiveIdentifying,
+          sourceCardinality: effectiveSourceCardinality,
           changedBy: userId,
         });
-      } else if (patch.isIdentifying === false && before.isIdentifying) {
-        await unwindIdentifyingPKs(tx, { relId, modelId, changedBy: userId });
+        // If no FKs existed (e.g. the source originally had no PK and
+        // now does), fall back to a fresh propagate — keeps Erwin
+        // behaviour: identifying rels MUST carry propagated PKs.
+        if (flipped === 0) {
+          try {
+            await propagateRelationshipFk(tx, {
+              relId,
+              modelId,
+              sourceEntityId: effectiveSource,
+              targetEntityId: effectiveTarget,
+              isIdentifying: effectiveIdentifying,
+              sourceCardinality: effectiveSourceCardinality,
+              changedBy: userId,
+            });
+          } catch (err) {
+            if (
+              err instanceof InvariantError &&
+              err.code === 'source_has_no_pk' &&
+              !effectiveIdentifying
+            ) {
+              // Same soft-handle rule as create.
+              logger.info(
+                { relId, modelId },
+                'relationship.update — source has no PK; non-identifying flip leaves FKs empty',
+              );
+            } else {
+              throw err;
+            }
+          }
+        }
+      } else if (
+        patch.sourceCardinality !== undefined &&
+        patch.sourceCardinality !== before.sourceCardinality
+      ) {
+        // Cardinality-only flip → reconcile nullability across every
+        // auto-propagated FK. No-op for identifying rels (always NN).
+        await reconcileFkNullability(tx, {
+          relId,
+          modelId,
+          isIdentifying: effectiveIdentifying,
+          sourceCardinality: effectiveSourceCardinality,
+          changedBy: userId,
+        });
       }
 
       await recordChange({
@@ -565,10 +650,14 @@ export async function deleteRelationship(
 
   try {
     const result = await db.transaction(async (tx) => {
-      let unwoundAttrs = 0;
-      if (before.isIdentifying) {
-        unwoundAttrs = await unwindIdentifyingPKs(tx, { relId, modelId, changedBy: userId });
-      }
+      // Key Columns upgrade: ALL rels (identifying or not) may have
+      // propagated FKs or manually-paired target attrs. Unwind runs
+      // unconditionally — it no-ops cleanly when nothing was propagated.
+      const unwoundAttrs = await unwindRelationshipFk(tx, {
+        relId,
+        modelId,
+        changedBy: userId,
+      });
 
       const deleted = await tx
         .delete(dataModelRelationships)
@@ -607,6 +696,378 @@ export async function deleteRelationship(
     logger.error({ err, userId, modelId, relId }, 'deleteRelationship failed');
     throw new DBError('deleteRelationship');
   }
+}
+
+// ============================================================
+// KEY COLUMNS — Erwin-parity FK pairing panel
+//
+// GET  /models/:id/relationships/:relId/key-columns  → getKeyColumns
+// POST /models/:id/relationships/:relId/key-columns  → setKeyColumns
+//
+// Design:
+//   - Source PKs drive the pair list; if the source has no PKs, the
+//     response carries `sourceHasNoPk=true` and the client renders an
+//     error banner instead of rows.
+//   - Each pair has a target attr that was either auto-propagated
+//     (metadata.propagated_from_rel_id === relId) or manually paired
+//     (metadata.fk_for_rel_id === relId, fk_for_source_attr_id set).
+//   - `needsBackfill` signals that the source has N PKs but the target
+//     carries fewer than N paired attrs — the UI triggers a silent
+//     POST with the existing pairs to let the server auto-fill.
+// ============================================================
+
+/** Load rel + source + target entity rows, authenticating access.
+ *  Throws NotFoundError if any of them is missing within the model. */
+async function loadRelWithEndpoints(
+  userId: string,
+  modelId: string,
+  relId: string,
+): Promise<{
+  rel: DataModelRelationship;
+  source: EntityLite;
+  target: EntityLite;
+}> {
+  await assertCanAccessModel(userId, modelId);
+  const rel = await getRelationship(userId, modelId, relId);
+  const map = await loadEntitiesInModel(modelId, [rel.sourceEntityId, rel.targetEntityId]);
+  const source = map.get(rel.sourceEntityId);
+  const target = map.get(rel.targetEntityId);
+  if (!source || !target) throw new NotFoundError('Relationship');
+  return { rel, source, target };
+}
+
+type AttrRow = typeof dataModelAttributes.$inferSelect;
+
+/** Build the pair list from the target entity's FK attrs for this rel.
+ *  Pairs are keyed by source PK id; auto-propagated attrs map via
+ *  `propagated_from_attr_id`, manual attrs via `fk_for_source_attr_id`. */
+function buildPairs(
+  sourcePks: AttrRow[],
+  targetFks: AttrRow[],
+): { pairs: RelationshipKeyColumnPair[]; needsBackfill: boolean } {
+  const bySourceAttr = new Map<string, { target: AttrRow; isAutoCreated: boolean }>();
+  for (const attr of targetFks) {
+    const md = (attr.metadata as Record<string, unknown> | null) ?? {};
+    const auto = md.propagated_from_attr_id as string | undefined;
+    const manual = md.fk_for_source_attr_id as string | undefined;
+    if (auto) {
+      bySourceAttr.set(auto, { target: attr, isAutoCreated: true });
+    } else if (manual) {
+      bySourceAttr.set(manual, { target: attr, isAutoCreated: false });
+    }
+  }
+
+  const pairs: RelationshipKeyColumnPair[] = sourcePks.map((pk) => {
+    const hit = bySourceAttr.get(pk.id);
+    return {
+      sourceAttributeId: pk.id,
+      sourceAttributeName: pk.name,
+      targetAttributeId: hit?.target.id ?? null,
+      targetAttributeName: hit?.target.name ?? null,
+      isAutoCreated: hit?.isAutoCreated ?? false,
+    };
+  });
+
+  const pairedCount = pairs.filter((p) => p.targetAttributeId !== null).length;
+  const needsBackfill = sourcePks.length > 0 && pairedCount < sourcePks.length;
+
+  return { pairs, needsBackfill };
+}
+
+export async function getKeyColumns(
+  userId: string,
+  modelId: string,
+  relId: string,
+): Promise<RelationshipKeyColumnsResponse> {
+  const { rel } = await loadRelWithEndpoints(userId, modelId, relId);
+
+  const sourcePks = await db
+    .select()
+    .from(dataModelAttributes)
+    .where(
+      and(
+        eq(dataModelAttributes.entityId, rel.sourceEntityId),
+        eq(dataModelAttributes.isPrimaryKey, true),
+      ),
+    )
+    .orderBy(asc(dataModelAttributes.ordinalPosition), asc(dataModelAttributes.createdAt));
+
+  const sourceHasNoPk = sourcePks.length === 0;
+
+  // Fetch target attrs that either propagated from this rel OR are
+  // manually tagged for this rel. Single query using JSONB predicates.
+  const targetFks = await db
+    .select()
+    .from(dataModelAttributes)
+    .where(
+      and(
+        eq(dataModelAttributes.entityId, rel.targetEntityId),
+        or(
+          sql`${dataModelAttributes.metadata}->>'propagated_from_rel_id' = ${relId}`,
+          sql`${dataModelAttributes.metadata}->>'fk_for_rel_id' = ${relId}`,
+        ),
+      ),
+    );
+
+  const { pairs, needsBackfill } = buildPairs(sourcePks, targetFks);
+  return { pairs, needsBackfill, sourceHasNoPk };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Tx = PgTransaction<any, any, any>;
+
+/** Inner TX worker for setKeyColumns. Keeps the service function body
+ *  flat + makes unit testing easier by accepting a pre-opened tx. */
+async function applyKeyColumnsInTx(
+  tx: Tx,
+  input: {
+    rel: DataModelRelationship;
+    modelId: string;
+    userId: string;
+    desiredBySource: Map<string, string | null>;
+    sourcePks: AttrRow[];
+    existingTargetFks: AttrRow[];
+  },
+): Promise<void> {
+  const { rel, modelId, userId, desiredBySource, sourcePks, existingTargetFks } = input;
+
+  // Index existing target FKs by which source attr they serve.
+  const autoBySourceAttr = new Map<string, AttrRow>();
+  const manualBySourceAttr = new Map<string, AttrRow>();
+  for (const attr of existingTargetFks) {
+    const md = (attr.metadata as Record<string, unknown> | null) ?? {};
+    const auto = md.propagated_from_attr_id as string | undefined;
+    const manual = md.fk_for_source_attr_id as string | undefined;
+    if (auto) autoBySourceAttr.set(auto, attr);
+    if (manual) manualBySourceAttr.set(manual, attr);
+  }
+
+  // Compute next ordinal lazily — only needed if we auto-create.
+  let nextOrdinal: number | null = null;
+  async function getNextOrdinal(): Promise<number> {
+    if (nextOrdinal !== null) return nextOrdinal;
+    const [{ maxOrdinal } = { maxOrdinal: 0 }] = await tx
+      .select({
+        maxOrdinal: sql<number>`COALESCE(MAX(${dataModelAttributes.ordinalPosition}), 0)`,
+      })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, rel.targetEntityId));
+    nextOrdinal = Number(maxOrdinal) + 1;
+    return nextOrdinal;
+  }
+
+  for (const pk of sourcePks) {
+    const desired = desiredBySource.has(pk.id) ? desiredBySource.get(pk.id)! : null;
+
+    if (desired === null) {
+      // Auto — ensure an auto-propagated FK exists for this source PK.
+      if (!autoBySourceAttr.has(pk.id)) {
+        // Drop any stale manual tag for this source attr to avoid a
+        // double-count in GET.
+        const stale = manualBySourceAttr.get(pk.id);
+        if (stale) {
+          const md = (stale.metadata as Record<string, unknown> | null) ?? {};
+          const clean: Record<string, unknown> = { ...md };
+          delete clean.fk_for_rel_id;
+          delete clean.fk_for_source_attr_id;
+          await tx
+            .update(dataModelAttributes)
+            .set({ metadata: clean, updatedAt: new Date() })
+            .where(eq(dataModelAttributes.id, stale.id));
+        }
+
+        const ordinal = await getNextOrdinal();
+        nextOrdinal = ordinal + 1;
+        await propagateOneSourcePkToTarget(tx, {
+          relId: rel.id,
+          sourceAttr: pk,
+          sourceEntityId: rel.sourceEntityId,
+          targetEntityId: rel.targetEntityId,
+          isIdentifying: rel.isIdentifying,
+          sourceCardinality: rel.sourceCardinality,
+          ordinal,
+        });
+
+        await recordChange({
+          dataModelId: modelId,
+          objectId: rel.id,
+          objectType: 'relationship',
+          action: 'update',
+          changedBy: userId,
+          afterState: {
+            keyColumnPair: {
+              sourceAttributeId: pk.id,
+              targetAttributeId: null,
+              mode: 'auto_created',
+            },
+          },
+        });
+      }
+      continue;
+    }
+
+    // Desired = specific target attr UUID. Validate it lives on the
+    // target entity; adopt it as the manual FK for this source PK.
+    const [targetRow] = await tx
+      .select()
+      .from(dataModelAttributes)
+      .where(
+        and(
+          eq(dataModelAttributes.id, desired),
+          eq(dataModelAttributes.entityId, rel.targetEntityId),
+        ),
+      )
+      .limit(1);
+    if (!targetRow) {
+      throw new ValidationError({
+        targetAttributeId: [
+          `Attribute ${desired} does not belong to target entity ${rel.targetEntityId}.`,
+        ],
+      });
+    }
+
+    const targetMd = (targetRow.metadata as Record<string, unknown> | null) ?? {};
+    const existingRelTag = targetMd.fk_for_rel_id as string | undefined;
+    const existingSrcTag = targetMd.fk_for_source_attr_id as string | undefined;
+    // If the attr is already manually paired for a DIFFERENT rel/source,
+    // reject — the user must clear that pairing first.
+    if (
+      (existingRelTag && existingRelTag !== rel.id) ||
+      (existingSrcTag && existingSrcTag !== pk.id)
+    ) {
+      throw new ConflictError(
+        `Attribute "${targetRow.name}" is already paired to another relationship. Clear that pairing first.`,
+      );
+    }
+
+    // Drop any stale auto-propagated FK for THIS source PK that isn't
+    // the attr the user just picked.
+    const autoRow = autoBySourceAttr.get(pk.id);
+    if (autoRow && autoRow.id !== targetRow.id) {
+      await tx.delete(dataModelAttributes).where(eq(dataModelAttributes.id, autoRow.id));
+    }
+
+    // Tag the chosen attr as the manual FK. Preserve any other metadata.
+    const newMd: Record<string, unknown> = {
+      ...targetMd,
+      fk_for_rel_id: rel.id,
+      fk_for_source_attr_id: pk.id,
+    };
+    await tx
+      .update(dataModelAttributes)
+      .set({ isForeignKey: true, metadata: newMd, updatedAt: new Date() })
+      .where(eq(dataModelAttributes.id, targetRow.id));
+
+    await recordChange({
+      dataModelId: modelId,
+      objectId: rel.id,
+      objectType: 'relationship',
+      action: 'update',
+      changedBy: userId,
+      afterState: {
+        keyColumnPair: {
+          sourceAttributeId: pk.id,
+          targetAttributeId: targetRow.id,
+          mode: 'manual_paired',
+        },
+      },
+    });
+  }
+}
+
+export async function setKeyColumns(
+  userId: string,
+  modelId: string,
+  relId: string,
+  input: { pairs: RelationshipKeyColumnPairInput[] },
+): Promise<RelationshipKeyColumnsResponse> {
+  const { rel } = await loadRelWithEndpoints(userId, modelId, relId);
+
+  // Validate every sourceAttributeId is actually a PK on source.
+  const sourcePks = await db
+    .select()
+    .from(dataModelAttributes)
+    .where(
+      and(
+        eq(dataModelAttributes.entityId, rel.sourceEntityId),
+        eq(dataModelAttributes.isPrimaryKey, true),
+      ),
+    )
+    .orderBy(asc(dataModelAttributes.ordinalPosition), asc(dataModelAttributes.createdAt));
+
+  const sourcePkIds = new Set(sourcePks.map((a) => a.id));
+  for (const p of input.pairs) {
+    if (!sourcePkIds.has(p.sourceAttributeId)) {
+      throw new ValidationError({
+        sourceAttributeId: [
+          `Attribute ${p.sourceAttributeId} is not a primary key on the source entity.`,
+        ],
+      });
+    }
+  }
+  // Reject duplicate source ids in the body.
+  const seen = new Set<string>();
+  for (const p of input.pairs) {
+    if (seen.has(p.sourceAttributeId)) {
+      throw new ValidationError({
+        pairs: [`Duplicate sourceAttributeId ${p.sourceAttributeId} in request body.`],
+      });
+    }
+    seen.add(p.sourceAttributeId);
+  }
+
+  const desiredBySource = new Map<string, string | null>();
+  for (const p of input.pairs) desiredBySource.set(p.sourceAttributeId, p.targetAttributeId);
+
+  try {
+    await db.transaction(async (tx) => {
+      // Re-fetch target FKs INSIDE the TX so concurrent mutations don't
+      // produce stale state. The JSONB predicates use ->> so the GIN
+      // metadata index is not a perfect fit — acceptable for a single
+      // rel's worth of attrs (bounded by source PK count, typically ≤ 3).
+      const existingTargetFks = await tx
+        .select()
+        .from(dataModelAttributes)
+        .where(
+          and(
+            eq(dataModelAttributes.entityId, rel.targetEntityId),
+            or(
+              sql`${dataModelAttributes.metadata}->>'propagated_from_rel_id' = ${relId}`,
+              sql`${dataModelAttributes.metadata}->>'fk_for_rel_id' = ${relId}`,
+            ),
+          ),
+        );
+
+      await applyKeyColumnsInTx(tx, {
+        rel,
+        modelId,
+        userId,
+        desiredBySource,
+        sourcePks,
+        existingTargetFks,
+      });
+    });
+  } catch (err) {
+    if (
+      err instanceof ValidationError ||
+      err instanceof ConflictError ||
+      err instanceof NotFoundError ||
+      err instanceof InvariantError ||
+      err instanceof CyclicIdentifyingError
+    ) {
+      throw err;
+    }
+    if (isTransientDbError(err)) {
+      logger.warn({ err, userId, modelId, relId }, 'setKeyColumns — transient DB failure');
+      throw new ServiceUnavailableError();
+    }
+    logger.error({ err, userId, modelId, relId }, 'setKeyColumns failed');
+    throw new DBError('setKeyColumns');
+  }
+
+  // Return the reconciled view via the same GET path so the response
+  // body is guaranteed to match what a subsequent GET would return.
+  return getKeyColumns(userId, modelId, relId);
 }
 
 // ============================================================

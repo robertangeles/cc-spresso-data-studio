@@ -549,11 +549,13 @@ describe('Model Studio — relationship service TX semantics', () => {
       .from(dataModelRelationships)
       .where(eq(dataModelRelationships.dataModelId, modelId));
 
-    // Force propagateIdentifyingPKs to throw to prove the rel insert
+    // Force propagateRelationshipFk to throw to prove the rel insert
     // is rolled back (the rel row must not remain on the happy-path
-    // target entity after the throw).
+    // target entity after the throw). After the Key Columns upgrade
+    // the create path unconditionally calls `propagateRelationshipFk`
+    // (identifying or not), so the spy target is the canonical name.
     const spy = vi
-      .spyOn(propagateService, 'propagateIdentifyingPKs')
+      .spyOn(propagateService, 'propagateRelationshipFk')
       .mockImplementationOnce(async () => {
         throw new Error('injected propagate failure');
       });
@@ -653,6 +655,279 @@ describe('Model Studio — Direction A relationships', () => {
     expect(body.success).toBe(true);
     expect(body.data.name).toBe('manages');
     expect(body.data.inverseName).toBe('is_managed_by');
+  });
+});
+
+// --------------------------------------------------------------------
+// Key Columns — Erwin-parity FK pairing panel (Step 6 follow-up).
+// Covers:
+//   S6-KC-I1  GET detects backfill on a pre-existing non-identifying rel
+//   S6-KC-I2  POST with targetAttributeId=null → auto FK materialises
+//   S6-KC-I3  POST with existing UUID → attr tagged + stale auto deleted
+//   S6-KC-I4  DELETE rel unwinds auto-FKs (non-identifying)
+//   S6-KC-I5  PATCH isIdentifying flip toggles isPk on propagated FKs
+//   S6-KC-I6  DELETE attribute blocked when metadata carries
+//             propagated_from_rel_id
+// --------------------------------------------------------------------
+
+describe('Model Studio — Key Columns (Step 6 follow-up)', () => {
+  it('S6-KC-I1+I2: non-identifying rel auto-propagates one FK; GET reports it', async () => {
+    const [kcTarget] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_tgt', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+
+    // Create a one-PK source to keep the test focused. We reuse the
+    // sourceEntity for simplicity — its two PKs mean both will auto-
+    // propagate.
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId,
+        targetEntityId: kcTarget.id,
+        name: 'kc_rel_i1',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const body = (await createRes.json()) as ApiResponse<RelationshipDTO>;
+    const relId = body.data.id;
+
+    // FKs should have materialised as non-PK rows on target.
+    const propagated = await db
+      .select()
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, kcTarget.id));
+    expect(propagated.length).toBe(2); // composite source PK → 2 FKs
+    for (const a of propagated) {
+      expect(a.isPrimaryKey).toBe(false); // non-identifying
+      expect(a.isForeignKey).toBe(true);
+      const md = (a.metadata as Record<string, unknown> | null) ?? {};
+      expect(md.propagated_from_rel_id).toBe(relId);
+    }
+
+    // GET /key-columns reports the pairs.
+    const getRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/relationships/${relId}/key-columns`,
+      { method: 'GET', headers: authHeader(accessToken) },
+    );
+    expect(getRes.status).toBe(200);
+    const kc = (await getRes.json()) as ApiResponse<{
+      pairs: Array<{
+        sourceAttributeId: string;
+        targetAttributeId: string | null;
+        isAutoCreated: boolean;
+      }>;
+      needsBackfill: boolean;
+      sourceHasNoPk: boolean;
+    }>;
+    expect(kc.data.pairs.length).toBe(2);
+    expect(kc.data.sourceHasNoPk).toBe(false);
+    expect(kc.data.needsBackfill).toBe(false);
+    expect(kc.data.pairs.every((p) => p.isAutoCreated)).toBe(true);
+  });
+
+  it('S6-KC-I3: POST manual pair replaces auto FK with existing attr + drops stale', async () => {
+    const [kcTarget] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_manual_tgt', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+
+    // Pre-seed an existing candidate attr on the target (different name
+    // so it does not collide with the auto-propagated ones).
+    const [existingAttr] = await db
+      .insert(dataModelAttributes)
+      .values({
+        entityId: kcTarget.id,
+        name: 'manual_fk_src_id',
+        dataType: 'uuid',
+        isNullable: true,
+        isForeignKey: false,
+        ordinalPosition: 1,
+      })
+      .returning({ id: dataModelAttributes.id, name: dataModelAttributes.name });
+
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId,
+        targetEntityId: kcTarget.id,
+        name: 'kc_manual_rel',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const rel = (await createRes.json()) as ApiResponse<RelationshipDTO>;
+    const relId = rel.data.id;
+
+    // Pair src_id → existingAttr. The other source PK stays on auto.
+    const postRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/relationships/${relId}/key-columns`,
+      {
+        method: 'POST',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({
+          pairs: [{ sourceAttributeId: sourcePkAttrIds[0], targetAttributeId: existingAttr.id }],
+        }),
+      },
+    );
+    expect(postRes.status).toBe(200);
+    const postBody = (await postRes.json()) as ApiResponse<{
+      pairs: Array<{
+        sourceAttributeId: string;
+        targetAttributeId: string | null;
+        isAutoCreated: boolean;
+      }>;
+    }>;
+    const forSrc = postBody.data.pairs.find((p) => p.sourceAttributeId === sourcePkAttrIds[0]);
+    expect(forSrc?.targetAttributeId).toBe(existingAttr.id);
+    expect(forSrc?.isAutoCreated).toBe(false);
+
+    // The originally auto-propagated FK for src_id should be gone.
+    const remaining = await db
+      .select({ id: dataModelAttributes.id, name: dataModelAttributes.name })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, kcTarget.id));
+    const names = remaining.map((r) => r.name);
+    // src_id auto-propagated was deleted; the existingAttr (manual_fk_src_id)
+    // is tagged; src_region auto-propagated stays.
+    expect(names).not.toContain('src_id');
+    expect(names).toContain('manual_fk_src_id');
+    expect(names).toContain('src_region');
+  });
+
+  it('S6-KC-I4: DELETE non-identifying rel unwinds auto FKs', async () => {
+    const [kcTarget] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_del_tgt', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId,
+        targetEntityId: kcTarget.id,
+        name: 'kc_del_rel',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const rel = (await createRes.json()) as ApiResponse<RelationshipDTO>;
+    const relId = rel.data.id;
+
+    const beforeDel = await db
+      .select({ id: dataModelAttributes.id })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, kcTarget.id));
+    expect(beforeDel.length).toBe(2);
+
+    const del = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/relationships/${relId}`,
+      { method: 'DELETE', headers: authHeader(accessToken) },
+    );
+    expect(del.status).toBe(200);
+
+    const afterDel = await db
+      .select({ id: dataModelAttributes.id })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, kcTarget.id));
+    expect(afterDel.length).toBe(0);
+  });
+
+  it('S6-KC-I5: PATCH isIdentifying flip toggles isPrimaryKey on propagated FKs', async () => {
+    const [kcTarget] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_flip_tgt', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId,
+        targetEntityId: kcTarget.id,
+        name: 'kc_flip_rel',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    const created = (await createRes.json()) as ApiResponse<RelationshipDTO>;
+    const relId = created.data.id;
+
+    // Non-identifying → FKs are NOT PKs.
+    const before = await db
+      .select()
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, kcTarget.id));
+    expect(before.every((a) => a.isPrimaryKey === false)).toBe(true);
+
+    // Flip to identifying.
+    const patch = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/relationships/${relId}`,
+      {
+        method: 'PATCH',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({ isIdentifying: true, version: created.data.version }),
+      },
+    );
+    expect(patch.status).toBe(200);
+
+    const after = await db
+      .select()
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, kcTarget.id));
+    expect(after.every((a) => a.isPrimaryKey === true)).toBe(true);
+    expect(after.every((a) => a.isNullable === false)).toBe(true);
+  });
+
+  it('S6-KC-I6: DELETE attribute blocked when managed by a relationship', async () => {
+    const [kcTarget] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_guard_tgt', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId,
+        targetEntityId: kcTarget.id,
+        name: 'kc_guard_rel',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+
+    const [propagatedAttr] = await db
+      .select()
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, kcTarget.id))
+      .limit(1);
+    expect(propagatedAttr).toBeDefined();
+
+    const del = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${kcTarget.id}/attributes/${propagatedAttr.id}`,
+      { method: 'DELETE', headers: authHeader(accessToken) },
+    );
+    // ConflictError → 409.
+    expect(del.status).toBe(409);
   });
 });
 

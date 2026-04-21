@@ -1,5 +1,9 @@
 import type { Request, Response, NextFunction } from 'express';
-import type { CreateRelationshipInput, UpdateRelationshipInput } from '@cc/shared';
+import type {
+  CreateRelationshipInput,
+  RelationshipKeyColumnsSet,
+  UpdateRelationshipInput,
+} from '@cc/shared';
 import { ForbiddenError, UnauthorizedError } from '../utils/errors.js';
 import * as relationshipService from '../services/model-studio-relationship.service.js';
 import * as inferService from '../services/model-studio-relationship-infer.service.js';
@@ -124,6 +128,31 @@ export async function infer(req: Request, res: Response, next: NextFunction) {
     } else {
       res.status(200).json({ success: true, data: result });
     }
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getKeyColumns(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = requireUserId(req);
+    const result = await relationshipService.getKeyColumns(userId, req.params.id, req.params.relId);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function setKeyColumns(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = requireUserId(req);
+    const result = await relationshipService.setKeyColumns(
+      userId,
+      req.params.id,
+      req.params.relId,
+      req.body as RelationshipKeyColumnsSet,
+    );
+    res.json({ success: true, data: result });
   } catch (err) {
     next(err);
   }

@@ -479,6 +479,20 @@ export async function deleteAttribute(
   await getParentEntity(modelId, entityId);
   const before = await getAttribute(userId, modelId, entityId, attributeId);
 
+  // Block direct deletion of attrs that are server-managed by a
+  // relationship's Key Columns propagation. The UI surfaces a clear
+  // remediation: delete the relationship, or pick a different target
+  // attribute for that pairing. Users still fully own attrs tagged
+  // only via `fk_for_rel_id` (manual pairing) — those are their own
+  // authored columns that happen to serve as an FK.
+  const beforeMd = (before.metadata as Record<string, unknown> | null) ?? {};
+  const managedRelId = beforeMd.propagated_from_rel_id as string | undefined;
+  if (managedRelId) {
+    throw new ConflictError(
+      `This attribute is managed by relationship ${managedRelId}. Delete the relationship instead or pair this relationship to a different attribute.`,
+    );
+  }
+
   const dependents = await describeAttributeDependents(attributeId);
   const hasDependents = dependents.attributeLinks + dependents.semanticMappings > 0;
 

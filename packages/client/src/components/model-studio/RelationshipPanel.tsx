@@ -19,9 +19,13 @@ import {
   type Layer,
   type NamingLintRule,
   type Relationship,
+  type RelationshipKeyColumnPair,
 } from '@cc/shared';
 import type { EntitySummary } from '../../hooks/useEntities';
 import { isVersionConflictResult } from '../../hooks/useRelationships';
+import { useAttributes } from '../../hooks/useAttributes';
+import { useRelationshipKeyColumns } from '../../hooks/useRelationshipKeyColumns';
+import { useUndoStack } from '../../hooks/useUndoStack';
 import { useToast } from '../ui/Toast';
 import { StubTab } from './attribute-tabs/StubTab';
 import { formatAuditEvent, type AuditEvent } from '../../lib/auditFormatter';
@@ -651,6 +655,171 @@ function GeneralRelTab({
           className="w-full rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-1.5 font-mono text-sm text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
         />
       </Row>
+      <KeyColumnsSection relationship={relationship} source={source} target={target} />
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Key Columns section (source PK → target FK pair editor)
+// ────────────────────────────────────────────────────────────────────
+
+/** Renders one row per source-PK with a dropdown to either keep the
+ *  auto-created FK or bind an existing target attribute. Lives inside
+ *  the General tab; persistence + silent backfill live in the
+ *  `useRelationshipKeyColumns` hook. Undo support wraps `setPair`
+ *  via the ambient `useUndoStack` context (same pattern as rel-name
+ *  edits in ModelStudioCanvas.relUpdate). */
+function KeyColumnsSection({
+  relationship,
+  source,
+  target,
+}: {
+  relationship: Relationship;
+  source: EntitySummary | null;
+  target: EntitySummary | null;
+}) {
+  const { toast } = useToast();
+  const undo = useUndoStack();
+  const modelId = relationship.dataModelId;
+  const targetEntityId = relationship.targetEntityId;
+
+  const kc = useRelationshipKeyColumns(modelId, relationship.id);
+
+  // Local per-panel attrs hook — lazily loads the TARGET entity's
+  // attribute list so the dropdown can show "Existing: <name>" options.
+  const attrs = useAttributes(modelId);
+  useEffect(() => {
+    if (targetEntityId) void attrs.load(targetEntityId);
+    // Intentionally omit `attrs` from deps — re-running on hook identity
+    // change would thrash the fetch. Dataset key is (modelId, targetId).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelId, targetEntityId]);
+
+  const targetAttrs = attrs.getFor(targetEntityId);
+
+  // Compute already-bound attrs within this rel (so we don't let two
+  // source PKs point at the same target attr). `null` targets don't
+  // reserve an attr (auto-create assigns a fresh one).
+  const boundAttrIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of kc.pairs) {
+      if (p.targetAttributeId) s.add(p.targetAttributeId);
+    }
+    return s;
+  }, [kc.pairs]);
+
+  const onChangePair = useCallback(
+    async (pair: RelationshipKeyColumnPair, nextTargetAttrId: string | null) => {
+      if (pair.targetAttributeId === nextTargetAttrId) return;
+      const prevPairs = kc.pairs.map((p) => ({
+        sourceAttributeId: p.sourceAttributeId,
+        targetAttributeId: p.targetAttributeId,
+      }));
+      try {
+        await undo.execute({
+          label: 'Update key columns',
+          do: () => kc.setPair(pair.sourceAttributeId, nextTargetAttrId),
+          undo: async () => {
+            // Restore the prior pair list attr-by-attr. The server
+            // accepts the full list via setPair per source-attr; we
+            // iterate so the inverse mirrors the forward shape.
+            for (const prev of prevPairs) {
+              await kc.setPair(prev.sourceAttributeId, prev.targetAttributeId);
+            }
+          },
+        });
+        toast('Key columns updated', 'success');
+      } catch {
+        // kc.error is already set — the banner will render it.
+      }
+    },
+    [kc, undo, toast],
+  );
+
+  const headerRow = (
+    <div className="mb-1 flex items-baseline justify-between">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/80">
+        Key columns
+      </span>
+      <span className="text-[10px] text-text-secondary/50">
+        One row per source PK — composite supported
+      </span>
+    </div>
+  );
+
+  return (
+    <div data-testid="relationship-key-columns">
+      {headerRow}
+      {kc.isLoading && kc.pairs.length === 0 ? (
+        <div className="rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-2 text-[11px] text-text-secondary/70">
+          Loading key columns...
+        </div>
+      ) : kc.sourceHasNoPk ? (
+        <div
+          data-testid="rel-key-columns-no-pk"
+          className="rounded-md border border-amber-400/40 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-100"
+        >
+          Source entity has no primary key — add one to enable FK propagation.
+        </div>
+      ) : kc.error ? (
+        <div
+          data-testid="rel-key-columns-error"
+          className="rounded-md border border-red-400/40 bg-red-500/10 px-2.5 py-2 text-[11px] text-red-100"
+        >
+          {kc.error}
+        </div>
+      ) : kc.pairs.length === 0 ? (
+        <div className="rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-2 text-[11px] text-text-secondary/70">
+          No key columns yet.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {kc.pairs.map((p) => {
+            const optionsForPair = targetAttrs.filter(
+              (a) => a.id === p.targetAttributeId || !boundAttrIds.has(a.id),
+            );
+            // An auto-created FK is server-managed — show it as
+            // "Auto-create (...)" even though a target attr exists. A
+            // user-chosen attr (isAutoCreated=false) shows as
+            // "Existing: <name>". Empty string = auto-create option.
+            const selectValue = p.isAutoCreated ? '' : (p.targetAttributeId ?? '');
+            return (
+              <div
+                key={p.sourceAttributeId}
+                className="flex items-center gap-2 rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-1.5"
+              >
+                <span className="font-mono text-xs text-text-primary">
+                  {(source?.name ?? '?') + '.' + p.sourceAttributeName}
+                </span>
+                <span className="text-accent">→</span>
+                <select
+                  data-testid={`rel-key-column-select-${p.sourceAttributeId}`}
+                  aria-label={`Target attribute for ${p.sourceAttributeName}`}
+                  value={selectValue}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    void onChangePair(p, raw === '' ? null : raw);
+                  }}
+                  className="ml-auto rounded-md border border-white/10 bg-surface-1/60 px-2 py-1 font-mono text-xs text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
+                >
+                  <option value="">{`Auto-create (${p.sourceAttributeName})`}</option>
+                  {optionsForPair.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {`Existing: ${a.name}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
+          {target && (
+            <span className="text-[10px] text-text-secondary/50">
+              Target: <span className="font-mono text-text-secondary/70">{target.name}</span>
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

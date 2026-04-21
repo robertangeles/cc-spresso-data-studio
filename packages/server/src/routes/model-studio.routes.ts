@@ -24,6 +24,7 @@ import {
   createRelationshipSchema,
   updateRelationshipSchema,
   relationshipIdParamsSchema,
+  relationshipKeyColumnsSetSchema,
 } from '@cc/shared';
 import { authenticate, requireRole } from '../middleware/auth.middleware.js';
 import { validate, validateParams, validateQuery } from '../middleware/validate.middleware.js';
@@ -321,6 +322,23 @@ router.get(
   relationshipsEnabledGate,
   validateParams(entityImpactParamsSchema),
   relationshipController.entityImpact,
+);
+
+// Key Columns — Erwin-parity FK pairing panel (Step 6 follow-up).
+// GET returns current pairs + backfill signal; POST reconciles the
+// pairs atomically (creates / deletes / tags target attrs).
+router.get(
+  '/models/:id/relationships/:relId/key-columns',
+  relationshipsEnabledGate,
+  validateParams(relationshipIdParamsSchema),
+  relationshipController.getKeyColumns,
+);
+router.post(
+  '/models/:id/relationships/:relId/key-columns',
+  relationshipsEnabledGate,
+  validateParams(relationshipIdParamsSchema),
+  validate(relationshipKeyColumnsSetSchema),
+  relationshipController.setKeyColumns,
 );
 
 // Admin-only diagnostics. `requireRole('Administrator')` gates BEFORE
