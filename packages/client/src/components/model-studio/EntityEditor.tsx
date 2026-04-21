@@ -255,14 +255,16 @@ function EditorShell(props: EditorShellProps) {
         attributeCount={attributes.length}
       />
 
-      {/* Grid + property editor. The grid flex-basis is 40% in
-          expanded mode so the property editor below gets proper real
-          estate; in compact, the grid takes the whole body. */}
+      {/* Grid + property editor. The grid flex-basis is 40% when an
+          attribute is selected (so the tabbed property editor below
+          has proper real estate); otherwise the grid takes the full
+          body — a placeholder under the grid wastes vertical space
+          and visually "squeezes" the working surface. */}
       <div className="flex min-h-0 flex-1 flex-col">
         <div
           className={[
             'min-h-0 border-b border-white/10',
-            width === 'expanded' ? 'flex-[0_0_40%]' : 'flex-1',
+            width === 'expanded' && selectedAttr ? 'flex-[0_0_40%]' : 'flex-1',
           ].join(' ')}
         >
           <AttributeGrid
@@ -278,7 +280,7 @@ function EditorShell(props: EditorShellProps) {
           />
         </div>
 
-        {width === 'expanded' && (
+        {width === 'expanded' && selectedAttr && (
           <div className="min-h-0 flex-1">
             <AttributePropertyEditor
               entityId={entity.id}
