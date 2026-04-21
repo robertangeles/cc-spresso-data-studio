@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
+  Bot,
   Database,
   Plus,
   MessageSquare,
@@ -257,20 +258,21 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Legal links */}
-      <div className="mx-3 mb-1 flex gap-3">
-        <NavLink
-          to="/privacy"
-          className="text-[10px] text-text-tertiary hover:text-text-secondary transition-colors"
+      {/* Assistant — prominent entry point sitting just above the user
+          profile. Fires a window event that the SiteAssistant drawer
+          listens for. Keeps the chat drawer floating (not sidebar-
+          docked) so the canvas working surface stays uncluttered. */}
+      <div className="mx-3 mb-2">
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event('spresso:open-assistant'))}
+          className="group flex w-full items-center gap-2.5 rounded-md border border-accent/30 bg-gradient-to-r from-accent/10 to-amber-500/10 px-2.5 py-2 text-[13px] font-medium text-accent shadow-[0_0_16px_rgba(255,214,10,0.12)] transition-all hover:border-accent/50 hover:from-accent/20 hover:to-amber-500/20 hover:shadow-[0_0_24px_rgba(255,214,10,0.2)]"
+          aria-label="Open Spresso assistant"
         >
-          Privacy
-        </NavLink>
-        <NavLink
-          to="/terms"
-          className="text-[10px] text-text-tertiary hover:text-text-secondary transition-colors"
-        >
-          Terms
-        </NavLink>
+          <Bot className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 flex-1 text-left">Assistant</span>
+          <span className="text-[10px] text-text-secondary/60 group-hover:text-accent/80">Ask</span>
+        </button>
       </div>
 
       {/* User profile */}

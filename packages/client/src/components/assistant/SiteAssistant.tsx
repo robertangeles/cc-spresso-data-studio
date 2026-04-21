@@ -32,6 +32,14 @@ export function SiteAssistant() {
     }
   }, [isOpen]);
 
+  // The sidebar hosts the entry point now — no floating FAB. Sidebar's
+  // Assistant button fires this event to open the drawer.
+  useEffect(() => {
+    const open = () => setIsOpen(true);
+    window.addEventListener('spresso:open-assistant', open);
+    return () => window.removeEventListener('spresso:open-assistant', open);
+  }, []);
+
   const sendMessage = async () => {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
@@ -77,28 +85,11 @@ export function SiteAssistant() {
     }
   };
 
-  // FAB
-  if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-accent to-amber-600 shadow-[0_0_20px_rgba(255,214,10,0.3)] transition-transform duration-200 hover:scale-110 hover:shadow-[0_0_30px_rgba(255,214,10,0.5)]"
-        style={{ animation: 'fab-breathe 3s ease-in-out infinite' }}
-        aria-label="Open site assistant"
-      >
-        <Bot className="h-6 w-6 text-white" />
-        {hasUnread && (
-          <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-surface-0 bg-red-500" />
-        )}
-        <style>{`
-          @keyframes fab-breathe {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-          }
-        `}</style>
-      </button>
-    );
-  }
+  // Closed state renders nothing — the sidebar's Assistant nav item
+  // is the entry point. (Legacy `hasUnread` state is retained but
+  // unused for now; plumb a sidebar badge later if needed.)
+  if (!isOpen) return null;
+  void hasUnread;
 
   // Chat drawer
   return (
