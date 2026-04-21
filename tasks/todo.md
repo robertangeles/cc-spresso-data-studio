@@ -139,7 +139,7 @@ the project memory at `project_model_studio_state.md` — use it.
 
 - [x] **Fixture auth rescue (S6-E2 / E5 / E6 / E7 / E8 + new
       E11/E12 unblocked).** Spec refactored to the `dependencies:
-  ['setup']` project chain — one login per run via `setup`,
+['setup']` project chain — one login per run via `setup`,
       one `POST /api/auth/refresh` per suite to mint an access token
       for API calls. Zero per-test logins, zero rate-limit burn.
       See the header comment of
@@ -200,6 +200,40 @@ the project memory at `project_model_studio_state.md` — use it.
       model-studio tree. Ship the handler (select source entity →
       `⌘R` → select target → `Enter` creates the rel) then un-fixme
       the test.
+
+- [ ] **Candidate-key-referenced foreign keys (alt-key FK targets).**
+      Today every FK references the source entity's primary key. Standard
+      SQL allows an FK to reference any column (or column-set) with a
+      UNIQUE constraint — a candidate key — which Erwin + ER Studio both
+      support as "alternate-key FK" / "role-named FK".
+
+      Gap evidence:
+        - [packages/server/src/services/model-studio-relationship-propagate.service.ts:296](packages/server/src/services/model-studio-relationship-propagate.service.ts#L296)
+          only SELECTs source attrs with `isPrimaryKey = true`; UQ-only
+          columns and AK-group members are skipped.
+        - [packages/server/src/services/model-studio-relationship.service.ts:989](packages/server/src/services/model-studio-relationship.service.ts#L989)
+          `setKeyColumns` rejects any non-PK source attribute.
+        - Relationship row has no `referencedColumn` metadata — DDL
+          generation in Step 9 will have to default to the PK.
+
+      Scope when picked up:
+        1. Schema: add `source_attribute_ids uuid[]` OR equivalent
+           per-pair metadata on the propagated FK attr so DDL can emit
+           the right `REFERENCES <entity>(<col>)` clause. Keep
+           backward-compat default to PK.
+        2. Server: relax the PK check in propagate-service + setKeyColumns
+           to allow `isPrimaryKey=true OR isUnique=true OR altKeyGroup
+           IS NOT NULL` as eligible source. Reject anything else with
+           a clear 422.
+        3. Client: RelationshipPanel's Key Columns section — add a
+           second "Source column" dropdown on each row so the user can
+           pick from any candidate key on the source entity (default =
+           a PK row per PK). Composite AKs need their member columns
+           listed together.
+        4. DDL (Step 9): emit correct REFERENCES clause based on the
+           persisted referenced column(s).
+      Blocked by: nothing. Additive; PK-referenced stays the default
+      path. Rough effort: 2-3 hrs.
 
 - [ ] **EntityEditor: tabbed property sheet (Erwin convention).**
       Convert the EntityEditor header (name / business name /
