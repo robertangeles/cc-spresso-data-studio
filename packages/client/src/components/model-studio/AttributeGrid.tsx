@@ -180,7 +180,7 @@ export function AttributeGrid({
           <SortableContext items={ids} strategy={verticalListSortingStrategy}>
             <table className="w-full border-separate border-spacing-0 font-sans">
               <thead>
-                <tr className="sticky top-0 z-10 bg-surface-2/90 backdrop-blur-xl">
+                <tr>
                   <Th className="w-7" title="Drag the handle in a row to reorder attributes." />
                   <Th title="Column identifier. Snake_case is required on the physical layer; free-form elsewhere.">
                     Name
@@ -333,7 +333,10 @@ function Th({
       scope="col"
       title={title}
       className={[
-        'border-b border-white/10 px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider text-text-secondary/80',
+        // Opaque bg on each cell so sticky header never bleeds the row
+        // beneath it. bg-surface-2 alone on the <tr> doesn't always
+        // paint under position:sticky — it paints per-cell reliably.
+        'sticky top-0 z-10 bg-surface-2 border-b border-white/10 px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider text-text-secondary/80',
         className ?? '',
       ].join(' ')}
     >
