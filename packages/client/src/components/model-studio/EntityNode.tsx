@@ -73,8 +73,6 @@ export interface EntityNodeProps extends NodeProps {
   data: EntityNodeData;
 }
 
-const MAX_VISIBLE_PER_GROUP = 5;
-
 /** Data types that carry no business meaning on their own — matches
  *  the server-side lint's surrogate list so the conceptual-layer
  *  hide-surrogate-PK branch stays in lock-step with BK linting. */
@@ -319,14 +317,9 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
               data-primary-kind={hideSurrogatePks ? 'bk' : 'pk'}
               className="px-3 py-1.5 space-y-0.5"
             >
-              {primaryAttrs.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
+              {primaryAttrs.map((a) => (
                 <AttributeLine key={a.id} attr={a} isPrimary altKeyLabels={data.altKeyLabels} />
               ))}
-              {primaryAttrs.length > MAX_VISIBLE_PER_GROUP && (
-                <li className="text-[10px] text-text-secondary italic">
-                  +{primaryAttrs.length - MAX_VISIBLE_PER_GROUP} more
-                </li>
-              )}
             </ul>
           )}
           {primaryAttrs.length > 0 && nonPrimaryAttrs.length > 0 && (
@@ -334,7 +327,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
           )}
           {nonPrimaryAttrs.length > 0 && (
             <ul data-testid="entity-node-nonpk-group" className="px-3 py-1.5 space-y-0.5">
-              {nonPrimaryAttrs.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
+              {nonPrimaryAttrs.map((a) => (
                 <AttributeLine
                   key={a.id}
                   attr={a}
@@ -342,11 +335,6 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
                   altKeyLabels={data.altKeyLabels}
                 />
               ))}
-              {nonPrimaryAttrs.length > MAX_VISIBLE_PER_GROUP && (
-                <li className="text-[10px] text-text-secondary italic">
-                  +{nonPrimaryAttrs.length - MAX_VISIBLE_PER_GROUP} more
-                </li>
-              )}
             </ul>
           )}
         </div>
