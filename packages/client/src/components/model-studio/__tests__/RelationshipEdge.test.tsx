@@ -269,39 +269,14 @@ describe('RelationshipEdge — identifying stroke style', () => {
   });
 });
 
-describe('RelationshipEdge — cardinality text labels (Direction A)', () => {
-  it('renders IE notation text `1..*` for source=one_or_many', () => {
-    const { container } = renderEdge(baseData('ie', 'one_or_many', 'many', true));
-    const sourceLabel = container.querySelector('[data-testid="rel-card-source-edge-test"]');
-    expect(sourceLabel).toBeTruthy();
-    expect(sourceLabel?.getAttribute('data-card-text')).toBe('1..*');
-    expect(sourceLabel?.textContent).toBe('1..*');
-  });
-
-  it('renders IE notation text `0..1` for source=zero_or_one', () => {
-    const { container } = renderEdge(baseData('ie', 'zero_or_one', 'many', true));
-    const sourceLabel = container.querySelector('[data-testid="rel-card-source-edge-test"]');
-    expect(sourceLabel?.getAttribute('data-card-text')).toBe('0..1');
-  });
-
-  it('renders IDEF1X letter `P` for source=one_or_many', () => {
-    const { container } = renderEdge(baseData('idef1x', 'one_or_many', 'many', true));
-    const sourceLabel = container.querySelector('[data-testid="rel-card-source-edge-test"]');
-    expect(sourceLabel?.getAttribute('data-card-text')).toBe('P');
-  });
-
-  it('renders IDEF1X letter `Z` for source=zero_or_one', () => {
-    const { container } = renderEdge(baseData('idef1x', 'zero_or_one', 'many', true));
-    const sourceLabel = container.querySelector('[data-testid="rel-card-source-edge-test"]');
-    expect(sourceLabel?.getAttribute('data-card-text')).toBe('Z');
-  });
-
-  it('renders both source and target cardinality text labels', () => {
-    const { container } = renderEdge(baseData('ie', 'one', 'many', true));
-    expect(container.querySelector('[data-testid="rel-card-source-edge-test"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="rel-card-target-edge-test"]')).toBeTruthy();
-  });
-});
+// Cardinality text labels were intentionally removed from the diagram
+// render — the cardinality glyph (crow's foot, bar, circle) is the
+// cardinality in IE/IDEF1X notation, and duplicating it as text
+// clutters dense canvases + overlaps verb phrases. The shared
+// `formatCardinalityText` util is still exported for the properties
+// panel + DDL export to consume. See
+// packages/shared/src/__tests__/cardinality-text.test.ts for the util
+// unit tests.
 
 describe('RelationshipEdge — verb phrases (Direction A)', () => {
   // EdgeLabelRenderer portals its children into React Flow's viewport

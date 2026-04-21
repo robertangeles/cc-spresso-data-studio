@@ -117,12 +117,22 @@ function InnerCanvas({ modelId, layer }: Props) {
     return unsubscribe;
   }, [subscribe]);
 
-  // Apply persisted viewport once loaded.
+  // Apply persisted viewport ONCE when the canvas finishes loading.
+  // Do NOT re-apply on every `canvas.state.viewport` change — after a
+  // user pans, `onMoveEnd` triggers `canvas.save` which updates
+  // `canvas.state.viewport`, which would re-fire this effect and call
+  // `rf.setViewport` with the value the viewport is ALREADY at. That
+  // cascade jitter was a root cause of the "scroll bouncing" reported
+  // during pan. Gate with a ref so only the first-load seed fires.
+  const hasSeededViewport = useRef(false);
   useEffect(() => {
     if (canvas.isLoading) return;
+    if (hasSeededViewport.current) return;
+    hasSeededViewport.current = true;
     const v = canvas.state.viewport ?? { x: 0, y: 0, zoom: 1 };
     rf.setViewport({ x: v.x, y: v.y, zoom: v.zoom });
-  }, [canvas.isLoading, canvas.state.viewport, rf]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvas.isLoading, rf]);
 
   // Preload attributes on mount so PKs + FKs render before click.
   const loadAllAttrs = attrs.loadAll;
@@ -340,15 +350,20 @@ function InnerCanvas({ modelId, layer }: Props) {
     [canvas, nodes, onNodesChangeInternal, undo],
   );
 
-  const handleMoveEnd = useCallback(
-    (_e: unknown, v: Viewport) => {
-      canvas.save({
-        nodePositions: canvas.state.nodePositions,
-        viewport: { x: v.x, y: v.y, zoom: v.zoom },
-      });
-    },
-    [canvas],
-  );
+  // `handleMoveEnd` is stable across renders (ref-based canvas access)
+  // so React Flow doesn't re-bind its pan listener on every canvas
+  // state mutation — that rebinding was the other contributor to the
+  // pan jank. Dep-free callback + a ref keeps us reading the latest
+  // `canvas.save` + `canvas.state.nodePositions` without triggering
+  // React Flow to see a fresh function identity.
+  const canvasRef = useRef(canvas);
+  canvasRef.current = canvas;
+  const handleMoveEnd = useCallback((_e: unknown, v: Viewport) => {
+    canvasRef.current.save({
+      nodePositions: canvasRef.current.state.nodePositions,
+      viewport: { x: v.x, y: v.y, zoom: v.zoom },
+    });
+  }, []);
 
   const handlePaneDoubleClick = useCallback(
     async (event: React.MouseEvent) => {
@@ -883,6 +898,7 @@ function InnerCanvas({ modelId, layer }: Props) {
         deleteKeyCode={['Backspace', 'Delete']}
         panOnScroll
         zoomOnScroll
+        onlyRenderVisibleElements
         zoomOnDoubleClick={false}
         selectionOnDrag
         colorMode="dark"

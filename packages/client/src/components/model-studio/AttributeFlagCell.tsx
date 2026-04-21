@@ -1,29 +1,36 @@
 /**
  * Step 6 Direction A — AttributeFlagCell.
  *
- * Renders the text-code flag cluster for an attribute row: `PK FK AK1
- * NN UQ`. Codes are rendered as mono-spaced 9px uppercase chips,
- * omitted entirely when the underlying flag is false. Order is fixed
- * (PK → FK → AK → NN → UQ) so a modeller's eye learns a consistent
- * reading sequence across every entity in the model.
+ * Renders ONLY the key-role flags a senior data modeller scans for
+ * on the diagram: PK, FK, and BK/AK groups. Order is fixed
+ * (PK → FK → AK) so a modeller's eye learns a consistent reading
+ * sequence across every entity in the model.
  *
- * Taste grounding: Erwin / ER Studio render these exact codes in the
- * entity-box flag column; seeing them here signals "not a toy" to a
- * 15-year practitioner on first glance.
+ * NN / UQ are intentionally NOT shown on the at-a-glance card. They
+ * are constraint details — they belong in the attribute properties
+ * panel, not the diagram view. Erwin / ER Studio follow the same
+ * convention: diagrams show roles; the panel shows details. Showing
+ * every constraint in-diagram creates visual noise that downgrades
+ * the tool's credibility with 15-year practitioners.
+ *
+ * `isNn` / `isUq` are still accepted in the props type so consumers
+ * don't have to branch, but the component never renders them.
  */
 
 export interface AttributeFlagCellProps {
   isPk: boolean;
   isFk: boolean;
-  isNn: boolean;
-  isUq: boolean;
+  /** Accepted for API compatibility; not rendered on the card. */
+  isNn?: boolean;
+  /** Accepted for API compatibility; not rendered on the card. */
+  isUq?: boolean;
   altKeyGroup: string | null;
 }
 
-export function AttributeFlagCell({ isPk, isFk, isNn, isUq, altKeyGroup }: AttributeFlagCellProps) {
+export function AttributeFlagCell({ isPk, isFk, altKeyGroup }: AttributeFlagCellProps) {
   // Base class shared by every code chip — keeps kerning and padding
-  // consistent so a row with just `PK` still aligns with a row that
-  // shows `PK FK AK1 NN UQ`.
+  // consistent so a row with just `PK` aligns with a row that shows
+  // `PK FK AK1`.
   const base = 'font-mono text-[9px] font-semibold tracking-wider px-1 py-0.5 rounded-sm';
   return (
     <span
@@ -51,24 +58,6 @@ export function AttributeFlagCell({ isPk, isFk, isNn, isUq, altKeyGroup }: Attri
           title={`Alt key group ${altKeyGroup}`}
         >
           {altKeyGroup}
-        </span>
-      ) : null}
-      {isNn ? (
-        <span
-          data-testid="attribute-flag-nn"
-          className={`${base} text-text-secondary/70`}
-          title="NOT NULL"
-        >
-          NN
-        </span>
-      ) : null}
-      {isUq ? (
-        <span
-          data-testid="attribute-flag-uq"
-          className={`${base} text-text-secondary/70`}
-          title="UNIQUE"
-        >
-          UQ
         </span>
       ) : null}
     </span>

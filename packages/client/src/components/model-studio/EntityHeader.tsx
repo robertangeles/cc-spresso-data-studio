@@ -1,11 +1,9 @@
-import { KeyRound } from 'lucide-react';
 import { casingForLayer, type Layer } from '@cc/shared';
 
 /**
  * Step 6 Direction A — EntityHeader.
  *
  * Header row for an EntityNode. Renders:
- *   - A KeyRound glyph (primary-identifier visual anchor).
  *   - The entity name, cased per `casingForLayer` so a senior modeller
  *     reading the canvas gets an immediate layer cue (lowercase
  *     snake_case on physical, Title Case on logical, Sentence case on
@@ -14,9 +12,13 @@ import { casingForLayer, type Layer } from '@cc/shared';
  *     muted-mono. Reads as a reference tag you can cite in governance
  *     artefacts without pulling open the entity.
  *
- * Deliberately excluded per β's Direction-A removals:
- *   - The "P" layer chip.
- *   - The "no business name" placeholder.
+ * Deliberately excluded:
+ *   - No key glyph on the header. In data modelling a "key" is a key
+ *     COLUMN (PK / FK / BK), not an entity. Putting 🔑 next to an
+ *     entity name misuses the symbol; keys belong in the attribute
+ *     flag column, not the entity header.
+ *   - No "P" layer chip (layer is already in the canvas header).
+ *   - No "no business name" placeholder (render nothing when empty).
  *
  * When a naming-lint violation is present on the displayed name, we
  * underline it in amber (wavy + offset 4) so the senior practitioner
@@ -44,7 +46,6 @@ export function EntityHeader({
       data-testid="entity-header"
       className="relative px-3 pt-2.5 pb-1.5 flex items-center gap-2"
     >
-      <KeyRound className="h-3.5 w-3.5 shrink-0 text-text-secondary/70" aria-hidden="true" />
       <span
         data-testid="entity-node-name"
         className={[

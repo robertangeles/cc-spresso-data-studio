@@ -344,12 +344,6 @@ function AttributeLine({ attr, isPrimary }: { attr: EntityNodeAttribute; isPrima
   const altKey = attr.altKeyGroup ?? null;
   const isPk = attr.isPrimaryKey;
   const isFk = attr.isForeignKey === true;
-  // NN/UQ are normalised downstream when altKeyGroup is set (composite
-  // UNIQUE + NOT NULL are auto-coerced by the server normaliser). The
-  // cell reads the flag directly so the canvas narrates exactly what
-  // the server enforces.
-  const isNn = attr.isNullable === false;
-  const isUq = attr.isUnique === true;
 
   return (
     <li
@@ -358,14 +352,13 @@ function AttributeLine({ attr, isPrimary }: { attr: EntityNodeAttribute; isPrima
       data-is-primary={isPrimary ? 'true' : 'false'}
       className="relative flex items-center gap-1.5 text-[11px]"
     >
+      {/* Attribute glance view: name + key-role flag(s) only. Types
+          live in the attribute properties panel — showing them in the
+          diagram is clutter a senior modeller would rather not see
+          when scanning the ER graph for PK/FK/BK structure. */}
       <span className="truncate font-mono text-text-primary font-medium">{attr.name}</span>
-      {attr.dataType && (
-        <span className="shrink-0 font-mono text-text-secondary/70 text-[10px]">
-          {attr.dataType}
-        </span>
-      )}
       <span className="ml-auto shrink-0">
-        <AttributeFlagCell isPk={isPk} isFk={isFk} isNn={isNn} isUq={isUq} altKeyGroup={altKey} />
+        <AttributeFlagCell isPk={isPk} isFk={isFk} altKeyGroup={altKey} />
       </span>
       {/* Attribute-level handles retained as hit targets for attr-to-
           attr routing (Step-7 layer_links + future precision drag)

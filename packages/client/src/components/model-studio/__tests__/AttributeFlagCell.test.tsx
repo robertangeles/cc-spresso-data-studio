@@ -41,10 +41,15 @@ describe('AttributeFlagCell', () => {
     expect(screen.queryByText('PK')).toBeNull();
   });
 
-  it('NN + UQ renders both constraint codes', () => {
+  it('NN + UQ are NOT rendered on the card (constraint details belong in the panel)', () => {
     render(<AttributeFlagCell isPk={false} isFk={false} isNn isUq altKeyGroup={null} />);
-    expect(screen.getByText('NN')).toBeTruthy();
-    expect(screen.getByText('UQ')).toBeTruthy();
+    // Erwin / ER Studio diagrams show roles (PK / FK / BK) only; NN + UQ
+    // are constraint details surfaced in the attribute properties panel.
+    // The component accepts the props for API compatibility but renders
+    // nothing for them.
+    expect(screen.queryByText('NN')).toBeNull();
+    expect(screen.queryByText('UQ')).toBeNull();
     expect(screen.queryByText('PK')).toBeNull();
+    expect(screen.queryByText('FK')).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { BaseEdge, getSmoothStepPath, Position, type EdgeProps } from '@xyflow/react';
-import { formatCardinalityText, type Cardinality, type Notation } from '@cc/shared';
+import type { Cardinality, Notation } from '@cc/shared';
 
 /**
  * Step 6 — custom React Flow edge rendering an IE / IDEF1X cardinality
@@ -338,25 +338,11 @@ function RelationshipEdgeComponent(props: EdgeProps) {
       />
       {/* Cardinality text labels — Erwin-style `1..*`, `0..1`, etc.
           (IE) or federal-standard letters `Z`, `P`, `M`, `1` (IDEF1X).
-          The glyph alone is enough for a fluent practitioner, but the
-          small text removes ambiguity during mixed-seniority reviews
-          and matches the convention every enterprise modelling tool
-          has shipped since the 1990s. Text sits 30px past the glyph
-          anchor so it never clips the entity card border. */}
-      <CardinalityTextLabel
-        x={sourceX}
-        y={sourceY}
-        angleDeg={srcAngleDeg}
-        text={formatCardinalityText(d.sourceCardinality, notation)}
-        testId={`rel-card-source-${id}`}
-      />
-      <CardinalityTextLabel
-        x={targetX}
-        y={targetY}
-        angleDeg={tgtAngleDeg}
-        text={formatCardinalityText(d.targetCardinality, notation)}
-        testId={`rel-card-target-${id}`}
-      />
+          Not rendered on the canvas — the glyph (crow's foot, bar,
+          circle) IS the cardinality. Duplicating it as text clutters
+          dense diagrams and overlaps verb labels. Senior modellers
+          read the glyph directly; we keep `formatCardinalityText`
+          available for the properties panel + DDL export. */}
       {/* Verb phrases — forward (rel.name) + inverse (rel.inverseName).
           When both are set, each label sits at the midpoint of its own
           half of the line so the reader can parse the relationship in
@@ -379,65 +365,12 @@ function RelationshipEdgeComponent(props: EdgeProps) {
   );
 }
 
-/**
- * Render the cardinality text (`1..*`, `Z`, `P`, etc.) next to an
- * endpoint glyph. The `angleDeg` is the same rotation the glyph group
- * uses; we use it to push the text OUTWARD along the edge tangent.
- * The text itself is NOT rotated — practitioners read labels
- * horizontally, so we pick a perpendicular offset (above the line)
- * instead of rotating the glyph-plus-label as a unit.
- *
- * Offset convention (matches the glyph markup's local-space
- * coordinates): glyphs sit at local x = -14 to -22 (outward along -x
- * after the 180° rotation of a right-handle). We place the text at
- * local x ≈ -30, y ≈ -10 so the label hovers above and outside the
- * glyph without overlapping either the glyph or the entity card.
- */
-function CardinalityTextLabel({
-  x,
-  y,
-  angleDeg,
-  text,
-  testId,
-}: {
-  x: number;
-  y: number;
-  angleDeg: number;
-  text: string;
-  testId: string;
-}) {
-  // Convert the glyph-group rotation to the actual outward unit vector
-  // in world space: the group's local -x axis is "outward" from the
-  // card, so the world-space outward vector is
-  //   (cos(angle + 180°), sin(angle + 180°)).
-  // Equivalently: (-cos(angle), -sin(angle)).
-  const rad = (angleDeg * Math.PI) / 180;
-  const outwardX = -Math.cos(rad);
-  const outwardY = -Math.sin(rad);
-  // Perpendicular-to-outward unit vector, rotated -90° so the label
-  // sits "above" the line (towards smaller y in screen space).
-  const perpX = outwardY;
-  const perpY = -outwardX;
-  // Push 30px outward (past the glyph) + 10px perpendicular (clear of
-  // the line itself).
-  const tx = x + outwardX * 30 + perpX * 10;
-  const ty = y + outwardY * 30 + perpY * 10;
-  return (
-    <text
-      x={tx}
-      y={ty}
-      fill="#8FA3B7"
-      fontSize={10}
-      fontFamily="var(--font-mono, ui-monospace, SFMono-Regular, monospace)"
-      textAnchor="middle"
-      dominantBaseline="middle"
-      data-testid={testId}
-      data-card-text={text}
-    >
-      {text}
-    </text>
-  );
-}
+// `CardinalityTextLabel` was removed — see the canvas-render block
+// above for the rationale. The cardinality glyph IS the cardinality in
+// IE/IDEF1X notation; adding text next to every endpoint duplicated
+// the read and overlapped verb-phrase labels on dense diagrams.
+// `formatCardinalityText` stays exported from `@cc/shared` for the
+// properties panel + DDL export.
 
 /**
  * Render verb phrase labels for a relationship.
