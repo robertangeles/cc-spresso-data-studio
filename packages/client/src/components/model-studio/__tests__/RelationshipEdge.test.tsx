@@ -135,21 +135,23 @@ describe('idef1xSymbol — table-driven lookup', () => {
 });
 
 describe('selfRefPath — arc geometry (S6-U20)', () => {
-  it('returns an SVG path containing arc (A) commands', () => {
-    const path = selfRefPath(100, 200);
+  it('returns an SVG path starting with M and containing a cubic (C) bezier', () => {
+    // Self-ref now routes right(source)→top(target) and draws a single
+    // cubic bezier D-loop between them — see selfRefPath for geometry.
+    const path = selfRefPath(100, 200, 60, 160);
     expect(path).toMatch(/^M /);
-    // Two arc segments → two capital 'A' commands in the path.
-    const arcCount = (path.match(/ A /g) ?? []).length;
-    expect(arcCount).toBe(2);
+    expect(path).toMatch(/ C /);
   });
 
-  it('start + end points differ — self-ref must not be a zero-length arc', () => {
-    const path = selfRefPath(100, 200);
-    expect(path).not.toMatch(/M 100 200 A .+ 100 200$/);
+  it('start + end points differ — self-ref must not be a zero-length curve', () => {
+    const path = selfRefPath(100, 200, 60, 160);
+    // Path must END at the target coords, not the source.
+    expect(path.endsWith('60 160')).toBe(true);
+    expect(path.endsWith('100 200')).toBe(false);
   });
 
-  it('is deterministic for a given anchor', () => {
-    expect(selfRefPath(50, 50)).toBe(selfRefPath(50, 50));
+  it('is deterministic for a given source+target pair', () => {
+    expect(selfRefPath(50, 50, 20, 20)).toBe(selfRefPath(50, 50, 20, 20));
   });
 });
 
@@ -187,17 +189,19 @@ describe('RelationshipEdge — IDEF1X visual snapshots (S6-U19)', () => {
 });
 
 describe('RelationshipEdge — self-ref rendering (S6-U20)', () => {
-  it('renders a self-ref arc path when source === target', () => {
+  it('renders a self-ref cubic-bezier path when source === target', () => {
     const data = baseData('ie', 'one', 'many', false);
     data.isSelfRef = true;
     data.targetEntityId = data.sourceEntityId;
     const { container } = renderEdge(data);
     const root = container.querySelector('[data-testid="relationship-edge-edge-test"]');
     expect(root?.getAttribute('data-self-ref')).toBe('true');
-    // The rendered <path> must contain an arc command (A).
+    // selfRefPath now draws a single cubic bezier D-loop between the
+    // `right` source handle and the `top` target handle — check for
+    // the C (cubic) command, not A (arc). See selfRefPath geometry.
     const path = container.querySelector('path[d]');
     const d = path?.getAttribute('d') ?? '';
-    expect(d).toMatch(/ A /);
+    expect(d).toMatch(/ C /);
   });
 });
 

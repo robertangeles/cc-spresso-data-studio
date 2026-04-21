@@ -235,7 +235,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
           {pks.length > 0 && (
             <ul data-testid="entity-node-pk-group" className="px-3 py-1.5 space-y-0.5">
               {pks.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
-                <AttributeLine key={a.id} attr={a} isPk isParentHovered={isHovered} />
+                <AttributeLine key={a.id} attr={a} isPk />
               ))}
               {pks.length > MAX_VISIBLE_PER_GROUP && (
                 <li className="text-[10px] text-text-secondary italic">
@@ -250,7 +250,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
           {nonPks.length > 0 && (
             <ul data-testid="entity-node-nonpk-group" className="px-3 py-1.5 space-y-0.5">
               {nonPks.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
-                <AttributeLine key={a.id} attr={a} isPk={false} isParentHovered={isHovered} />
+                <AttributeLine key={a.id} attr={a} isPk={false} />
               ))}
               {nonPks.length > MAX_VISIBLE_PER_GROUP && (
                 <li className="text-[10px] text-text-secondary italic">
@@ -265,15 +265,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
   );
 }
 
-function AttributeLine({
-  attr,
-  isPk,
-  isParentHovered,
-}: {
-  attr: EntityNodeAttribute;
-  isPk: boolean;
-  isParentHovered: boolean;
-}) {
+function AttributeLine({ attr, isPk }: { attr: EntityNodeAttribute; isPk: boolean }) {
   return (
     <li
       data-testid="entity-node-attribute"
@@ -291,34 +283,26 @@ function AttributeLine({
           {attr.dataType}
         </span>
       )}
-      {/* Attribute-level handles — revealed on entity hover (same
-          Infection-Virus reveal as the entity-level handles). Smaller
-          than the entity-level dots so the 4 big cardinal handles stay
-          the primary affordance; attribute dots are the power-user
-          option for FK↔PK precision. IDs follow the
-          `attr-{uuid}-{source|target}` contract parsed by
-          ModelStudioCanvas.onConnect. */}
+      {/* Attribute-level handles retained as hit targets for attr-to-
+          attr routing (Step-7 layer_links + future precision drag)
+          but rendered fully invisible. Senior-practitioner target:
+          Erwin / ER Studio do NOT show per-attribute handles; an amber
+          dot on every row reads as beginner tooling. Connections come
+          from entity-level handles; FK↔attr inference lives in the
+          relationship model, not the canvas chrome. */}
       <Handle
         type="target"
         position={Position.Left}
         id={`attr-${attr.id}-target`}
-        className="!h-1.5 !w-1.5 !border-0 !bg-accent"
-        style={{
-          left: -3,
-          opacity: isParentHovered ? 0.8 : 0,
-          transition: 'opacity 120ms ease-out',
-        }}
+        className="!h-1.5 !w-1.5 !border-0 !bg-transparent"
+        style={{ left: -3, opacity: 0 }}
       />
       <Handle
         type="source"
         position={Position.Right}
         id={`attr-${attr.id}-source`}
-        className="!h-1.5 !w-1.5 !border-0 !bg-accent"
-        style={{
-          right: -3,
-          opacity: isParentHovered ? 0.8 : 0,
-          transition: 'opacity 120ms ease-out',
-        }}
+        className="!h-1.5 !w-1.5 !border-0 !bg-transparent"
+        style={{ right: -3, opacity: 0 }}
       />
     </li>
   );

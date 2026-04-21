@@ -163,21 +163,23 @@ export function outwardAngleFor(position: Position): number {
  *
  * Kept pure + exported so S6-U20 can snapshot a known geometry.
  */
-export function selfRefPath(sx: number, sy: number): string {
-  // Push the anchor clearly outside the card border along the top-right
-  // diagonal. Empirically a 14px outward offset clears the 1.25px stroke
-  // + entity card border + any selected-glow.
-  const outwardOffset = 14;
-  const startX = sx + outwardOffset;
-  const startY = sy - 4;
-  const radius = 22;
-  // Two quarter arcs forming a closed-looking ear above and to the
-  // right of the source handle. Sweep flag 1 → clockwise.
-  const midX = startX + radius;
-  const midY = startY - radius;
-  const endX = sx + 4;
-  const endY = sy - outwardOffset;
-  return `M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${midX} ${midY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}`;
+export function selfRefPath(sx: number, sy: number, tx: number, ty: number): string {
+  // Classic Erwin/ER Studio convention: self-ref loops project OUTWARD
+  // from the entity in a smooth D-shape. Our canvas routes self-ref
+  // edges `right` (source) → `top` (target), so the bezier starts at
+  // the right edge midpoint and ends at the top edge midpoint. The two
+  // control points pull the curve out into the top-right quadrant,
+  // creating a clean loop that hugs the corner without clipping the
+  // entity body.
+  // Tighter bulge than the initial pass — Erwin / ER Studio self-refs
+  // sit close to the corner, not in open space. 30px hugs the
+  // top-right corner without reading as a detached arc.
+  const bulge = 30;
+  const c1x = sx + bulge; // pull right from source
+  const c1y = sy;
+  const c2x = tx;
+  const c2y = ty - bulge; // pull up from target
+  return `M ${sx} ${sy} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${tx} ${ty}`;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -226,13 +228,20 @@ function RelationshipEdgeComponent(props: EdgeProps) {
   let tgtAngleDeg = 180;
 
   if (isSelfRef) {
-    edgePath = selfRefPath(sourceX, sourceY);
-    labelX = sourceX + 44;
-    labelY = sourceY - 44;
-    // Source glyph aligned with the outward-right tangent at the loop's
-    // start; target glyph aligned with the outward-upward tangent at
-    // the loop's end so both glyphs render outside the node bounds.
-    srcAngleDeg = 0;
+    edgePath = selfRefPath(sourceX, sourceY, targetX, targetY);
+    // Label sits at the FAR corner of the loop (top-right of the
+    // entity), not its midpoint — pushing it all the way into the
+    // bulge prevents it from clipping the entity header. Mirror
+    // selfRefPath's bulge so the two stay in sync if tuned.
+    const bulge = 30;
+    labelX = sourceX + bulge + 4;
+    labelY = targetY - bulge - 4;
+    // Source end: line leaves the right-edge handle going rightward.
+    // Rotate glyph 180° so its "tail" (bar / crow's foot) points OUT
+    // of the entity (to the right) instead of into it.
+    // Target end: line arrives at the top-edge handle from above.
+    // Rotate glyph -90° so the tail points UP, outside the entity.
+    srcAngleDeg = 180;
     tgtAngleDeg = -90;
   } else {
     const [smoothPath, sLabelX, sLabelY] = getSmoothStepPath({
@@ -313,25 +322,24 @@ function RelationshipEdgeComponent(props: EdgeProps) {
           transition: 'opacity 200ms ease',
         }}
       />
-      {/* Source-end glyph — anchored at the card-edge handle, rotated
-          so the glyph markers project OUTWARD from the card. For
-          self-ref edges the anchor is the start of the loop (sits just
-          outside the source handle) so the glyph clears the border. */}
+      {/* Source-end glyph — anchored at the actual source handle
+          (right-edge midpoint for self-ref; outward-facing edge
+          midpoint for non-self-ref). srcAngleDeg rotates the glyph so
+          the bar / crow's-foot extends OUTWARD (away from the card). */}
       <GlyphMarker
-        x={isSelfRef ? sourceX + 14 : sourceX}
-        y={isSelfRef ? sourceY - 4 : sourceY}
+        x={sourceX}
+        y={sourceY}
         angleDeg={srcAngleDeg}
         glyph={srcGlyph}
         identifying={d.isIdentifying}
         testId={`rel-glyph-source-${id}`}
       />
-      {/* Target-end glyph — for non-self-ref edges we use the target
-          handle; for self-ref the arc terminates above the source, so
-          we anchor the target glyph at the end of the loop and rotate
-          it so its markers point UP (away from the card). */}
+      {/* Target-end glyph — anchored at the actual target handle. For
+          self-ref that's the top-edge midpoint; tgtAngleDeg rotates
+          the glyph so markers extend UP (away from the card). */}
       <GlyphMarker
-        x={isSelfRef ? sourceX + 4 : targetX}
-        y={isSelfRef ? sourceY - 14 : targetY}
+        x={targetX}
+        y={targetY}
         angleDeg={tgtAngleDeg}
         glyph={tgtGlyph}
         identifying={d.isIdentifying}
