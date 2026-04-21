@@ -199,9 +199,15 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
       ref={rootRef}
       data-testid="entity-node"
       className={[
-        'relative min-w-[180px] max-w-[260px] rounded-xl border backdrop-blur-xl transition-all duration-150 ease-out',
+        // transition-all was animating React Flow's viewport-translate
+        // during pan, producing a visible "bouncing" drift. Scope the
+        // transitions to JUST the visual properties we actually want
+        // to animate (colors + shadow on hover/selected) so the node
+        // transform is applied instantly during pan.
+        'relative min-w-[180px] max-w-[260px] rounded-xl border backdrop-blur-xl',
+        'transition-[box-shadow,border-color,background-color] duration-150 ease-out',
         'bg-surface-2/70 border-white/10 shadow-[0_4px_18px_rgba(0,0,0,0.35)]',
-        'hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.45)]',
+        'hover:shadow-[0_8px_24px_rgba(0,0,0,0.45)]',
         selected
           ? 'ring-2 ring-accent shadow-[0_0_18px_rgba(255,214,10,0.35)] border-accent/40'
           : '',

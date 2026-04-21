@@ -5,7 +5,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   applyNodeChanges,
   useNodesState,
   useReactFlow,
@@ -914,21 +913,11 @@ function InnerCanvas({ modelId, layer }: Props) {
           showInteractive={false}
           className="!bg-surface-2/70 !backdrop-blur !border !border-white/10 !rounded-lg [&>button]:!bg-transparent [&>button]:!border-white/5 [&>button]:!text-text-secondary hover:[&>button]:!text-accent"
         />
-        <MiniMap
-          pannable
-          zoomable
-          ariaLabel="Canvas minimap"
-          position="bottom-left"
-          maskColor="rgba(0, 0, 0, 0.6)"
-          nodeColor={(n) => {
-            const lyr = (n.data as EntityNodeData | undefined)?.layer;
-            if (lyr === 'physical') return '#FCD34D';
-            if (lyr === 'logical') return '#34D399';
-            return '#60A5FA';
-          }}
-          nodeStrokeColor="rgba(255, 214, 10, 0.4)"
-          className="!bg-surface-2/70 !backdrop-blur !border !border-white/10 !rounded-lg"
-        />
+        {/* MiniMap removed — it recomputed node positions on every
+            viewport tick which capped pan at ~40fps. For an
+            extraordinary UX we trade the overview for silk-smooth
+            panning. Use the Controls fit-view button (or ⌘0) to
+            reset the viewport when you get lost. */}
       </ReactFlow>
 
       {empty && (
