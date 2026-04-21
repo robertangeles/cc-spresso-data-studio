@@ -251,13 +251,13 @@ function InnerCanvas({ modelId, layer }: Props) {
 
   // Edges.
   //
-  // Self-ref note (#6): EntityNode's entity-level handles are
-  // unkeyed (no `id` prop), so React Flow resolves them positionally
-  // rather than by string id. We can't redirect the target endpoint
-  // to a different handle from the canvas. Instead `selfRefPath` in
-  // RelationshipEdge projects the arc OUTWARD from the collapsed
-  // source handle, and we pin self-ref edges above node z-index so
-  // the projected arc isn't clipped behind the card body.
+  // Self-ref routing (#6 follow-up): EntityNode's entity-level handles
+  // now carry stable `id`s (`top` / `bottom` / `left` / `right`), so we
+  // pin the self-ref edge's source to the `bottom` handle and its
+  // target to the `right` handle. This forces React Flow to compute
+  // TWO DIFFERENT endpoint coordinates on the same node, which is what
+  // `selfRefPath` needs to draw a visible arc. zIndex 1000 keeps the
+  // arc in front of the entity card.
   const edges: Edge<RelationshipEdgeData>[] = useMemo(() => {
     return rels.relationships
       .filter((r) => r.layer === layer)
@@ -269,7 +269,7 @@ function InnerCanvas({ modelId, layer }: Props) {
           target: r.targetEntityId,
           type: 'relationship',
           selected: r.id === selectedRelId,
-          ...(selfRef ? { zIndex: 1000 } : {}),
+          ...(selfRef ? { zIndex: 1000, sourceHandle: 'bottom', targetHandle: 'right' } : {}),
           data: {
             sourceCardinality: r.sourceCardinality,
             targetCardinality: r.targetCardinality,

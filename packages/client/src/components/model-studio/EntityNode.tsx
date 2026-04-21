@@ -144,7 +144,17 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
         calm at rest. Click-and-drag from a handle to another entity's handle
         creates a relationship.
       */}
+      {/*
+        Entity-level handles get stable `id`s so the canvas can route
+        self-referential edges (source + target are the same entity) to
+        two DIFFERENT anchor points. Without these ids React Flow
+        collapses source==target to the same default anchor and the
+        self-ref arc renderer can't span a loop. See ModelStudioCanvas
+        edges memo where `sourceHandle`/`targetHandle` are stamped on
+        self-ref edges.
+      */}
       <Handle
+        id="top"
         type="target"
         position={Position.Top}
         className="!h-2.5 !w-2.5 !border-0 !bg-accent"
@@ -155,6 +165,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
         }}
       />
       <Handle
+        id="bottom"
         type="source"
         position={Position.Bottom}
         className="!h-2.5 !w-2.5 !border-0 !bg-accent"
@@ -165,6 +176,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
         }}
       />
       <Handle
+        id="left"
         type="target"
         position={Position.Left}
         className="!h-2.5 !w-2.5 !border-0 !bg-accent"
@@ -175,6 +187,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
         }}
       />
       <Handle
+        id="right"
         type="source"
         position={Position.Right}
         className="!h-2.5 !w-2.5 !border-0 !bg-accent"

@@ -31,13 +31,18 @@ const MODEL_B = '00000000-0000-4000-8000-000000000bbb';
  *  parameterised so one test can remount across models. */
 function makeWrapper(modelId: string | undefined) {
   return function Wrapper({ children }: { children: ReactNode }) {
-    // Pass children as positional args (React.createElement's 3rd+ params)
-    // instead of via props, per react/no-children-prop lint rule.
-    return createElement(
-      ToastProvider,
-      null,
-      createElement(UndoStackProvider, { modelId }, children),
+    // Use Fragment + explicit nesting so TypeScript sees the children
+    // prop on each provider (ProviderProps requires it) while ESLint's
+    // react/no-children-prop rule still passes — createElement's
+    // positional children arg is the lint-approved escape from the
+    // JSX-only rule, but TS still needs the type to satisfy. We cast
+    // the wrapper around Provider to accept children via positional.
+    const undoTree = createElement(
+      UndoStackProvider as unknown as (props: { modelId?: string }) => JSX.Element,
+      { modelId },
+      children,
     );
+    return createElement(ToastProvider, null, undoTree);
   };
 }
 
