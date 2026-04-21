@@ -227,9 +227,11 @@ export function AttributeGrid({
                   >
                     Classification
                   </Th>
-                  <Th title="One-line preview of the column's definition. Read-only — edit in the Documentation tab below.">
-                    Definition
-                  </Th>
+                  {/* Definition column dropped to match Erwin / ER Studio
+                      convention: the attribute grid shows roles + constraints,
+                      and the prose Definition lives in the property sheet
+                      (General tab). Row-hover tooltip preserves at-a-glance
+                      access — see AttributeRow's `title` prop below. */}
                   <Th className="w-8" title="Delete this attribute." />
                 </tr>
               </thead>
@@ -237,7 +239,7 @@ export function AttributeGrid({
                 {attributes.length === 0 && (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={10}
                       className="px-4 py-6 text-center text-[11px] italic text-text-secondary/60"
                     >
                       No attributes yet. Add one below — the first will be a uuid primary key by
@@ -465,6 +467,7 @@ function AttributeRow({
       data-attribute-id={attr.id}
       data-selected={selected ? 'true' : 'false'}
       onClick={onSelect}
+      title={attr.description?.trim() || undefined}
       className={[
         'group cursor-pointer transition-colors',
         // Zebra stripe; barely-there rhythm.
@@ -664,18 +667,6 @@ function AttributeRow({
             </option>
           ))}
         </select>
-      </td>
-
-      {/* Definition — read-only preview; the editor lives on the
-          Documentation tab below. */}
-      <td className="border-b border-white/5 px-2 py-0.5 align-middle">
-        <div
-          data-testid="attribute-definition-preview"
-          title={attr.description ?? 'Read-only. Edit in the Documentation tab.'}
-          className="w-full min-w-0 truncate px-1.5 py-1 text-[11px] italic text-text-secondary/70"
-        >
-          {attr.description?.trim() ? attr.description : '—'}
-        </div>
       </td>
 
       {/* Delete */}
