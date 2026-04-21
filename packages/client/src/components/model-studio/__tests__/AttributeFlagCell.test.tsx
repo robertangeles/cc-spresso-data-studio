@@ -41,6 +41,20 @@ describe('AttributeFlagCell', () => {
     expect(screen.queryByText('PK')).toBeNull();
   });
 
+  it('AK badge tooltip shows "AK1 — <label>" when altKeyLabel is provided', () => {
+    render(
+      <AttributeFlagCell isPk={false} isFk={false} altKeyGroup="AK1" altKeyLabel="NI number" />,
+    );
+    const badge = screen.getByTestId('attribute-flag-ak');
+    expect(badge.getAttribute('title')).toBe('AK1 — NI number');
+  });
+
+  it('AK badge tooltip falls back to "Alt key group AK1" when no label set', () => {
+    render(<AttributeFlagCell isPk={false} isFk={false} altKeyGroup="AK1" altKeyLabel={null} />);
+    const badge = screen.getByTestId('attribute-flag-ak');
+    expect(badge.getAttribute('title')).toBe('Alt key group AK1');
+  });
+
   it('NN + UQ are NOT rendered on the card (constraint details belong in the panel)', () => {
     render(<AttributeFlagCell isPk={false} isFk={false} isNn isUq altKeyGroup={null} />);
     // Erwin / ER Studio diagrams show roles (PK / FK / BK) only; NN + UQ

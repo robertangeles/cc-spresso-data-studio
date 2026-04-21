@@ -203,6 +203,7 @@ function InnerCanvas({ modelId, layer }: Props) {
           })),
           relCount: relCountByEntity.get(e.id) ?? 0,
           showOrphanBadge: showOrphanBadges,
+          altKeyLabels: e.altKeyLabels ?? {},
         },
       };
     });
@@ -491,9 +492,14 @@ function InnerCanvas({ modelId, layer }: Props) {
     [rels.relationships, selectedRelId],
   );
 
-  // Entity mutations (unchanged from Step 4/5).
+  // Entity mutations — Step-4/5 fields + Direction A altKeyLabels.
   const updateSelected = useCallback(
-    async (patch: { name?: string; businessName?: string | null; description?: string | null }) => {
+    async (patch: {
+      name?: string;
+      businessName?: string | null;
+      description?: string | null;
+      altKeyLabels?: Record<string, string>;
+    }) => {
       if (!selectedEntityId) return;
       // Snapshot the current entity so we can revert field-by-field.
       const current = ent.entities.find((e) => e.id === selectedEntityId);
@@ -502,10 +508,14 @@ function InnerCanvas({ modelId, layer }: Props) {
         name?: string;
         businessName?: string | null;
         description?: string | null;
+        altKeyLabels?: Record<string, string>;
       } = {};
       if (patch.name !== undefined) inversePatch.name = current.name;
       if (patch.businessName !== undefined) inversePatch.businessName = current.businessName;
       if (patch.description !== undefined) inversePatch.description = current.description;
+      if (patch.altKeyLabels !== undefined) {
+        inversePatch.altKeyLabels = { ...(current.altKeyLabels ?? {}) };
+      }
       await undo.execute({
         label: 'Update entity',
         do: () => ent.update(selectedEntityId, patch),

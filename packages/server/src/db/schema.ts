@@ -2054,6 +2054,13 @@ export const dataModelEntities = pgTable(
     // backfills existing rows via a single window-function UPDATE; new
     // rows are assigned in `createEntity` inside a transaction.
     displayId: varchar('display_id', { length: 20 }),
+    // Step 6 Direction A — optional one-line "purpose" label per alt-key
+    // group (keyed by AK group name: `AK1`, `AK2`, …). The badge stays
+    // `AK1`; this label surfaces as a tooltip on the AK badge and
+    // becomes the basis for DDL constraint names in Step 9. Map values
+    // are string descriptions capped at 200 chars (enforced in the
+    // shared Zod schema). Default `{}` = no labels set.
+    altKeyLabels: jsonb('alt_key_labels').notNull().default('{}'),
     metadata: jsonb('metadata').notNull().default('{}'),
     tags: jsonb('tags').notNull().default('[]'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

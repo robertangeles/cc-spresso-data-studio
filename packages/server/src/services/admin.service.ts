@@ -13,6 +13,7 @@ import {
   addEntitiesDisplayIdColumn,
   addRelationshipsInverseNameColumn,
 } from '../db/migrations/step6-direction-a.js';
+import { addEntitiesAltKeyLabelsColumn } from '../db/migrations/step6-alt-key-labels.js';
 
 // --- AI Provider: OpenRouter is the single gateway ---
 
@@ -100,6 +101,10 @@ export async function seedAIProviders(): Promise<void> {
   await runOnce('add-attributes-alt-key-group', addAttributesAltKeyGroupColumn);
   await runOnce('add-relationships-inverse-name', addRelationshipsInverseNameColumn);
   await runOnce('add-entities-display-id', addEntitiesDisplayIdColumn);
+
+  // Step 6 Direction A follow-up — per-AK-group descriptive labels on
+  // entities. Idempotent (`ADD COLUMN IF NOT EXISTS`); no backfill.
+  await runOnce('add-entities-alt-key-labels', addEntitiesAltKeyLabelsColumn);
 }
 
 /** One-time idempotent migration: convert short model IDs to OpenRouter format */

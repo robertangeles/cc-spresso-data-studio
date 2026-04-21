@@ -23,6 +23,11 @@ export interface EntitySummary {
    *  right of the entity card so senior modellers can cite it in
    *  governance artefacts without chasing a UUID. */
   displayId: string | null;
+  /** Step 6 Direction A follow-up — optional one-line "purpose" label
+   *  per AK group, keyed by `AK1`, `AK2`, …. Surfaces as a tooltip on
+   *  the AK badge + becomes the DDL constraint name at export time.
+   *  Empty map (`{}`) = no labels set on any AK group. */
+  altKeyLabels: Record<string, string>;
   metadata: Record<string, unknown>;
   tags: string[];
   createdAt: string;

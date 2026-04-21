@@ -224,6 +224,17 @@ export const entityCreateSchema = z
   });
 export type EntityCreate = z.infer<typeof entityCreateSchema>;
 
+/** Step 6 Direction A follow-up — optional one-line descriptive "purpose"
+ *  label per alt-key group. Keyed by AK group name (`AK1`, `AK2`, …) and
+ *  mapped to a short string (capped at 200 chars, enforced here and in
+ *  the DB-level JSONB constraint). The badge rendered on the entity
+ *  card stays `AK1` — this label is surfaced via tooltip on the badge
+ *  and becomes the DDL constraint name when exported. Empty string
+ *  values are rejected via `.min(1)` so "set to empty" is represented
+ *  by removing the key from the map, not by an empty string. */
+export const altKeyLabelsSchema = z.record(z.string().min(1).max(200));
+export type AltKeyLabels = z.infer<typeof altKeyLabelsSchema>;
+
 export const entityUpdateSchema = z
   .object({
     name: entityNameSchema.optional(),
@@ -233,6 +244,7 @@ export const entityUpdateSchema = z
     entityType: ENTITY_TYPE.optional(),
     metadata: metadataSchema.optional(),
     tags: tagsSchema.optional(),
+    altKeyLabels: altKeyLabelsSchema.optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, {
@@ -261,6 +273,10 @@ export const entitySchema = z.object({
     .string()
     .regex(/^E\d+$/, 'displayId must match /^E\\d+$/')
     .optional(),
+  /** Step 6 Direction A follow-up — per-AK-group "purpose" labels.
+   *  Defaults to `{}` so callers can always assume a map. See
+   *  `altKeyLabelsSchema` for the value shape. */
+  altKeyLabels: altKeyLabelsSchema.default({}),
   metadata: metadataSchema.default({}),
   tags: tagsSchema.default([]),
   createdAt: z.string().datetime(),

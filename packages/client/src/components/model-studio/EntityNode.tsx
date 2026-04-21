@@ -63,6 +63,10 @@ export interface EntityNodeData extends Record<string, unknown> {
   relCount?: number;
   /** User preference — turned off via canvas header checkbox. */
   showOrphanBadge?: boolean;
+  /** Optional descriptive labels keyed by AK group (e.g.
+   *  `{AK1: "NI number"}`). Shared across every attribute in the same
+   *  group. Surfaced as the tooltip on the AK badge. */
+  altKeyLabels?: Record<string, string>;
 }
 
 export interface EntityNodeProps extends NodeProps {
@@ -316,7 +320,7 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
               className="px-3 py-1.5 space-y-0.5"
             >
               {primaryAttrs.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
-                <AttributeLine key={a.id} attr={a} isPrimary />
+                <AttributeLine key={a.id} attr={a} isPrimary altKeyLabels={data.altKeyLabels} />
               ))}
               {primaryAttrs.length > MAX_VISIBLE_PER_GROUP && (
                 <li className="text-[10px] text-text-secondary italic">
@@ -331,7 +335,12 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
           {nonPrimaryAttrs.length > 0 && (
             <ul data-testid="entity-node-nonpk-group" className="px-3 py-1.5 space-y-0.5">
               {nonPrimaryAttrs.slice(0, MAX_VISIBLE_PER_GROUP).map((a) => (
-                <AttributeLine key={a.id} attr={a} isPrimary={false} />
+                <AttributeLine
+                  key={a.id}
+                  attr={a}
+                  isPrimary={false}
+                  altKeyLabels={data.altKeyLabels}
+                />
               ))}
               {nonPrimaryAttrs.length > MAX_VISIBLE_PER_GROUP && (
                 <li className="text-[10px] text-text-secondary italic">
@@ -346,8 +355,17 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
   );
 }
 
-function AttributeLine({ attr, isPrimary }: { attr: EntityNodeAttribute; isPrimary: boolean }) {
+function AttributeLine({
+  attr,
+  isPrimary,
+  altKeyLabels,
+}: {
+  attr: EntityNodeAttribute;
+  isPrimary: boolean;
+  altKeyLabels?: Record<string, string>;
+}) {
   const altKey = attr.altKeyGroup ?? null;
+  const altLabel = altKey ? (altKeyLabels?.[altKey] ?? null) : null;
   const isPk = attr.isPrimaryKey;
   const isFk = attr.isForeignKey === true;
 
@@ -364,7 +382,7 @@ function AttributeLine({ attr, isPrimary }: { attr: EntityNodeAttribute; isPrima
           when scanning the ER graph for PK/FK/BK structure. */}
       <span className="truncate font-mono text-text-primary font-medium">{attr.name}</span>
       <span className="ml-auto shrink-0">
-        <AttributeFlagCell isPk={isPk} isFk={isFk} altKeyGroup={altKey} />
+        <AttributeFlagCell isPk={isPk} isFk={isFk} altKeyGroup={altKey} altKeyLabel={altLabel} />
       </span>
       {/* Attribute-level handles retained as hit targets for attr-to-
           attr routing (Step-7 layer_links + future precision drag)

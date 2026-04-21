@@ -57,6 +57,7 @@ const FIELD_LABELS: Record<string, string> = {
   targetEntityId: 'Target entity',
   // Step 6 Direction A fields
   altKeyGroup: 'Alt key group',
+  altKeyLabels: 'Alt key purposes',
   inverseName: 'Inverse verb phrase',
   displayId: 'Display id',
 };
@@ -347,6 +348,9 @@ function describeFieldChange(field: string, prev: unknown, next: unknown): strin
   if (field === 'displayId') {
     return describeDisplayIdChange(prev, next);
   }
+  if (field === 'altKeyLabels') {
+    return describeAltKeyLabelsChange(prev, next);
+  }
 
   // Booleans — phrase as state toggles when it reads naturally.
   if (typeof prev === 'boolean' || typeof next === 'boolean') {
@@ -390,6 +394,31 @@ function describeAltKeyGroupChange(prev: unknown, next: unknown): string {
   if (p != null && n == null) return 'Cleared alt key group.';
   if (p != null && n != null) return `Moved from ${code(p)} to ${code(n)}.`;
   return 'Alt key group unchanged.';
+}
+
+/** Step 6 Direction A — optional per-AK-group purpose labels stored
+ *  on the ENTITY (`alt_key_labels` JSONB). Diff shapes:
+ *   {}           → {AK1:"X"}      "Set AK1 purpose: X"
+ *   {AK1:"X"}    → {}              "Cleared AK1 purpose"
+ *   {AK1:"old"}  → {AK1:"new"}     "Changed AK1 purpose from `old` to `new`"
+ *   multi-key changes → "N alt key purposes updated" (no enumeration
+ *   to keep audit lines scannable). */
+function describeAltKeyLabelsChange(prev: unknown, next: unknown): string {
+  const p = isRecord(prev) ? (prev as Record<string, unknown>) : {};
+  const n = isRecord(next) ? (next as Record<string, unknown>) : {};
+  const keys = new Set([...Object.keys(p), ...Object.keys(n)]);
+  const diffs: Array<{ key: string; from: string | null; to: string | null }> = [];
+  for (const key of keys) {
+    const from = typeof p[key] === 'string' ? (p[key] as string) : null;
+    const to = typeof n[key] === 'string' ? (n[key] as string) : null;
+    if (from !== to) diffs.push({ key, from, to });
+  }
+  if (diffs.length === 0) return 'Alt key purposes unchanged.';
+  if (diffs.length > 1) return `${diffs.length} alt key purposes updated.`;
+  const { key, from, to } = diffs[0];
+  if (from == null && to != null) return `Set ${code(key)} purpose: ${code(to)}.`;
+  if (from != null && to == null) return `Cleared ${code(key)} purpose.`;
+  return `Changed ${code(key)} purpose from ${code(from ?? '')} to ${code(to ?? '')}.`;
 }
 
 /** Step 6 Direction A — inverse verb phrase (target → source label). */

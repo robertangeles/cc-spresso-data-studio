@@ -52,6 +52,7 @@ export interface EntityEditorProps {
     name?: string;
     businessName?: string | null;
     description?: string | null;
+    altKeyLabels?: Record<string, string>;
   }) => Promise<void>;
   onAutoDescribe: () => Promise<{ description: string }>;
   onDelete: (cascade: boolean) => Promise<void>;
@@ -273,6 +274,8 @@ function EditorShell(props: EditorShellProps) {
               attribute={selectedAttr}
               onUpdate={onAttributeUpdate}
               loadHistory={onLoadHistory}
+              entityAltKeyLabels={entity.altKeyLabels ?? {}}
+              onUpdateEntityAltKeyLabels={(labels) => onUpdate({ altKeyLabels: labels })}
             />
           </div>
         )}

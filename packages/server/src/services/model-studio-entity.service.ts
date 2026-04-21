@@ -294,6 +294,11 @@ export async function updateEntity(
   if (patch.entityType !== undefined) updates.entityType = patch.entityType;
   if (patch.metadata !== undefined) updates.metadata = patch.metadata;
   if (patch.tags !== undefined) updates.tags = patch.tags;
+  // Step 6 Direction A follow-up — per-AK-group descriptive labels. A
+  // passed `{}` clears all labels; `undefined` leaves the existing map
+  // untouched. The Zod schema rejects empty-string values so "clear a
+  // single label" is expressed by omitting that key from the patch.
+  if (patch.altKeyLabels !== undefined) updates.altKeyLabels = patch.altKeyLabels;
 
   try {
     const [updated] = await db

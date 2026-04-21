@@ -421,4 +421,31 @@ describe('formatAuditEvent — Step 6 Direction A phrases', () => {
     expect(lines[0]).toContain('Assigned display id');
     expect(lines[0]).toContain('E007');
   });
+
+  it('narrates alt-key purpose set (empty → {AK1: "NI number"})', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { altKeyLabels: {} },
+        afterState: { altKeyLabels: { AK1: 'NI number' } },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Set');
+    expect(lines[0]).toContain('AK1');
+    expect(lines[0]).toContain('NI number');
+  });
+
+  it('narrates alt-key purpose cleared ({AK1: "X"} → {})', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { altKeyLabels: { AK1: 'NI number' } },
+        afterState: { altKeyLabels: {} },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Cleared');
+    expect(lines[0]).toContain('AK1');
+  });
 });

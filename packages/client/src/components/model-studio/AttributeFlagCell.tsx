@@ -25,9 +25,19 @@ export interface AttributeFlagCellProps {
   /** Accepted for API compatibility; not rendered on the card. */
   isUq?: boolean;
   altKeyGroup: string | null;
+  /** Optional descriptive label for this AK group. Drives the badge
+   *  tooltip — hovering `AK1` shows `AK1 — NI number` when set. Stored
+   *  on the parent entity (shared by all columns in the same group).
+   *  See `data_model_entities.alt_key_labels`. */
+  altKeyLabel?: string | null;
 }
 
-export function AttributeFlagCell({ isPk, isFk, altKeyGroup }: AttributeFlagCellProps) {
+export function AttributeFlagCell({
+  isPk,
+  isFk,
+  altKeyGroup,
+  altKeyLabel,
+}: AttributeFlagCellProps) {
   // Base class shared by every code chip — keeps kerning and padding
   // consistent so a row with just `PK` aligns with a row that shows
   // `PK FK AK1`.
@@ -55,7 +65,11 @@ export function AttributeFlagCell({ isPk, isFk, altKeyGroup }: AttributeFlagCell
         <span
           data-testid="attribute-flag-ak"
           className={`${base} text-amber-300`}
-          title={`Alt key group ${altKeyGroup}`}
+          title={
+            altKeyLabel && altKeyLabel.trim()
+              ? `${altKeyGroup} — ${altKeyLabel}`
+              : `Alt key group ${altKeyGroup}`
+          }
         >
           {altKeyGroup}
         </span>

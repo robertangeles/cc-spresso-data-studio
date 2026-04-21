@@ -395,6 +395,41 @@ describe('Model Studio — entities (Step 4)', () => {
       }).catch(() => {});
     }
   });
+
+  // ----------------------------------------------------------
+  // Step 6 Direction A follow-up — per-AK-group descriptive label
+  // round-trip. PATCH entity with `altKeyLabels` → 200 with labels
+  // echoed back, proving both the write path + the select shape.
+  // ----------------------------------------------------------
+  it('S6-DA-I6: PATCH entity with altKeyLabels echoes the labels in the response', async () => {
+    // Create a fresh entity in the suite's shared model so the assertion
+    // owns its write and doesn't collide with earlier cases. We register
+    // it in `createdEntityIds` so `afterAll` cascades it away.
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/entities`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({ name: `ak_labels_${Date.now()}`, layer: 'logical' }),
+    });
+    expect(createRes.status).toBe(201);
+    const createBody = (await createRes.json()) as ApiResponse<{ id: string }>;
+    const entityId = createBody.data.id;
+    createdEntityIds.push(entityId);
+
+    const patchRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${entityId}`,
+      {
+        method: 'PATCH',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({ altKeyLabels: { AK1: 'NI number' } }),
+      },
+    );
+    expect(patchRes.status).toBe(200);
+    const patchBody = (await patchRes.json()) as ApiResponse<{
+      altKeyLabels: Record<string, string>;
+    }>;
+    expect(patchBody.success).toBe(true);
+    expect(patchBody.data.altKeyLabels).toEqual({ AK1: 'NI number' });
+  });
 });
 
 // Sanity: keep the user table reference visible so a future agent who
