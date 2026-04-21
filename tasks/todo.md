@@ -139,7 +139,7 @@ the project memory at `project_model_studio_state.md` — use it.
 
 - [x] **Fixture auth rescue (S6-E2 / E5 / E6 / E7 / E8 + new
       E11/E12 unblocked).** Spec refactored to the `dependencies:
-    ['setup']` project chain — one login per run via `setup`,
+  ['setup']` project chain — one login per run via `setup`,
       one `POST /api/auth/refresh` per suite to mint an access token
       for API calls. Zero per-test logins, zero rate-limit burn.
       See the header comment of
@@ -200,6 +200,29 @@ the project memory at `project_model_studio_state.md` — use it.
       model-studio tree. Ship the handler (select source entity →
       `⌘R` → select target → `Enter` creates the rel) then un-fixme
       the test.
+
+- [ ] **EntityEditor: tabbed property sheet (Erwin convention).**
+      Convert the EntityEditor header (name / business name /
+      definition / actions) into a compact row + tabs below:
+      **Attributes** (default) | Definition | Keys | Documentation.
+      Rationale: Erwin + ER Studio + PowerDesigner all ship this
+      exact UX — it's the convention senior CDMP practitioners expect,
+      and it keeps the attribute grid (the working surface) on screen
+      while isolating prose / keys / docs to their own tabs. This PR
+      (`feature/model-studio-step6-relationships`) ships Direction A
+      (collapsible Definition with 1-line preview + localStorage
+      persistence) in
+      [packages/client/src/components/model-studio/EntityEditor.tsx](packages/client/src/components/model-studio/EntityEditor.tsx)
+      as the quick win — 1hr, zero new abstractions, immediate fix
+      for "long Definition pushes grid off-screen". The tabbed
+      refactor is deferred because it's ~4-6hrs of scaffolding (tab
+      container + route state + migrating the existing Row 4 /
+      action-strip sections + updating Playwright selectors) that
+      doesn't block the demo. Where to start: model the tabs as a
+      reusable `<PropertySheetTabs>` primitive since the
+      `AttributePropertyEditor` (already tabbed) can adopt the same
+      component in a follow-up pass. Blocked by: nothing — can ship
+      any time after Step 6 merges.
 
 ## Phase 1 (legacy content-builder scaffold — pre-rebrand, kept for history)
 

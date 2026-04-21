@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
   Database,
   LayoutPanelTop,
   Maximize2,
@@ -42,6 +44,7 @@ import { AttributePropertyEditor } from './AttributePropertyEditor';
 
 const EXPAND_BREAKPOINT = 1280;
 const STORAGE_KEY = 'model-studio.entity-editor-width';
+const DEFINITION_OPEN_KEY = 'model-studio.entity-editor-definition-open';
 
 export interface EntityEditorProps {
   entity: EntitySummary | null;
@@ -77,6 +80,14 @@ function readStoredWidth(): WidthMode {
   // expect rich detail on open. Users can collapse to compact and the
   // preference persists.
   return 'expanded';
+}
+
+function readStoredDefinitionOpen(): boolean {
+  try {
+    return window.localStorage.getItem(DEFINITION_OPEN_KEY) === 'true';
+  } catch {
+    return false;
+  }
 }
 
 export function EntityEditor(props: EntityEditorProps) {
@@ -344,7 +355,28 @@ function EntityHeader({
   const [autoBusy, setAutoBusy] = useState(false);
   const [autoError, setAutoError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Definition collapses to a 1-line preview by default so the attribute
+  // grid below gets the prime vertical real estate. Senior modellers
+  // live in the grid; the prose Definition is a reference field they
+  // read/edit occasionally. State is persisted globally — once a user
+  // pins the definition open they almost certainly want it that way
+  // everywhere.
+  const [definitionOpen, setDefinitionOpen] = useState(readStoredDefinitionOpen);
   const nameRef = useRef<HTMLInputElement>(null);
+  const definitionRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(DEFINITION_OPEN_KEY, String(definitionOpen));
+    } catch {
+      /* ignore */
+    }
+  }, [definitionOpen]);
+
+  function expandDefinition() {
+    setDefinitionOpen(true);
+    queueMicrotask(() => definitionRef.current?.focus());
+  }
 
   useEffect(() => {
     setDraft({
@@ -378,6 +410,11 @@ function EntityHeader({
   async function runAutoDescribe() {
     setAutoBusy(true);
     setAutoError(null);
+    // Force-expand so the modeller can see the generated prose land
+    // without hunting for it. This overrides a pinned-collapsed state
+    // only for the current entity session — the persisted preference
+    // kicks back in on the next open.
+    setDefinitionOpen(true);
     try {
       const result = await onAutoDescribe();
       setDraft((d) => ({ ...d, description: result.description }));
@@ -512,28 +549,86 @@ function EntityHeader({
         />
       </div>
 
-      {/* Row 4 — Definition (DMBOK term for the prose description) */}
+      {/* Row 4 — Definition (DMBOK term for the prose description).
+          Collapsible: default state is a 1-line preview so the
+          attribute grid gets vertical priority. Click the row to
+          expand into the editable textarea. */}
       <div className="mt-3">
-        <FieldLabel label="Definition" hint="Prose; use Auto-describe to draft" />
-        <textarea
-          data-testid="entity-editor-description"
-          value={draft.description}
-          onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-          onBlur={commitDescription}
-          rows={width === 'expanded' ? 3 : 2}
-          placeholder="What real-world thing does this entity represent? What rules apply?"
-          title="Plain-English description of what the entity represents and any business rules."
-          className={[
-            'w-full resize-y rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-1.5 text-xs leading-relaxed text-text-primary',
-            'placeholder:text-text-secondary/40',
-            'focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40',
-            autoBusy ? 'animate-pulse bg-surface-1/60' : '',
-          ].join(' ')}
-        />
-        {autoError && (
-          <p data-testid="auto-describe-error" className="mt-1 text-[10px] text-red-300">
-            {autoError}
-          </p>
+        {definitionOpen ? (
+          <>
+            <button
+              type="button"
+              data-testid="entity-editor-definition-toggle"
+              aria-expanded="true"
+              onClick={() => setDefinitionOpen(false)}
+              title="Collapse the Definition to free up vertical space for the attribute grid"
+              className="mb-1 -mx-1 flex w-[calc(100%+0.5rem)] items-baseline justify-between rounded-sm px-1 py-0.5 hover:bg-white/5"
+            >
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-secondary/80">
+                <ChevronDown className="h-3 w-3" />
+                Definition
+              </span>
+              <span className="text-[10px] text-text-secondary/50">
+                Prose; use Auto-describe to draft
+              </span>
+            </button>
+            <textarea
+              ref={definitionRef}
+              data-testid="entity-editor-description"
+              value={draft.description}
+              onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+              onBlur={commitDescription}
+              rows={width === 'expanded' ? 3 : 2}
+              placeholder="What real-world thing does this entity represent? What rules apply?"
+              title="Plain-English description of what the entity represents and any business rules."
+              className={[
+                'w-full resize-y rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-1.5 text-xs leading-relaxed text-text-primary',
+                'placeholder:text-text-secondary/40',
+                'focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40',
+                autoBusy ? 'animate-pulse bg-surface-1/60' : '',
+              ].join(' ')}
+            />
+            {autoError && (
+              <p data-testid="auto-describe-error" className="mt-1 text-[10px] text-red-300">
+                {autoError}
+              </p>
+            )}
+          </>
+        ) : (
+          <button
+            type="button"
+            data-testid="entity-editor-definition-toggle"
+            aria-expanded="false"
+            onClick={expandDefinition}
+            title={
+              draft.description.trim()
+                ? 'Expand to edit the full Definition'
+                : 'Click to add a Definition'
+            }
+            className="group flex w-full items-start gap-2 rounded-md border border-white/10 bg-surface-1/30 px-2.5 py-1.5 text-left transition-colors hover:border-white/20 hover:bg-surface-1/60 focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
+          >
+            <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-text-secondary/60 transition-colors group-hover:text-text-primary" />
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-baseline justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/80">
+                  Definition
+                </span>
+                {!draft.description.trim() && (
+                  <span className="text-[10px] text-accent/70">+ Add</span>
+                )}
+              </div>
+              <div
+                className={[
+                  'truncate text-xs leading-relaxed',
+                  draft.description.trim()
+                    ? 'text-text-secondary/80'
+                    : 'italic text-text-secondary/40',
+                ].join(' ')}
+              >
+                {draft.description.trim() || 'No definition yet. Click to add one.'}
+              </div>
+            </div>
+          </button>
         )}
       </div>
 

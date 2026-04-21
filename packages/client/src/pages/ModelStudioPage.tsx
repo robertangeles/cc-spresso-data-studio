@@ -689,9 +689,9 @@ function ModelCardMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () 
         <div
           role="menu"
           className={[
-            'absolute right-0 top-7 z-20 w-40 overflow-hidden rounded-lg',
-            'bg-surface-2/95 backdrop-blur-xl border border-white/10',
-            'shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
+            'absolute right-0 top-7 z-30 w-40 overflow-hidden rounded-lg',
+            'bg-surface-2 border border-white/10',
+            'shadow-[0_8px_24px_rgba(0,0,0,0.5)]',
           ].join(' ')}
         >
           <button
