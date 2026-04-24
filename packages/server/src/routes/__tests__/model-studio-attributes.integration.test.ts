@@ -746,4 +746,105 @@ describe('Model Studio — attributes (Step 5)', () => {
     expect(body.data.events).toHaveLength(1);
     expect(body.data.events[0].action).toBe('create');
   });
+
+  // ================================================================
+  // Step 6 Direction A — altKeyGroup (BK / alt-key group) cases.
+  // ================================================================
+
+  it('S6-DA-I1: POST /attributes with altKeyGroup=AK1 → 201, normaliser forces NN + UQ', async () => {
+    // Fresh entity so we know the attribute is the first on the
+    // entity and won't collide with any suite-scoped attribute.
+    const ent = await entityService.createEntity(userId, modelId, {
+      name: 'bk_target_1',
+      layer: 'logical',
+    });
+    createdEntityIds.push(ent.id);
+
+    const res = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${ent.id}/attributes`,
+      {
+        method: 'POST',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({
+          name: 'email',
+          dataType: 'varchar',
+          length: 255,
+          isNullable: true, // <- explicitly TRUE; normaliser must coerce to false
+          isUnique: false, // <- explicitly FALSE; normaliser must coerce to true
+          altKeyGroup: 'AK1',
+        }),
+      },
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as ApiResponse<{
+      id: string;
+      altKeyGroup: string | null;
+      isNullable: boolean;
+      isUnique: boolean;
+    }>;
+    expect(body.success).toBe(true);
+    expect(body.data.altKeyGroup).toBe('AK1');
+    // BK invariant: NN + UQ coerced.
+    expect(body.data.isNullable).toBe(false);
+    expect(body.data.isUnique).toBe(true);
+  });
+
+  it('S6-DA-I2: PATCH existing attribute to set altKeyGroup=AK2 → 200', async () => {
+    const ent = await entityService.createEntity(userId, modelId, {
+      name: 'bk_target_2',
+      layer: 'logical',
+    });
+    createdEntityIds.push(ent.id);
+    const created = await attributeService.createAttribute(userId, modelId, ent.id, {
+      name: 'external_ref',
+      dataType: 'varchar',
+      length: 64,
+    });
+
+    const res = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${ent.id}/attributes/${created.id}`,
+      {
+        method: 'PATCH',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({ altKeyGroup: 'AK2' }),
+      },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ApiResponse<{
+      altKeyGroup: string | null;
+      isNullable: boolean;
+      isUnique: boolean;
+    }>;
+    expect(body.data.altKeyGroup).toBe('AK2');
+    expect(body.data.isNullable).toBe(false);
+    expect(body.data.isUnique).toBe(true);
+  });
+
+  it('S6-DA-I3: POST /attributes with altKeyGroup="bad!" → 400/422 ValidationError', async () => {
+    const ent = await entityService.createEntity(userId, modelId, {
+      name: 'bk_target_3',
+      layer: 'logical',
+    });
+    createdEntityIds.push(ent.id);
+
+    const res = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${ent.id}/attributes`,
+      {
+        method: 'POST',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({
+          name: 'bad_ak',
+          dataType: 'varchar',
+          length: 32,
+          altKeyGroup: 'bad!',
+        }),
+      },
+    );
+    // Zod raises a 400 via the app's validation middleware; the test
+    // plan rounds to 422 for consistency with REST conventions, so
+    // both are acceptable here.
+    expect([400, 422]).toContain(res.status);
+    const body = (await res.json()) as ApiResponse<unknown>;
+    expect(JSON.stringify(body.details ?? body.error ?? {})).toMatch(/altKeyGroup|AK/i);
+  });
 });

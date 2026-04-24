@@ -4,6 +4,16 @@ import { db, pool, schema } from '../db/index.js';
 import { config } from '../config/index.js';
 import { logger } from '../config/logger.js';
 import { runOnce } from '../db/migration-runner.js';
+import {
+  addCanvasStatesNotationColumn,
+  addRelationshipsVersionAndIndexes,
+} from '../db/migrations/step6-relationships.js';
+import {
+  addAttributesAltKeyGroupColumn,
+  addEntitiesDisplayIdColumn,
+  addRelationshipsInverseNameColumn,
+} from '../db/migrations/step6-direction-a.js';
+import { addEntitiesAltKeyLabelsColumn } from '../db/migrations/step6-alt-key-labels.js';
 
 // --- AI Provider: OpenRouter is the single gateway ---
 
@@ -77,6 +87,24 @@ export async function seedAIProviders(): Promise<void> {
   // so the ~100 UPDATE statements below only run on the first boot of
   // a fresh environment, not on every server restart.
   await runOnce('migrate-model-id-prefixes', migrateModelIds);
+
+  // Step 6 — Relationships + IE/IDEF1X notation schema adapters.
+  // Each ALTER is itself idempotent (`IF NOT EXISTS`), so the runOnce
+  // guard here is primarily to silence the boot-time log spam and keep
+  // the applied_migrations audit trail accurate.
+  await runOnce('add-canvas-states-notation-column', addCanvasStatesNotationColumn);
+  await runOnce('add-relationships-version-and-indexes', addRelationshipsVersionAndIndexes);
+
+  // Step 6 Direction A — BK/AK groups, inverse verb phrases, display IDs.
+  // Column ADDs are idempotent (`IF NOT EXISTS`); the display_id backfill
+  // is scoped to `WHERE display_id IS NULL` so re-runs are harmless.
+  await runOnce('add-attributes-alt-key-group', addAttributesAltKeyGroupColumn);
+  await runOnce('add-relationships-inverse-name', addRelationshipsInverseNameColumn);
+  await runOnce('add-entities-display-id', addEntitiesDisplayIdColumn);
+
+  // Step 6 Direction A follow-up — per-AK-group descriptive labels on
+  // entities. Idempotent (`ADD COLUMN IF NOT EXISTS`); no backfill.
+  await runOnce('add-entities-alt-key-labels', addEntitiesAltKeyLabelsColumn);
 }
 
 /** One-time idempotent migration: convert short model IDs to OpenRouter format */

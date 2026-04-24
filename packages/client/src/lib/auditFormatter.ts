@@ -20,6 +20,10 @@ export interface AuditEvent {
   beforeState: unknown;
   afterState: unknown;
   createdAt: string;
+  /** Optional object-type tag ('relationship' | 'attribute' | 'entity' …).
+   *  When present and set to `'relationship'`, audit phrases are routed
+   *  through the relationship formatter rather than the generic one. */
+  objectType?: string;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -44,6 +48,18 @@ const FIELD_LABELS: Record<string, string> = {
   ordinalPosition: 'Position',
   metadata: 'Metadata',
   tags: 'Tags',
+  // Relationship-scoped fields (Step 6)
+  sourceCardinality: 'Source cardinality',
+  targetCardinality: 'Target cardinality',
+  isIdentifying: 'Identifying',
+  layer: 'Layer',
+  sourceEntityId: 'Source entity',
+  targetEntityId: 'Target entity',
+  // Step 6 Direction A fields
+  altKeyGroup: 'Alt key group',
+  altKeyLabels: 'Alt key purposes',
+  inverseName: 'Inverse verb phrase',
+  displayId: 'Display id',
 };
 
 /** Fields that carry large free-form text. We summarise size rather
@@ -62,18 +78,28 @@ const MAX_VALUE_CHARS = 60;
 
 export function formatAuditEvent(event: AuditEvent): string[] {
   try {
+    // Relationship-scoped events get their own phrase set so the audit
+    // trail reads as rel-native prose ("Linked Customer to Order…")
+    // rather than generic field diffs.
+    const isRel = event.objectType === 'relationship';
     switch (event.action) {
       case 'create':
-        return formatCreate(event);
+        return isRel ? formatRelCreate(event) : formatCreate(event);
       case 'update':
-        return formatUpdate(event);
+        return isRel ? formatRelUpdate(event) : formatUpdate(event);
       case 'delete':
-        return formatDelete(event);
+        return isRel ? formatRelDelete(event) : formatDelete(event);
       case 'synthetic_generated':
         return formatSynthetic(event);
       case 'attribute_order':
       case 'reorder':
         return ['Reordered attributes.'];
+      case 'propagate':
+        return formatPropagate(event);
+      case 'unwind':
+        return formatUnwind(event);
+      case 'infer':
+        return formatInfer(event);
       default:
         return [`Action "${event.action}" occurred.`];
     }
@@ -160,11 +186,171 @@ function formatSynthetic(event: AuditEvent): string[] {
 }
 
 // ────────────────────────────────────────────────────────────────────
+// Relationship-scoped formatters (Step 6)
+//
+// Relationship audit rows carry `{ source: { name }, target: { name },
+// sourceCardinality, targetCardinality, isIdentifying, layer, name }`
+// in afterState / beforeState. We phrase each action so the audit tab
+// reads as English prose — not a boolean diff.
+// ────────────────────────────────────────────────────────────────────
+
+function formatRelCreate(event: AuditEvent): string[] {
+  const after = asObject(event.afterState);
+  if (!after) return ['Linked two entities.'];
+  const src = relEntityName(after.source);
+  const tgt = relEntityName(after.target);
+  const srcCard = relCard(after.sourceCardinality);
+  const tgtCard = relCard(after.targetCardinality);
+  const identifying = after.isIdentifying === true;
+  const identTail = identifying ? ', identifying' : '';
+  return [`Linked ${src} to ${tgt} (${srcCard}:${tgtCard}${identTail}).`];
+}
+
+function formatRelUpdate(event: AuditEvent): string[] {
+  const before = asObject(event.beforeState);
+  const after = asObject(event.afterState);
+  if (!before || !after) return ['Updated relationship.'];
+
+  const lines: string[] = [];
+
+  // Cardinalities — phrase as arrow so the audit row reads like a
+  // diagram change, not a string swap.
+  if (!deepEqual(before.sourceCardinality, after.sourceCardinality)) {
+    lines.push(
+      `Changed source cardinality from ${relCard(before.sourceCardinality)}→${relCard(after.sourceCardinality)}.`,
+    );
+  }
+  if (!deepEqual(before.targetCardinality, after.targetCardinality)) {
+    lines.push(
+      `Changed target cardinality from ${relCard(before.targetCardinality)}→${relCard(after.targetCardinality)}.`,
+    );
+  }
+
+  // Identifying — state-toggle phrasing.
+  if (!deepEqual(before.isIdentifying, after.isIdentifying)) {
+    if (after.isIdentifying === true) lines.push('Marked as identifying.');
+    else if (after.isIdentifying === false) lines.push('Unmarked as identifying.');
+  }
+
+  // Name — rename / unnamed / named.
+  if (!deepEqual(before.name ?? null, after.name ?? null)) {
+    const prev = before.name ?? null;
+    const next = after.name ?? null;
+    if (next && !prev) lines.push(`Named the relationship ${code(String(next))}.`);
+    else if (!next && prev)
+      lines.push(`Cleared the relationship name (was ${code(String(prev))}).`);
+    else if (next && prev) lines.push(`Renamed to ${code(String(next))}.`);
+  }
+
+  // Layer — schema invariant says this can't legally change without a
+  // move, but if it ever lands in an audit row we at least read well.
+  if (!deepEqual(before.layer, after.layer)) {
+    lines.push(`Moved to ${code(String(after.layer))} layer.`);
+  }
+
+  // Endpoint swap (flip direction) — handled as paired change.
+  const endpointsSwapped =
+    !deepEqual(before.sourceEntityId, after.sourceEntityId) &&
+    !deepEqual(before.targetEntityId, after.targetEntityId);
+  if (endpointsSwapped) {
+    lines.push('Flipped relationship direction.');
+  }
+
+  return lines.length > 0 ? lines : ['Updated relationship. (No visible field differences.)'];
+}
+
+function formatRelDelete(event: AuditEvent): string[] {
+  const before = asObject(event.beforeState);
+  if (!before) return ['Removed a relationship.'];
+  const src = relEntityName(before.source);
+  const tgt = relEntityName(before.target);
+  return [`Removed relationship ${src}→${tgt}.`];
+}
+
+function formatPropagate(event: AuditEvent): string[] {
+  const after = asObject(event.afterState);
+  if (!after) return ['Propagated primary-key attributes.'];
+  const names = Array.isArray(after.propagatedAttributeNames)
+    ? (after.propagatedAttributeNames as unknown[]).filter(
+        (n): n is string => typeof n === 'string',
+      )
+    : [];
+  const count = num(after.propagatedCount) || names.length;
+  if (count === 0) return ['Propagated primary-key attributes.'];
+  const label = names.length > 0 ? `: ${names.join(', ')}` : '';
+  return [`Propagated ${count} composite PK attribute${count === 1 ? '' : 's'}${label}.`];
+}
+
+function formatUnwind(event: AuditEvent): string[] {
+  const before = asObject(event.beforeState);
+  const after = asObject(event.afterState);
+  const ref = after ?? before;
+  if (!ref) return ['Removed propagated PK attributes.'];
+  const count =
+    num(ref.unwoundCount) ||
+    (Array.isArray(ref.unwoundAttributeNames)
+      ? (ref.unwoundAttributeNames as unknown[]).length
+      : 0);
+  if (count === 0) return ['Removed propagated PK attributes.'];
+  return [`Removed ${count} propagated PK attribute${count === 1 ? '' : 's'}.`];
+}
+
+function formatInfer(event: AuditEvent): string[] {
+  const after = asObject(event.afterState);
+  const count = after ? num(after.proposalCount) : 0;
+  return [`Generated ${count} relationship proposal${count === 1 ? '' : 's'} from FK graph.`];
+}
+
+/** Extract a displayable entity name from `{ name }` blob in audit
+ *  state. Falls back to `?` so no formatter ever produces "undefined". */
+function relEntityName(raw: unknown): string {
+  if (isRecord(raw) && typeof raw.name === 'string' && raw.name.length > 0) return raw.name;
+  return '?';
+}
+
+/** Turn a canonical cardinality enum into a compact glyph that reads
+ *  as ER-diagram notation inline. Unknown values fall through as-is. */
+function relCard(raw: unknown): string {
+  if (typeof raw !== 'string') return '?';
+  switch (raw) {
+    case 'one':
+      return 'one';
+    case 'many':
+      return 'many';
+    case 'zero_or_one':
+      return 'zero-or-one';
+    case 'zero_or_many':
+      return 'zero-or-many';
+    case 'one_or_many':
+      return 'one-or-many';
+    default:
+      return raw;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Per-field formatter
 // ────────────────────────────────────────────────────────────────────
 
 function describeFieldChange(field: string, prev: unknown, next: unknown): string {
   const label = FIELD_LABELS[field] ?? humaniseKey(field);
+
+  // Step 6 Direction A — BK / inverse-verb / display-id phrases.
+  // Rendered as first-class English rather than generic field diffs so
+  // the audit trail reads as "Flagged x as AK1" (not "Alt key group
+  // changed from null to AK1").
+  if (field === 'altKeyGroup') {
+    return describeAltKeyGroupChange(prev, next);
+  }
+  if (field === 'inverseName') {
+    return describeInverseNameChange(prev, next);
+  }
+  if (field === 'displayId') {
+    return describeDisplayIdChange(prev, next);
+  }
+  if (field === 'altKeyLabels') {
+    return describeAltKeyLabelsChange(prev, next);
+  }
 
   // Booleans — phrase as state toggles when it reads naturally.
   if (typeof prev === 'boolean' || typeof next === 'boolean') {
@@ -192,6 +378,69 @@ function describeFieldChange(field: string, prev: unknown, next: unknown): strin
   if (prev == null && next != null) return `${label} set to ${nextRendered}.`;
   if (prev != null && next == null) return `${label} cleared (was ${prevRendered}).`;
   return `${label} changed from ${prevRendered} to ${nextRendered}.`;
+}
+
+/** Step 6 Direction A — BK alt-key-group transitions. Four legal shapes:
+ *   null      → AKn    "Flagged <attr> as AKn" (but attr name lives on
+ *                      the row header, not in this phrase — the audit
+ *                      tab prefixes every phrase with the object name).
+ *   AKn       → null   "Cleared alt key group"
+ *   AK1       → AK2    "Moved from AK1 to AK2"
+ *   anything else falls through to a generic phrase. */
+function describeAltKeyGroupChange(prev: unknown, next: unknown): string {
+  const p = typeof prev === 'string' && prev.length > 0 ? prev : null;
+  const n = typeof next === 'string' && next.length > 0 ? next : null;
+  if (p == null && n != null) return `Flagged as ${code(n)}.`;
+  if (p != null && n == null) return 'Cleared alt key group.';
+  if (p != null && n != null) return `Moved from ${code(p)} to ${code(n)}.`;
+  return 'Alt key group unchanged.';
+}
+
+/** Step 6 Direction A — optional per-AK-group purpose labels stored
+ *  on the ENTITY (`alt_key_labels` JSONB). Diff shapes:
+ *   {}           → {AK1:"X"}      "Set AK1 purpose: X"
+ *   {AK1:"X"}    → {}              "Cleared AK1 purpose"
+ *   {AK1:"old"}  → {AK1:"new"}     "Changed AK1 purpose from `old` to `new`"
+ *   multi-key changes → "N alt key purposes updated" (no enumeration
+ *   to keep audit lines scannable). */
+function describeAltKeyLabelsChange(prev: unknown, next: unknown): string {
+  const p = isRecord(prev) ? (prev as Record<string, unknown>) : {};
+  const n = isRecord(next) ? (next as Record<string, unknown>) : {};
+  const keys = new Set([...Object.keys(p), ...Object.keys(n)]);
+  const diffs: Array<{ key: string; from: string | null; to: string | null }> = [];
+  for (const key of keys) {
+    const from = typeof p[key] === 'string' ? (p[key] as string) : null;
+    const to = typeof n[key] === 'string' ? (n[key] as string) : null;
+    if (from !== to) diffs.push({ key, from, to });
+  }
+  if (diffs.length === 0) return 'Alt key purposes unchanged.';
+  if (diffs.length > 1) return `${diffs.length} alt key purposes updated.`;
+  const { key, from, to } = diffs[0];
+  if (from == null && to != null) return `Set ${code(key)} purpose: ${code(to)}.`;
+  if (from != null && to == null) return `Cleared ${code(key)} purpose.`;
+  return `Changed ${code(key)} purpose from ${code(from ?? '')} to ${code(to ?? '')}.`;
+}
+
+/** Step 6 Direction A — inverse verb phrase (target → source label). */
+function describeInverseNameChange(prev: unknown, next: unknown): string {
+  const p = typeof prev === 'string' && prev.length > 0 ? prev : null;
+  const n = typeof next === 'string' && next.length > 0 ? next : null;
+  if (p == null && n != null) return `Set inverse verb phrase to ${code(n)}.`;
+  if (p != null && n == null) return `Cleared inverse verb phrase (was ${code(p)}).`;
+  if (p != null && n != null) return `Renamed inverse verb phrase to ${code(n)}.`;
+  return 'Inverse verb phrase unchanged.';
+}
+
+/** Step 6 Direction A — server-assigned display id (`E001`, `E002`, …).
+ *  Display ids are monotonic + immutable once assigned, so in practice
+ *  only the `null → En` transition fires in production. */
+function describeDisplayIdChange(prev: unknown, next: unknown): string {
+  const p = typeof prev === 'string' && prev.length > 0 ? prev : null;
+  const n = typeof next === 'string' && next.length > 0 ? next : null;
+  if (p == null && n != null) return `Assigned display id ${code(n)}.`;
+  if (p != null && n == null) return `Cleared display id (was ${code(p)}).`;
+  if (p != null && n != null) return `Reassigned display id from ${code(p)} to ${code(n)}.`;
+  return 'Display id unchanged.';
 }
 
 function describeBooleanChange(field: string, label: string, prev: unknown, next: unknown): string {

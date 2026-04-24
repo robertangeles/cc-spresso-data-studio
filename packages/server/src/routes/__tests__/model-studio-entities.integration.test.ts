@@ -352,6 +352,84 @@ describe('Model Studio — entities (Step 4)', () => {
     expect(body.success).toBe(true);
     expect(body.data.entities.length).toBeGreaterThan(0);
   });
+
+  // ----------------------------------------------------------
+  // Step 6 Direction A — display_id assignment on create.
+  // ----------------------------------------------------------
+  it('S6-DA-I5: three entities in a fresh model get displayIds E001, E002, E003', async () => {
+    // Spin up a *second* model dedicated to this case so the display_id
+    // sequence is guaranteed to start at 1 regardless of what the
+    // rest of the suite has created on `modelId`.
+    const modelRes = await fetch(`${BASE_URL}/api/model-studio/models`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        name: `Step6-DA-I5 ${Date.now()}`,
+        projectId,
+        activeLayer: 'logical',
+      }),
+    });
+    expect(modelRes.status).toBe(201);
+    const modelBody = (await modelRes.json()) as ApiResponse<{ id: string }>;
+    const freshModelId = modelBody.data.id;
+
+    const displayIds: string[] = [];
+    try {
+      for (const name of ['alpha', 'bravo', 'charlie']) {
+        const res = await fetch(`${BASE_URL}/api/model-studio/models/${freshModelId}/entities`, {
+          method: 'POST',
+          headers: authHeader(accessToken),
+          body: JSON.stringify({ name, layer: 'logical' }),
+        });
+        expect(res.status).toBe(201);
+        const body = (await res.json()) as ApiResponse<{ id: string; displayId: string }>;
+        expect(body.data.displayId).toMatch(/^E\d+$/);
+        displayIds.push(body.data.displayId);
+      }
+      expect(displayIds).toEqual(['E001', 'E002', 'E003']);
+    } finally {
+      // Cascade-delete the fresh model so no orphan state lingers.
+      await fetch(`${BASE_URL}/api/model-studio/models/${freshModelId}`, {
+        method: 'DELETE',
+        headers: authHeader(accessToken),
+      }).catch(() => {});
+    }
+  });
+
+  // ----------------------------------------------------------
+  // Step 6 Direction A follow-up — per-AK-group descriptive label
+  // round-trip. PATCH entity with `altKeyLabels` → 200 with labels
+  // echoed back, proving both the write path + the select shape.
+  // ----------------------------------------------------------
+  it('S6-DA-I6: PATCH entity with altKeyLabels echoes the labels in the response', async () => {
+    // Create a fresh entity in the suite's shared model so the assertion
+    // owns its write and doesn't collide with earlier cases. We register
+    // it in `createdEntityIds` so `afterAll` cascades it away.
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/entities`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({ name: `ak_labels_${Date.now()}`, layer: 'logical' }),
+    });
+    expect(createRes.status).toBe(201);
+    const createBody = (await createRes.json()) as ApiResponse<{ id: string }>;
+    const entityId = createBody.data.id;
+    createdEntityIds.push(entityId);
+
+    const patchRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${entityId}`,
+      {
+        method: 'PATCH',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({ altKeyLabels: { AK1: 'NI number' } }),
+      },
+    );
+    expect(patchRes.status).toBe(200);
+    const patchBody = (await patchRes.json()) as ApiResponse<{
+      altKeyLabels: Record<string, string>;
+    }>;
+    expect(patchBody.success).toBe(true);
+    expect(patchBody.data.altKeyLabels).toEqual({ AK1: 'NI number' });
+  });
 });
 
 // Sanity: keep the user table reference visible so a future agent who

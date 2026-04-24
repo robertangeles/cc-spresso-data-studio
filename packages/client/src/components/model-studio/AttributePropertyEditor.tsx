@@ -148,6 +148,13 @@ export interface AttributePropertyEditorProps {
   attribute: AttributeSummary | null;
   onUpdate: (attrId: string, patch: AttributeUpdate) => Promise<AttributeSummary>;
   loadHistory: (entityId: string, attrId: string) => Promise<AttributeHistoryEvent[]>;
+  /** Labels keyed by AK group. Stored on the ENTITY; shared across
+   *  every column in the same group. Threaded from the canvas so the
+   *  General tab's Purpose input can read the current label. */
+  entityAltKeyLabels?: Record<string, string> | null;
+  /** PATCH the entity's altKeyLabels map. Threaded from the canvas.
+   *  When absent, the Purpose input renders disabled. */
+  onUpdateEntityAltKeyLabels?: (labels: Record<string, string>) => Promise<void> | void;
 }
 
 export function AttributePropertyEditor({
@@ -155,6 +162,8 @@ export function AttributePropertyEditor({
   attribute,
   onUpdate,
   loadHistory,
+  entityAltKeyLabels,
+  onUpdateEntityAltKeyLabels,
 }: AttributePropertyEditorProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
 
@@ -196,6 +205,8 @@ export function AttributePropertyEditor({
           attribute={attribute}
           onUpdate={(patch) => onUpdate(attribute.id, patch)}
           loadHistory={loadHistory}
+          entityAltKeyLabels={entityAltKeyLabels}
+          onUpdateEntityAltKeyLabels={onUpdateEntityAltKeyLabels}
         />
       </div>
     </div>
@@ -312,16 +323,27 @@ function ActiveTabContent({
   attribute,
   onUpdate,
   loadHistory,
+  entityAltKeyLabels,
+  onUpdateEntityAltKeyLabels,
 }: {
   activeTab: TabId;
   entityId: string;
   attribute: AttributeSummary;
   onUpdate: (patch: AttributeUpdate) => Promise<AttributeSummary>;
   loadHistory: (entityId: string, attrId: string) => Promise<AttributeHistoryEvent[]>;
+  entityAltKeyLabels?: Record<string, string> | null;
+  onUpdateEntityAltKeyLabels?: (labels: Record<string, string>) => Promise<void> | void;
 }) {
   switch (activeTab) {
     case 'general':
-      return <GeneralTab attribute={attribute} onUpdate={onUpdate} />;
+      return (
+        <GeneralTab
+          attribute={attribute}
+          onUpdate={onUpdate}
+          entityAltKeyLabels={entityAltKeyLabels}
+          onUpdateEntityAltKeyLabels={onUpdateEntityAltKeyLabels}
+        />
+      );
     case 'audit':
       return (
         <HistoryTab entityId={entityId} attributeId={attribute.id} loadHistory={loadHistory} />

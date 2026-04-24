@@ -98,7 +98,6 @@ export function ModelStudioDetailPage() {
 
         <div className="flex items-center gap-2 ml-auto shrink-0">
           <InertSelect label={capitalize(model.activeLayer)} />
-          <InertSelect label={model.notation === 'ie' ? 'IE notation' : 'IDEF1X'} />
         </div>
       </header>
 

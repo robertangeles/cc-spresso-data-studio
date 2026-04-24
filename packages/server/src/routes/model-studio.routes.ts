@@ -1,4 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import {
   modelCreateSchema,
@@ -12,6 +13,7 @@ import {
   entityIdParamsSchema,
   entityListQuerySchema,
   entityDeleteQuerySchema,
+  entityImpactParamsSchema,
   attributeCreateSchema,
   attributeUpdateSchema,
   attributeIdParamsSchema,
@@ -19,6 +21,10 @@ import {
   attributeDeleteQuerySchema,
   attributeBatchQuerySchema,
   syntheticDataRequestSchema,
+  createRelationshipSchema,
+  updateRelationshipSchema,
+  relationshipIdParamsSchema,
+  relationshipKeyColumnsSetSchema,
 } from '@cc/shared';
 import { authenticate, requireRole } from '../middleware/auth.middleware.js';
 import { validate, validateParams, validateQuery } from '../middleware/validate.middleware.js';
@@ -29,6 +35,7 @@ import * as modelController from '../controllers/model-studio-model.controller.j
 import * as canvasController from '../controllers/model-studio-canvas.controller.js';
 import * as entityController from '../controllers/model-studio-entity.controller.js';
 import * as attributeController from '../controllers/model-studio-attribute.controller.js';
+import * as relationshipController from '../controllers/model-studio-relationship.controller.js';
 
 /**
  * Model Studio — Step 1 routes.
@@ -220,6 +227,135 @@ router.get(
   '/models/:id/entities/:entityId/attributes/:attributeId/history',
   validateParams(attributeIdParamsSchema),
   attributeController.history,
+);
+
+// ============================================================
+// Relationships — Step 6
+//
+// Gated by the `MODEL_STUDIO_RELATIONSHIPS_ENABLED` env flag. When OFF,
+// every rel route 404s — per alignment-step6.md §4 we must NOT leak
+// "feature exists but disabled" vs "no such route" to unauthenticated
+// probes. The gate runs inside each route handler block so the rest of
+// Model Studio keeps working while Step 6 is toggled.
+//
+// Authorisation:
+//   - read-level (`list`, `getOne`, `entityImpact`) — reader+ role via
+//     `assertCanAccessModel` (any org member counts as reader).
+//   - write-level (`create`, `update`, `remove`, `infer`) — editor+ role
+//     via the same assertion (current codebase does not differentiate
+//     reader vs editor, per `model-studio-authz.service.ts` doc comment).
+//     Step-7 will tighten to roleId once roles are wired.
+//   - admin-level diagnostics — `requireRole('Administrator')`.
+// ============================================================
+
+function relationshipsEnabledGate(_req: Request, _res: Response, next: NextFunction) {
+  // Feature flag pattern: env-driven boolean. Lives in env so toggling
+  // doesn't require a DB write — parallels `MODEL_STUDIO_DEFAULT_MODEL`.
+  if (process.env.MODEL_STUDIO_RELATIONSHIPS_ENABLED !== 'true') {
+    return next(new NotFoundError('Resource'));
+  }
+  next();
+}
+
+/**
+ * Rate limiter for `POST /:modelId/relationships/infer`.
+ * 10 requests per minute per user per alignment-step6.md §7 security rule.
+ * Falls back to IP if the authenticated user id is somehow missing.
+ */
+const inferLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.userId ?? req.ip ?? 'anon',
+  message: {
+    success: false,
+    error: 'Too many inference requests. Please slow down.',
+    statusCode: 429,
+  },
+});
+
+router.get(
+  '/models/:id/relationships',
+  relationshipsEnabledGate,
+  validateParams(modelIdParamsSchema),
+  relationshipController.list,
+);
+router.post(
+  '/models/:id/relationships',
+  relationshipsEnabledGate,
+  validateParams(modelIdParamsSchema),
+  validate(createRelationshipSchema),
+  relationshipController.create,
+);
+router.post(
+  '/models/:id/relationships/infer',
+  relationshipsEnabledGate,
+  inferLimiter,
+  validateParams(modelIdParamsSchema),
+  relationshipController.infer,
+);
+router.get(
+  '/models/:id/relationships/:relId',
+  relationshipsEnabledGate,
+  validateParams(relationshipIdParamsSchema),
+  relationshipController.getOne,
+);
+router.patch(
+  '/models/:id/relationships/:relId',
+  relationshipsEnabledGate,
+  validateParams(relationshipIdParamsSchema),
+  validate(updateRelationshipSchema),
+  relationshipController.update,
+);
+router.delete(
+  '/models/:id/relationships/:relId',
+  relationshipsEnabledGate,
+  validateParams(relationshipIdParamsSchema),
+  relationshipController.remove,
+);
+
+// Cascade-delete preview for an entity — lists the rels that would be
+// removed if the entity were deleted.
+router.get(
+  '/models/:id/entities/:entityId/impact',
+  relationshipsEnabledGate,
+  validateParams(entityImpactParamsSchema),
+  relationshipController.entityImpact,
+);
+
+// Key Columns — Erwin-parity FK pairing panel (Step 6 follow-up).
+// GET returns current pairs + backfill signal; POST reconciles the
+// pairs atomically (creates / deletes / tags target attrs).
+router.get(
+  '/models/:id/relationships/:relId/key-columns',
+  relationshipsEnabledGate,
+  validateParams(relationshipIdParamsSchema),
+  relationshipController.getKeyColumns,
+);
+router.post(
+  '/models/:id/relationships/:relId/key-columns',
+  relationshipsEnabledGate,
+  validateParams(relationshipIdParamsSchema),
+  validate(relationshipKeyColumnsSetSchema),
+  relationshipController.setKeyColumns,
+);
+
+// Admin-only diagnostics. `requireRole('Administrator')` gates BEFORE
+// validation so unauthorised callers cannot enumerate routes.
+router.get(
+  '/admin/model-studio/models/:id/relationships/diagnostics',
+  relationshipsEnabledGate,
+  requireRole('Administrator'),
+  validateParams(modelIdParamsSchema),
+  relationshipController.diagnostics,
+);
+router.get(
+  '/admin/model-studio/models/:id/relationships/explain',
+  relationshipsEnabledGate,
+  requireRole('Administrator'),
+  validateParams(modelIdParamsSchema),
+  relationshipController.explainMermaid,
 );
 
 export { router as modelStudioRoutes };

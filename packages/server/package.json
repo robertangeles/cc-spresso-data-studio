@@ -13,7 +13,8 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:bootstrap": "tsx src/db/ensure-extensions.ts",
-    "db:seed-e2e": "tsx src/db/seed-e2e-user.ts"
+    "db:seed-e2e": "tsx src/db/seed-e2e-user.ts",
+    "db:seed-step6-showcase": "tsx src/scripts/seed-step6-showcase.ts"
   },
   "dependencies": {
     "@cc/shared": "workspace:*",

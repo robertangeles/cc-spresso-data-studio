@@ -293,6 +293,70 @@
 | S6-E3 | Draw rel to empty canvas → cancels                           | Drag+release   | No-op                       | P1  |
 | S6-E4 | Draw duplicate rel → opens existing rel's panel              | Second attempt | Existing panel              | P2  |
 
+### EXPANSION cases (CEO-review locked, 2026-04-20) — additional coverage
+
+#### Shared unit (EXPANSION)
+
+| ID     | Test                                                                       | Input                            | Expected                       | Priority |
+| ------ | -------------------------------------------------------------------------- | -------------------------------- | ------------------------------ | -------- |
+| S6-U8  | `normalizeRelationship` trims name, rejects non-enum cardinality           | `{ name: '  x  ', sCard: 'bad'}` | ValidationError / trimmed name | P1       |
+| S6-U9  | `inferCardinalityFromFlags`: FK+UQ+NN → `one`; FK nullable → `zero_or_one` | attribute flags                  | enum per rule                  | P1       |
+| S6-U10 | `lintRelationshipName` → `'CustomerOrders'` emits camelCase warning        | `'CustomerOrders'`               | `{level:'warn'}`               | P1       |
+| S6-U11 | `lintRelationshipName` on null/empty → silent                              | `null` / `''`                    | `[]`                           | P2       |
+| S6-U18 | IE SVG snapshot — 10 variants (5 cardinalities × 2 identifying)            | rendered markup                  | matches snapshot               | P1       |
+| S6-U19 | IDEF1X SVG snapshot — 10 variants                                          | rendered markup                  | matches snapshot               | P1       |
+
+#### Server unit (EXPANSION)
+
+| ID     | Test                                                                                 | Input                 | Expected                    | Priority |
+| ------ | ------------------------------------------------------------------------------------ | --------------------- | --------------------------- | -------- |
+| S6-U12 | `propagateIdentifyingPKs`: 0 PKs on source → `InvariantError`                        | empty source PK list  | throws before TX            | P1       |
+| S6-U13 | `propagateIdentifyingPKs`: target attr name collision → throws, TX rolls back        | name clash            | rel not created, no orphans | P1       |
+| S6-U14 | `propagateIdentifyingPKs`: composite PKs propagate with correct order + types        | 2-col PK source       | 2 rows inserted, ordered    | P1       |
+| S6-U15 | `unwindIdentifyingPKs`: removes only propagated attrs, preserves user-added          | mixed attrs on target | only propagated removed     | P1       |
+| S6-U16 | `detectCycleIdentifying`: A→B→C→A rejects; A→B→C passes                              | graph                 | `CyclicIdentifyingError`    | P1       |
+| S6-U17 | `inferRelationshipsFromFkGraph`: 10 FK attrs → 10 proposals; dangling target skipped | FK graph              | 10 proposals + 1 warning    | P1       |
+
+#### Server integration (EXPANSION)
+
+| ID     | Route                                      | Case                                  | Expected                     | Priority |
+| ------ | ------------------------------------------ | ------------------------------------- | ---------------------------- | -------- |
+| S6-I3  | `PATCH /rels/:id`                          | Stale version                         | 409 `VERSION_CONFLICT`       | P1       |
+| S6-I4  | `PATCH /rels/:id` isIdentifying false→true | Composite PKs propagated + audit rows | 200 + DB verified            | P1       |
+| S6-I5  | `DELETE /rels/:id` (was identifying)       | Propagated PKs unwound + audit rows   | 200 + DB verified            | P1       |
+| S6-I6  | `POST /rels` cross-model forged body       | src.modelId ≠ tgt.modelId             | 422                          | P1       |
+| S6-I7  | `POST /rels` self-ref                      | source===target                       | 201 (3A)                     | P1       |
+| S6-I8  | `GET /rels` IDOR attempt                   | Other org's modelId                   | 403                          | P1       |
+| S6-I9  | `POST /infer` on zero-FK model             | No FK attrs                           | 200 + `{ proposals: [] }`    | P1       |
+| S6-I10 | `POST /infer` on >2000-attr model          | Large model                           | 202 + `{ jobId }` (5A)       | P1       |
+| S6-I11 | `POST /rels` metadata > 4 KB               | Oversized JSONB                       | 422                          | P2       |
+| S6-I12 | Changelog write failure (forced)           | Mocked DB error mid-TX                | Whole TX rolls back          | P1       |
+| S6-I13 | `GET /admin/.../diagnostics`               | Orphan propagated attr seeded         | lists orphan                 | P1       |
+| S6-I14 | `GET /admin/.../explain` (Mermaid)         | 5-entity model                        | returns Mermaid ER text      | P2       |
+| S6-I15 | `PUT /canvas-state` with `notation=ie`     | Patch #4 — schema accepts notation    | 200 (no "Validation failed") | P1       |
+
+#### Client unit (EXPANSION)
+
+| ID     | Test                                                                       | Expected                    | Priority |
+| ------ | -------------------------------------------------------------------------- | --------------------------- | -------- |
+| S6-U20 | Self-ref arc geometry (source===target)                                    | arc path generated          | P1       |
+| S6-U21 | `useNotation` BroadcastChannel sync across simulated tabs                  | tab B receives tab A's flip | P1       |
+| S6-U22 | `auditFormatter` renders rel create/update/delete/propagate/unwind phrases | 5 humanised strings         | P1       |
+| S6-U23 | `CascadeDeleteDialog` shows correct rel count + list                       | N rels rendered             | P1       |
+| S6-U24 | `useRelationships` optimistic create rolls back on server error            | zombie edge removed + toast | P1       |
+| S6-U25 | `InferRelationshipsPanel` accept-one / accept-all / reject flows           | correct mutations fired     | P1       |
+
+#### E2E (EXPANSION)
+
+| ID     | Flow                                                                       | Expected                    | Priority |
+| ------ | -------------------------------------------------------------------------- | --------------------------- | -------- |
+| S6-E5  | Drag in IE → flip IDEF1X → flip IE → original render restored              | roundtrip identical         | P1       |
+| S6-E6  | Delete entity with 3 rels → CascadeDeleteDialog → confirm → rels gone      | dialog + cascade            | P1       |
+| S6-E7  | Toggle isIdentifying true→false → confirm modal → propagated attrs removed | unwind verified             | P1       |
+| S6-E8  | Infer button → panel → accept 3 proposals → 3 rels created                 | bulk accept                 | P1       |
+| S6-E9  | Two-tab BroadcastChannel notation sync (7B)                                | tab B flips when tab A does | P1       |
+| S6-E10 | `⌘R` keyboard-draw flow (select source → ⌘R → select target → ↵)           | rel created via keyboard    | P2       |
+
 ---
 
 ## STEP 7 — Layer switching + D3 crossfade + layer_links

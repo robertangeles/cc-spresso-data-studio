@@ -12,32 +12,51 @@ import type { AttributeSummary } from '../../../hooks/useAttributes';
 export interface GeneralTabProps {
   attribute: AttributeSummary;
   onUpdate: (patch: AttributeUpdate) => Promise<AttributeSummary>;
+  /** Labels keyed by AK group name (e.g. `{AK1: "NI number"}`). Shared
+   *  across all columns in the same group — stored on the ENTITY, not
+   *  the attribute. Undefined when the panel hasn't threaded the
+   *  entity context. */
+  entityAltKeyLabels?: Record<string, string> | null;
+  /** PATCH the entity's altKeyLabels map. Called by the Purpose input
+   *  on blur. Undefined when the panel hasn't threaded the entity
+   *  context — in that case the Purpose input is disabled. */
+  onUpdateEntityAltKeyLabels?: (labels: Record<string, string>) => Promise<void> | void;
 }
 
-export function GeneralTab({ attribute, onUpdate }: GeneralTabProps) {
+export function GeneralTab({
+  attribute,
+  onUpdate,
+  entityAltKeyLabels,
+  onUpdateEntityAltKeyLabels,
+}: GeneralTabProps) {
   // Name + Data Type + PK/FK/NN/UQ/Classification live in the grid
   // above (inline-editable). General hosts the rest — and, per Rob's
   // direction, the short Definition lives here too (grid column is
   // a read-only preview). The richer Markdown editor ships on the
   // Documentation tab when Step 11 polish lands.
+  const currentAkGroup = attribute.altKeyGroup ?? null;
+  const currentAkLabel = (currentAkGroup ? entityAltKeyLabels?.[currentAkGroup] : '') ?? '';
+
   const [draft, setDraft] = useState({
     businessName: attribute.businessName ?? '',
     defaultValue: attribute.defaultValue ?? '',
     description: attribute.description ?? '',
+    akLabel: currentAkLabel,
   });
 
-  // Reset draft whenever the selected attribute changes — prevents
-  // half-typed text from one row bleeding into another. Keyed on
-  // attribute.id ONLY; syncing on the individual fields would wipe
-  // the user's in-progress typing every server round-trip.
+  // Reset draft whenever the selected attribute OR its AK group
+  // changes. Keyed on attribute.id + group so the Purpose input
+  // reflects the right group's label without wiping in-progress
+  // typing on the other fields mid-edit.
   useEffect(() => {
     setDraft({
       businessName: attribute.businessName ?? '',
       defaultValue: attribute.defaultValue ?? '',
       description: attribute.description ?? '',
+      akLabel: (attribute.altKeyGroup ? entityAltKeyLabels?.[attribute.altKeyGroup] : '') ?? '',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attribute.id]);
+  }, [attribute.id, attribute.altKeyGroup, entityAltKeyLabels]);
 
   async function commit<K extends keyof typeof draft>(field: K, raw: string) {
     const trimmed = raw.trim();
@@ -79,6 +98,77 @@ export function GeneralTab({ attribute, onUpdate }: GeneralTabProps) {
           rows={4}
           placeholder="What does this attribute represent? What business rules apply?"
           className="w-full resize-y rounded-md border border-white/10 bg-surface-1/50 px-3 py-2 text-xs leading-relaxed text-text-primary placeholder:text-text-secondary/40 focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
+        />
+      </div>
+
+      <div className="sm:col-span-2">
+        <FieldLabel label="Alt Key Group" hint="Composite business key — NN + UQ auto-enforced." />
+        <select
+          data-testid="attribute-general-ak-picker"
+          value={attribute.altKeyGroup ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value;
+            const next = raw === '' ? null : raw;
+            if ((next ?? null) === (attribute.altKeyGroup ?? null)) return;
+            void onUpdate({ altKeyGroup: next });
+          }}
+          style={{ colorScheme: 'dark' }}
+          className="w-full rounded-md border border-white/10 bg-surface-1/50 px-2.5 py-1.5 font-mono text-xs text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
+        >
+          <option value="" className="bg-surface-2 text-text-primary">
+            None
+          </option>
+          <option value="AK1" className="bg-surface-2 text-text-primary">
+            AK1
+          </option>
+          <option value="AK2" className="bg-surface-2 text-text-primary">
+            AK2
+          </option>
+          <option value="AK3" className="bg-surface-2 text-text-primary">
+            AK3
+          </option>
+        </select>
+        <p className="mt-1 text-[10px] text-text-secondary/60">
+          Columns sharing an alt key group form one composite business key. NN + UQ are
+          auto-enforced.
+        </p>
+      </div>
+
+      {/* Optional purpose label, stored on the ENTITY keyed by AK group
+          so every column in the same group reads the same label. Shows
+          as a tooltip on the AK badge + becomes the DDL constraint
+          name in Step 9 export. Disabled until an AK group is picked
+          OR the panel isn't threaded with the entity writer. */}
+      <div className="sm:col-span-2">
+        <FieldLabel
+          label="Purpose (optional)"
+          hint="Describes what this alt key enforces. Shows in tooltip + DDL constraint name."
+        />
+        <input
+          data-testid="attribute-general-ak-label"
+          value={draft.akLabel}
+          disabled={!currentAkGroup || !onUpdateEntityAltKeyLabels}
+          onChange={(e) => setDraft((d) => ({ ...d, akLabel: e.target.value }))}
+          onBlur={async () => {
+            if (!currentAkGroup || !onUpdateEntityAltKeyLabels) return;
+            const trimmed = draft.akLabel.trim();
+            const existing = entityAltKeyLabels?.[currentAkGroup] ?? '';
+            if (trimmed === existing) return;
+            const next: Record<string, string> = { ...(entityAltKeyLabels ?? {}) };
+            if (trimmed) next[currentAkGroup] = trimmed;
+            else delete next[currentAkGroup];
+            await onUpdateEntityAltKeyLabels(next);
+          }}
+          placeholder={
+            currentAkGroup ? `e.g. "NI number — UK tax identifier"` : 'Pick an alt key group first'
+          }
+          title={!currentAkGroup ? 'Pick an alt key group first' : undefined}
+          className={[
+            'w-full rounded-md border border-white/10 bg-surface-1/50 px-2.5 py-1.5 text-xs text-text-primary',
+            'placeholder:text-text-secondary/40',
+            'focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+          ].join(' ')}
         />
       </div>
 

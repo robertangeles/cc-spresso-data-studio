@@ -22,14 +22,23 @@ export async function getState(req: Request, res: Response, next: NextFunction) 
 export async function putState(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = requireUserId(req);
-    const { layer, nodePositions, viewport } = req.body as {
+    const { layer, nodePositions, viewport, notation } = req.body as {
       layer: Layer;
       nodePositions: Record<string, { x: number; y: number }>;
       viewport: { x: number; y: number; zoom: number };
+      // Optional per the shared `canvasStatePutSchema` — when the
+      // client (e.g. useCanvasState drag-end save) omits it, the
+      // service preserves the stored value. The hook (useNotation)
+      // sends it explicitly on notation flip.
+      notation?: 'ie' | 'idef1x';
     };
     const state = await canvasService.upsertCanvasState(userId, req.params.id, layer, {
       nodePositions,
       viewport,
+      // Pass through as-is so `useCanvasState.save` (drag-end, omits
+      // notation) leaves the stored preference alone, while
+      // `useNotation.set` (flip toggle, sends notation) writes it.
+      notation,
     });
     res.json({ success: true, data: state });
   } catch (err) {

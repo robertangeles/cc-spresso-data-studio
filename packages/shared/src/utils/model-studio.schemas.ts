@@ -158,6 +158,12 @@ export type CanvasStateQuery = z.infer<typeof canvasStateQuerySchema>;
 export const canvasStatePutSchema = z
   .object({
     layer: LAYER,
+    // Optional because only the notation-flip path sends it; the
+    // drag/pan/zoom path writes positions+viewport with no notation
+    // change. Keeping the field optional preserves that contract while
+    // letting `useNotation` PUT the flipped value through the same
+    // endpoint instead of inventing a parallel route.
+    notation: NOTATION.optional(),
     nodePositions: nodePositionsSchema,
     viewport: viewportSchema,
   })
@@ -218,6 +224,17 @@ export const entityCreateSchema = z
   });
 export type EntityCreate = z.infer<typeof entityCreateSchema>;
 
+/** Step 6 Direction A follow-up — optional one-line descriptive "purpose"
+ *  label per alt-key group. Keyed by AK group name (`AK1`, `AK2`, …) and
+ *  mapped to a short string (capped at 200 chars, enforced here and in
+ *  the DB-level JSONB constraint). The badge rendered on the entity
+ *  card stays `AK1` — this label is surfaced via tooltip on the badge
+ *  and becomes the DDL constraint name when exported. Empty string
+ *  values are rejected via `.min(1)` so "set to empty" is represented
+ *  by removing the key from the map, not by an empty string. */
+export const altKeyLabelsSchema = z.record(z.string().min(1).max(200));
+export type AltKeyLabels = z.infer<typeof altKeyLabelsSchema>;
+
 export const entityUpdateSchema = z
   .object({
     name: entityNameSchema.optional(),
@@ -227,12 +244,45 @@ export const entityUpdateSchema = z
     entityType: ENTITY_TYPE.optional(),
     metadata: metadataSchema.optional(),
     tags: tagsSchema.optional(),
+    altKeyLabels: altKeyLabelsSchema.optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, {
     message: 'At least one field must be provided',
   });
 export type EntityUpdate = z.infer<typeof entityUpdateSchema>;
+
+/** Step 6 Direction A — canonical entity output shape the API returns.
+ *  `displayId` is server-generated on create (`E001`, `E002`, …) and
+ *  not user-settable. Exposed here so the client can render the ID
+ *  chip top-right of the entity card. */
+export const entitySchema = z.object({
+  id: uuidParam,
+  dataModelId: uuidParam,
+  name: entityNameSchema,
+  businessName: businessNameSchema.nullable().optional(),
+  description: z.string().nullable().optional(),
+  layer: LAYER,
+  entityType: ENTITY_TYPE,
+  /** Server-assigned monotonic display ID, shape `^E\d+$` (e.g. `E001`).
+   *  Optional because pre-backfill rows may still be null for a brief
+   *  window between the `ALTER TABLE` and the backfill UPDATE — the
+   *  runOnce migration wraps both in a single boot-time step so this
+   *  is a transient concern, not a steady-state one. */
+  displayId: z
+    .string()
+    .regex(/^E\d+$/, 'displayId must match /^E\\d+$/')
+    .optional(),
+  /** Step 6 Direction A follow-up — per-AK-group "purpose" labels.
+   *  Defaults to `{}` so callers can always assume a map. See
+   *  `altKeyLabelsSchema` for the value shape. */
+  altKeyLabels: altKeyLabelsSchema.default({}),
+  metadata: metadataSchema.default({}),
+  tags: tagsSchema.default([]),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type Entity = z.infer<typeof entitySchema>;
 
 export const entityIdParamsSchema = z.object({
   id: uuidParam,
@@ -320,6 +370,17 @@ const transformationLogicSchema = z
   .string()
   .max(20_000, 'Transformation logic must be 20,000 characters or fewer');
 
+/** Step 6 Direction A — alt-key (business-key) grouping label. Shape
+ *  `AKn` where `n` is one or more digits (`AK1`, `AK2`, `AK10`). Zod
+ *  matches the server-side normaliser regex exactly so rejected input
+ *  fails consistently no matter the entry point. Empty string is NOT
+ *  accepted here — callers use `null` to clear the group. */
+const altKeyGroupSchema = z
+  .string()
+  .regex(/^AK\d+$/, 'altKeyGroup must match /^AK\\d+$/ (e.g. AK1, AK2, AK10)')
+  .nullable()
+  .optional();
+
 export const attributeCreateSchema = z
   .object({
     name: attributeNameSchema,
@@ -337,9 +398,20 @@ export const attributeCreateSchema = z
     isPrimaryKey: z.boolean().optional().default(false),
     isForeignKey: z.boolean().optional().default(false),
     isUnique: z.boolean().optional().default(false),
+    /** Step 6 follow-up — explicit UNIQUE designation (as opposed to UQ
+     *  coerced by PK or AK). Only explicit-UQ columns appear as FK-
+     *  targetable candidate keys in the Key Columns panel. Usually the
+     *  server auto-derives this from `isUnique` patches; callers can
+     *  also set it directly. */
+    isExplicitUnique: z.boolean().optional(),
     defaultValue: defaultValueSchema.optional().nullable(),
     classification: ATTRIBUTE_CLASSIFICATION.optional().nullable(),
     transformationLogic: transformationLogicSchema.optional().nullable(),
+    /** Step 6 Direction A — business-key / alt-key group label. When set,
+     *  the normaliser auto-coerces `isNullable=false` + `isUnique=true`
+     *  on this attribute (composite UNIQUE is emitted at DDL-export
+     *  time across all attrs in the entity sharing the same group). */
+    altKeyGroup: altKeyGroupSchema,
     metadata: metadataSchema.optional(),
     tags: tagsSchema.optional(),
   })
@@ -362,9 +434,15 @@ export const attributeUpdateSchema = z
     isPrimaryKey: z.boolean().optional(),
     isForeignKey: z.boolean().optional(),
     isUnique: z.boolean().optional(),
+    /** Explicit UNIQUE designation. See `attributeCreateSchema`. */
+    isExplicitUnique: z.boolean().optional(),
     defaultValue: defaultValueSchema.nullable().optional(),
     classification: ATTRIBUTE_CLASSIFICATION.nullable().optional(),
     transformationLogic: transformationLogicSchema.nullable().optional(),
+    /** Step 6 Direction A — business-key / alt-key group label.
+     *  `null` clears the group; an `AKn` value adds/moves the attribute
+     *  into that group. See `attributeCreateSchema` for the invariant. */
+    altKeyGroup: altKeyGroupSchema,
     metadata: metadataSchema.optional(),
     tags: tagsSchema.optional(),
   })
@@ -426,7 +504,10 @@ export type AttributeBatchQuery = z.infer<typeof attributeBatchQuerySchema>;
 //   - warning : reserved-word style smell (soft).
 // ============================================================
 
-export const NAMING_LINT_SEVERITY = z.enum(['violation', 'warning']);
+// `info` added Step 6 for advisory rules that are neither blockers nor
+// reserved-word-style smells (e.g. relationship-name pattern hint).
+// Additive-only — `violation` and `warning` retain their Step 4/5 shapes.
+export const NAMING_LINT_SEVERITY = z.enum(['violation', 'warning', 'info']);
 export type NamingLintSeverity = z.infer<typeof NAMING_LINT_SEVERITY>;
 
 export const namingLintRuleSchema = z.object({
@@ -437,3 +518,244 @@ export const namingLintRuleSchema = z.object({
   suggestion: z.string().optional(),
 });
 export type NamingLintRule = z.infer<typeof namingLintRuleSchema>;
+
+// ============================================================
+// Relationships (data_model_relationships table) — Step 6
+//
+// Relationships connect two entities on the same model + layer. The
+// Zod layer here validates shape only; the service enforces the
+// cross-layer / cross-model / cycle invariants after authZ fetches.
+//
+// `metadata` is a JSONB bag capped at 4 KB (serialised) with the
+// prototype-pollution-style keys rejected outright. This matches the
+// Step 6 security hard rules in tasks/alignment-step6.md §7.
+//
+// `version` lives on the canonical row (6A — optimistic lock). Server
+// assigns and increments it; PATCH requires the client-observed value
+// or returns 409.
+// ============================================================
+
+/** Keys we refuse to store in JSONB because they can shadow Object
+ *  prototype properties in downstream consumers. The list mirrors the
+ *  defensive set used by hardened JSON parsers. */
+const RELATIONSHIP_METADATA_BANNED_KEYS: ReadonlySet<string> = new Set([
+  '__proto__',
+  'constructor',
+  'prototype',
+]);
+
+const RELATIONSHIP_METADATA_MAX_BYTES = 4096;
+
+/** Open-ended bag. Two-stage validation:
+ *   1. Raw-input key guard (superRefine on `z.unknown()`): rejects the
+ *      banned prototype-pollution keys BEFORE zod's `.record()` strips
+ *      them. `z.record()` silently drops `__proto__` from parsed output,
+ *      so a refine running over the parsed result never sees it.
+ *   2. Record shape + 4 KB serialised-length refine on the passed-through
+ *      value.
+ *
+ * `preprocess` + a typed throw is the idiomatic zod pattern here — we
+ * can't use `pipe()` because the record stage would have already stripped
+ * the offending key by the time the downstream refine runs. */
+export const relationshipMetadataSchema = z
+  .unknown()
+  .superRefine((raw, ctx) => {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Metadata must be a plain object',
+      });
+      return;
+    }
+    // Inspect the raw own-property keys — `__proto__` survives JSON.parse
+    // as an own property, which is exactly the attack surface we care about.
+    for (const key of Object.keys(raw as Record<string, unknown>)) {
+      if (RELATIONSHIP_METADATA_BANNED_KEYS.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Metadata contains a reserved key (${key})`,
+        });
+        return;
+      }
+    }
+    // Serialised-size gate. Reject before we hand off to `.record()`
+    // so the byte ceiling binds on raw input.
+    if (JSON.stringify(raw).length > RELATIONSHIP_METADATA_MAX_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Metadata exceeds 4 KB',
+      });
+    }
+  })
+  .pipe(z.record(z.unknown()));
+
+/** Free-form, optional rel name (e.g. "places", "belongs_to_customer").
+ *  Trimmed; capped to match entity name length for symmetry. Nullable
+ *  because an unnamed edge is legitimate (cardinality carries the
+ *  semantics). */
+const relationshipNameSchema = z
+  .string()
+  .trim()
+  .max(128, 'Name must be 128 characters or fewer')
+  .nullable()
+  .optional();
+
+/** Step 6 Direction A — inverse verb phrase (target → source). Pair
+ *  with `name` so the edge renders both forward and reverse reading
+ *  directions (e.g. `name="manages"`, `inverseName="is_managed_by"`).
+ *  Same 128-char cap as `name` for symmetry; nullable because a rel
+ *  with only a forward verb is legitimate. */
+const relationshipInverseNameSchema = z
+  .string()
+  .trim()
+  .max(128, 'Inverse name must be 128 characters or fewer')
+  .nullable()
+  .optional();
+
+/** Canonical relationship row as the API returns it. */
+export const relationshipSchema = z.object({
+  id: uuidParam,
+  dataModelId: uuidParam,
+  sourceEntityId: uuidParam,
+  targetEntityId: uuidParam,
+  name: relationshipNameSchema,
+  inverseName: relationshipInverseNameSchema,
+  sourceCardinality: CARDINALITY,
+  targetCardinality: CARDINALITY,
+  isIdentifying: z.boolean(),
+  layer: LAYER,
+  metadata: relationshipMetadataSchema.default({}),
+  version: z.number().int().positive(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type Relationship = z.infer<typeof relationshipSchema>;
+
+/** Creation body — server owns id/dataModelId (from the URL)/version/
+ *  timestamps. Callers only supply shape-level fields. Strict so typos
+ *  surface as 422s instead of being silently dropped. */
+export const createRelationshipSchema = z
+  .object({
+    sourceEntityId: uuidParam,
+    targetEntityId: uuidParam,
+    name: relationshipNameSchema,
+    /** Step 6 Direction A — optional inverse verb phrase. */
+    inverseName: relationshipInverseNameSchema,
+    sourceCardinality: CARDINALITY,
+    targetCardinality: CARDINALITY,
+    isIdentifying: z.boolean(),
+    layer: LAYER,
+    metadata: relationshipMetadataSchema.optional(),
+  })
+  .strict();
+export type CreateRelationshipInput = z.infer<typeof createRelationshipSchema>;
+
+/** Partial patch. `version` is mandatory on every PATCH — it is the
+ *  optimistic-lock token (6A). A patch without it must be rejected at
+ *  the schema layer so stale clients can't accidentally race. */
+export const updateRelationshipSchema = z
+  .object({
+    sourceEntityId: uuidParam.optional(),
+    targetEntityId: uuidParam.optional(),
+    name: relationshipNameSchema,
+    /** Step 6 Direction A — optional inverse verb phrase. */
+    inverseName: relationshipInverseNameSchema,
+    sourceCardinality: CARDINALITY.optional(),
+    targetCardinality: CARDINALITY.optional(),
+    isIdentifying: z.boolean().optional(),
+    layer: LAYER.optional(),
+    metadata: relationshipMetadataSchema.optional(),
+    version: z.number().int().positive(),
+  })
+  .strict();
+export type UpdateRelationshipInput = z.infer<typeof updateRelationshipSchema>;
+
+/** Params for `/models/:id/relationships/:relId`. Both segments are
+ *  UUIDs so we get a clean 422 on malformed ids before the service
+ *  wastes a query on them. */
+export const relationshipIdParamsSchema = z.object({
+  id: uuidParam,
+  relId: uuidParam,
+});
+export type RelationshipIdParams = z.infer<typeof relationshipIdParamsSchema>;
+
+// ============================================================
+// Relationship Key Columns — Erwin-style FK pairing (source PK →
+// target FK), including manual-pairing override for power users.
+//
+// A relationship of any isIdentifying flavour propagates each source
+// PK as an FK attribute on the target entity. The default pairing is
+// "auto-create" — the server creates a new FK attr named after the
+// source PK. Power users can override per source PK by picking an
+// existing target attribute; the server then tags that attr with
+// metadata.fk_for_rel_id + fk_for_source_attr_id and deletes any
+// stale auto-created FK for that same source PK.
+// ============================================================
+
+/** One request row in the setKeyColumns body. `targetAttributeId=null`
+ *  tells the server to auto-create (or retain) a generated FK attr
+ *  named after the source attr. A UUID tells the server to tag that
+ *  existing attr as the FK for this source attr. Set `remove=true` to
+ *  delete any existing pair for this source (auto FK gets deleted,
+ *  manually-paired attr gets its rel tags stripped). Valid only for
+ *  AK/UQ candidate keys — removing a PK-sourced FK is rejected since
+ *  PKs are always required participants in the FK. */
+export const relationshipKeyColumnPairInputSchema = z
+  .object({
+    sourceAttributeId: uuidParam,
+    targetAttributeId: uuidParam.nullable(),
+    remove: z.boolean().optional(),
+  })
+  .strict();
+export type RelationshipKeyColumnPairInput = z.infer<typeof relationshipKeyColumnPairInputSchema>;
+
+/** POST /models/:id/relationships/:relId/key-columns body. */
+export const relationshipKeyColumnsSetSchema = z
+  .object({
+    pairs: z.array(relationshipKeyColumnPairInputSchema).max(16),
+  })
+  .strict();
+export type RelationshipKeyColumnsSet = z.infer<typeof relationshipKeyColumnsSetSchema>;
+
+/** Reconciled pair returned by GET / POST responses. `isAutoCreated`
+ *  tells the client whether the target attr is server-managed (auto)
+ *  or a user-chosen existing attribute. `sourceAttributeRole` lets the
+ *  client badge the source row: PK (primary key — default FK target),
+ *  UQ (simple unique — candidate-key FK, Step-6 follow-up), AK
+ *  (composite alt-key group — surfaced read-only in v1). */
+export const relationshipKeyColumnPairSchema = z
+  .object({
+    sourceAttributeId: uuidParam,
+    sourceAttributeName: z.string(),
+    sourceAttributeRole: z.enum(['pk', 'uq', 'ak']).optional(),
+    targetAttributeId: uuidParam.nullable(),
+    targetAttributeName: z.string().nullable(),
+    isAutoCreated: z.boolean(),
+  })
+  .strict();
+export type RelationshipKeyColumnPair = z.infer<typeof relationshipKeyColumnPairSchema>;
+
+/** Response for both GET and POST. `needsBackfill` is true when the
+ *  source has N PKs but fewer than N propagated FKs exist on the
+ *  target — lets the client trigger a silent auto-backfill.
+ *  `sourceHasNoCandidateKey` is the post-alt-key semantic ("no PK AND
+ *  no UQ AND no AK on source"); `sourceHasNoPk` is retained for
+ *  backwards compat with existing clients. */
+export const relationshipKeyColumnsResponseSchema = z
+  .object({
+    pairs: z.array(relationshipKeyColumnPairSchema),
+    needsBackfill: z.boolean(),
+    sourceHasNoPk: z.boolean(),
+    sourceHasNoCandidateKey: z.boolean().optional(),
+  })
+  .strict();
+export type RelationshipKeyColumnsResponse = z.infer<typeof relationshipKeyColumnsResponseSchema>;
+
+/** Params for `/models/:id/entities/:entityId/impact` (cascade-delete
+ *  preview). Shares shape with the entity-id params but re-declared
+ *  here to keep Step 6 additions locally grouped. */
+export const entityImpactParamsSchema = z.object({
+  id: uuidParam,
+  entityId: uuidParam,
+});
+export type EntityImpactParams = z.infer<typeof entityImpactParamsSchema>;

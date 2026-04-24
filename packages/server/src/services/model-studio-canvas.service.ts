@@ -4,7 +4,7 @@ import { dataModelCanvasStates } from '../db/schema.js';
 import { DBError } from '../utils/errors.js';
 import { logger } from '../config/logger.js';
 import { assertCanAccessModel } from './model-studio-authz.service.js';
-import type { Layer } from '@cc/shared';
+import type { Layer, Notation } from '@cc/shared';
 
 /**
  * Canvas state per (model, user, layer).
@@ -22,6 +22,9 @@ import type { Layer } from '@cc/shared';
 export interface CanvasStateDTO {
   nodePositions: Record<string, { x: number; y: number }>;
   viewport: { x: number; y: number; zoom: number };
+  /** Per-user notation preference (Step 6). Defaults to 'ie' when the
+   *  canvas row has never been written (DB column default is 'ie'). */
+  notation: Notation;
   updatedAt: string | null;
 }
 
@@ -29,6 +32,7 @@ function emptyState(): CanvasStateDTO {
   return {
     nodePositions: {},
     viewport: { x: 0, y: 0, zoom: 1 },
+    notation: 'ie',
     updatedAt: null,
   };
 }
@@ -57,6 +61,7 @@ export async function getCanvasState(
   return {
     nodePositions: row.nodePositions as CanvasStateDTO['nodePositions'],
     viewport: row.viewport as CanvasStateDTO['viewport'],
+    notation: (row.notation as Notation) ?? 'ie',
     updatedAt: row.updatedAt?.toISOString() ?? null,
   };
 }
@@ -65,37 +70,51 @@ export async function upsertCanvasState(
   userId: string,
   modelId: string,
   layer: Layer,
-  state: Omit<CanvasStateDTO, 'updatedAt'>,
+  state: Omit<CanvasStateDTO, 'updatedAt' | 'notation'> & { notation?: Notation },
 ): Promise<CanvasStateDTO> {
   await assertCanAccessModel(userId, modelId);
 
   try {
+    // Only set `notation` on insert/update when the caller actually
+    // provides one. Omitting preserves the DB column default ('ie') on
+    // insert and the existing row's notation on update — so drag-end
+    // saves from `useCanvasState` don't clobber the user's notation
+    // preference.
+    const insertRow: typeof dataModelCanvasStates.$inferInsert = {
+      dataModelId: modelId,
+      userId,
+      layer,
+      nodePositions: state.nodePositions,
+      viewport: state.viewport,
+    };
+    if (state.notation) insertRow.notation = state.notation;
+
+    const updateSet: Partial<typeof dataModelCanvasStates.$inferInsert> & {
+      updatedAt: Date;
+    } = {
+      nodePositions: state.nodePositions,
+      viewport: state.viewport,
+      updatedAt: new Date(),
+    };
+    if (state.notation) updateSet.notation = state.notation;
+
     const [row] = await db
       .insert(dataModelCanvasStates)
-      .values({
-        dataModelId: modelId,
-        userId,
-        layer,
-        nodePositions: state.nodePositions,
-        viewport: state.viewport,
-      })
+      .values(insertRow)
       .onConflictDoUpdate({
         target: [
           dataModelCanvasStates.dataModelId,
           dataModelCanvasStates.userId,
           dataModelCanvasStates.layer,
         ],
-        set: {
-          nodePositions: state.nodePositions,
-          viewport: state.viewport,
-          updatedAt: new Date(),
-        },
+        set: updateSet,
       })
       .returning();
 
     return {
       nodePositions: row.nodePositions as CanvasStateDTO['nodePositions'],
       viewport: row.viewport as CanvasStateDTO['viewport'],
+      notation: (row.notation as Notation) ?? 'ie',
       updatedAt: row.updatedAt?.toISOString() ?? null,
     };
   } catch (err) {

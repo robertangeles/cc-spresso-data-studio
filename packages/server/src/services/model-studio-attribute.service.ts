@@ -31,7 +31,11 @@ import { assertCanAccessModel } from './model-studio-authz.service.js';
 import { recordChange } from './model-studio-changelog.service.js';
 import { enqueueEmbedding } from './model-studio-embedding.service.js';
 import { providerRegistry } from './ai/index.js';
-import { normalizeAttributeFlags } from './model-studio-attribute-flags.js';
+import { AltKeyGroupFormatError, normalizeAttributeFlags } from './model-studio-attribute-flags.js';
+import {
+  cascadeGovernanceToFks,
+  cleanupPropagatedFksForSourceAttr,
+} from './model-studio-relationship-propagate.service.js';
 
 /**
  * Step 5 — Attribute CRUD + Synthetic Data (D9).
@@ -206,14 +210,24 @@ export async function createAttribute(
   const nextOrdinal = Number(maxOrdinal) + 1;
 
   try {
-    // Apply flag invariants: PK ⇒ NN + UQ; PK + FK can coexist.
-    // See normalizeAttributeFlags docstring for the full rule set.
-    const flags = normalizeAttributeFlags({
-      isPrimaryKey: dto.isPrimaryKey,
-      isForeignKey: dto.isForeignKey,
-      isNullable: dto.isNullable,
-      isUnique: dto.isUnique,
-    });
+    // Apply flag invariants: PK ⇒ NN + UQ; PK + FK can coexist; BK
+    // group ⇒ NN + UQ (Direction A #4). See normalizeAttributeFlags
+    // docstring for the full rule set.
+    let flags;
+    try {
+      flags = normalizeAttributeFlags({
+        isPrimaryKey: dto.isPrimaryKey,
+        isForeignKey: dto.isForeignKey,
+        isNullable: dto.isNullable,
+        isUnique: dto.isUnique,
+        altKeyGroup: dto.altKeyGroup ?? null,
+      });
+    } catch (err) {
+      if (err instanceof AltKeyGroupFormatError) {
+        throw new ValidationError({ altKeyGroup: [err.message] });
+      }
+      throw err;
+    }
 
     const [created] = await db
       .insert(dataModelAttributes)
@@ -233,6 +247,7 @@ export async function createAttribute(
         defaultValue: dto.defaultValue ?? null,
         classification: dto.classification ?? null,
         transformationLogic: dto.transformationLogic ?? null,
+        altKeyGroup: flags.altKeyGroup,
         ordinalPosition: nextOrdinal,
         metadata: dto.metadata ?? {},
         tags: dto.tags ?? [],
@@ -308,24 +323,37 @@ export async function updateAttribute(
     }
   }
 
-  // Apply flag invariants: PK ⇒ NN + UQ; PK + FK can coexist. Sticky
-  // NN/UQ when PK is cleared. The normaliser receives the patch's
-  // flag fields merged with the current row's flags and returns the
-  // final effective shape. See model-studio-attribute-flags.ts.
-  const normalisedFlags = normalizeAttributeFlags(
-    {
-      isPrimaryKey: patch.isPrimaryKey,
-      isForeignKey: patch.isForeignKey,
-      isNullable: patch.isNullable,
-      isUnique: patch.isUnique,
-    },
-    {
-      isPrimaryKey: before.isPrimaryKey,
-      isForeignKey: before.isForeignKey,
-      isNullable: before.isNullable,
-      isUnique: before.isUnique,
-    },
-  );
+  // Apply flag invariants: PK ⇒ NN + UQ; PK + FK can coexist; BK
+  // group ⇒ NN + UQ (Direction A #4). Sticky NN/UQ when PK or BK is
+  // cleared. The normaliser receives the patch's flag fields merged
+  // with the current row's flags and returns the final effective
+  // shape. See model-studio-attribute-flags.ts.
+  let normalisedFlags;
+  try {
+    normalisedFlags = normalizeAttributeFlags(
+      {
+        isPrimaryKey: patch.isPrimaryKey,
+        isForeignKey: patch.isForeignKey,
+        isNullable: patch.isNullable,
+        isUnique: patch.isUnique,
+        isExplicitUnique: patch.isExplicitUnique,
+        altKeyGroup: patch.altKeyGroup,
+      },
+      {
+        isPrimaryKey: before.isPrimaryKey,
+        isForeignKey: before.isForeignKey,
+        isNullable: before.isNullable,
+        isUnique: before.isUnique,
+        isExplicitUnique: before.isExplicitUnique,
+        altKeyGroup: before.altKeyGroup,
+      },
+    );
+  } catch (err) {
+    if (err instanceof AltKeyGroupFormatError) {
+      throw new ValidationError({ altKeyGroup: [err.message] });
+    }
+    throw err;
+  }
 
   // Only write flags if any flag field was in the patch OR the normaliser
   // produced a drift from current (e.g. PK was already true but the client
@@ -335,7 +363,8 @@ export async function updateAttribute(
     patch.isPrimaryKey !== undefined ||
     patch.isForeignKey !== undefined ||
     patch.isNullable !== undefined ||
-    patch.isUnique !== undefined;
+    patch.isUnique !== undefined ||
+    patch.altKeyGroup !== undefined;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.name !== undefined) updates.name = patch.name;
@@ -350,6 +379,8 @@ export async function updateAttribute(
     updates.isPrimaryKey = normalisedFlags.isPrimaryKey;
     updates.isForeignKey = normalisedFlags.isForeignKey;
     updates.isUnique = normalisedFlags.isUnique;
+    updates.isExplicitUnique = normalisedFlags.isExplicitUnique;
+    updates.altKeyGroup = normalisedFlags.altKeyGroup;
   }
   if (patch.defaultValue !== undefined) updates.defaultValue = patch.defaultValue;
   if (patch.classification !== undefined) updates.classification = patch.classification;
@@ -358,15 +389,53 @@ export async function updateAttribute(
   if (patch.metadata !== undefined) updates.metadata = patch.metadata;
   if (patch.tags !== undefined) updates.tags = patch.tags;
 
+  // PK demotion (true → false) requires cleanup of propagated FKs on
+  // downstream target entities. Run the update + cleanup in a single
+  // transaction so the two states never diverge. Detect by comparing
+  // the normalised final PK flag against the before state.
+  const demotingFromPk =
+    flagTouched && before.isPrimaryKey === true && normalisedFlags.isPrimaryKey === false;
+
+  // Governance cascade — when the user changes `classification` or
+  // `tags` on a source attr, every downstream FK that references it
+  // should inherit the new value so compliance dashboards stay in
+  // sync. Only fire if the patch actually touched the field AND the
+  // value changed. Runs alongside the update in the same transaction.
+  const classificationChanged =
+    patch.classification !== undefined && patch.classification !== before.classification;
+  const tagsChanged =
+    patch.tags !== undefined && JSON.stringify(patch.tags) !== JSON.stringify(before.tags ?? []);
+
   try {
-    const [updated] = await db
-      .update(dataModelAttributes)
-      .set(updates)
-      .where(
-        and(eq(dataModelAttributes.id, attributeId), eq(dataModelAttributes.entityId, entityId)),
-      )
-      .returning();
-    if (!updated) throw new NotFoundError('Attribute');
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(dataModelAttributes)
+        .set(updates)
+        .where(
+          and(eq(dataModelAttributes.id, attributeId), eq(dataModelAttributes.entityId, entityId)),
+        )
+        .returning();
+      if (!row) throw new NotFoundError('Attribute');
+
+      if (demotingFromPk) {
+        await cleanupPropagatedFksForSourceAttr(tx, {
+          sourceAttrId: attributeId,
+          modelId,
+          changedBy: userId,
+        });
+      }
+
+      if (classificationChanged || tagsChanged) {
+        await cascadeGovernanceToFks(tx, {
+          sourceAttrId: attributeId,
+          modelId,
+          changedBy: userId,
+          ...(classificationChanged ? { classification: patch.classification ?? null } : {}),
+          ...(tagsChanged ? { tags: patch.tags } : {}),
+        });
+      }
+      return row;
+    });
 
     await recordChange({
       dataModelId: modelId,
@@ -393,7 +462,7 @@ export async function updateAttribute(
     }
 
     logger.info(
-      { userId, modelId, entityId, attributeId, fields: Object.keys(patch) },
+      { userId, modelId, entityId, attributeId, fields: Object.keys(patch), demotingFromPk },
       'Model Studio: attribute updated',
     );
     return withLint(updated, entity.layer as Layer);
@@ -454,6 +523,20 @@ export async function deleteAttribute(
   await assertCanAccessModel(userId, modelId);
   await getParentEntity(modelId, entityId);
   const before = await getAttribute(userId, modelId, entityId, attributeId);
+
+  // Block direct deletion of attrs that are server-managed by a
+  // relationship's Key Columns propagation. The UI surfaces a clear
+  // remediation: delete the relationship, or pick a different target
+  // attribute for that pairing. Users still fully own attrs tagged
+  // only via `fk_for_rel_id` (manual pairing) — those are their own
+  // authored columns that happen to serve as an FK.
+  const beforeMd = (before.metadata as Record<string, unknown> | null) ?? {};
+  const managedRelId = beforeMd.propagated_from_rel_id as string | undefined;
+  if (managedRelId) {
+    throw new ConflictError(
+      `This attribute is managed by relationship ${managedRelId}. Delete the relationship instead or pair this relationship to a different attribute.`,
+    );
+  }
 
   const dependents = await describeAttributeDependents(attributeId);
   const hasDependents = dependents.attributeLinks + dependents.semanticMappings > 0;

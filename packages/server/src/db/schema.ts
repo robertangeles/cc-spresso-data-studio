@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   uuid,
@@ -2047,6 +2048,19 @@ export const dataModelEntities = pgTable(
     description: text('description'),
     layer: varchar('layer', { length: 20 }).notNull(),
     entityType: varchar('entity_type', { length: 20 }).notNull().default('standard'),
+    // Step 6 Direction A — human-readable monotonic ID per model
+    // (`E001`, `E002`, …). Surfaced top-right of the entity card in
+    // the cathedral visual. Nullable because the add-column migration
+    // backfills existing rows via a single window-function UPDATE; new
+    // rows are assigned in `createEntity` inside a transaction.
+    displayId: varchar('display_id', { length: 20 }),
+    // Step 6 Direction A — optional one-line "purpose" label per alt-key
+    // group (keyed by AK group name: `AK1`, `AK2`, …). The badge stays
+    // `AK1`; this label surfaces as a tooltip on the AK badge and
+    // becomes the basis for DDL constraint names in Step 9. Map values
+    // are string descriptions capped at 200 chars (enforced in the
+    // shared Zod schema). Default `{}` = no labels set.
+    altKeyLabels: jsonb('alt_key_labels').notNull().default('{}'),
     metadata: jsonb('metadata').notNull().default('{}'),
     tags: jsonb('tags').notNull().default('[]'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2114,6 +2128,14 @@ export const dataModelAttributes = pgTable(
     isPrimaryKey: boolean('is_primary_key').notNull().default(false),
     isForeignKey: boolean('is_foreign_key').notNull().default(false),
     isUnique: boolean('is_unique').notNull().default(false),
+    // Step 6 follow-up — distinguishes "user explicitly toggled UQ" from
+    // "UQ was coerced by PK or AK designation". Only explicit UQ counts
+    // as a FK-targetable candidate key. When PK or AK is cleared, isUnique
+    // stays sticky but is_explicit_unique stays at whatever the user set it
+    // to — so cleared-PK/AK rows don't leak into the Key Columns panel.
+    // Normaliser auto-flips this flag when the user patches isUnique
+    // outside of a PK/AK coercion context.
+    isExplicitUnique: boolean('is_explicit_unique').notNull().default(false),
     defaultValue: text('default_value'),
     ordinalPosition: integer('ordinal_position').notNull().default(0),
     // Step 5 follow-up: governance classification. Nullable — null
@@ -2127,6 +2149,13 @@ export const dataModelAttributes = pgTable(
     // attribute property editor. Null when no transformation is
     // documented.
     transformationLogic: text('transformation_logic'),
+    // Step 6 Direction A — alt-key (business-key) grouping label.
+    // `AK1`, `AK2`, …, `null`. Attributes sharing the same non-null
+    // group form ONE composite UNIQUE constraint (enforced at the
+    // DDL-export layer; normaliser auto-coerces NN+UQ on every row
+    // that carries a group). Format enforced at the zod layer as
+    // `/^AK\d+$/`.
+    altKeyGroup: varchar('alt_key_group', { length: 10 }),
     metadata: jsonb('metadata').notNull().default('{}'),
     tags: jsonb('tags').notNull().default('[]'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2140,6 +2169,13 @@ export const dataModelAttributes = pgTable(
     // Index: filter "all PII columns in this model" style queries
     // for governance dashboards. Partial index to skip null rows.
     index('idx_data_model_attributes_classification').on(t.classification),
+    // Step 6 Direction A — partial index on alt-key group. Used by the
+    // DDL exporter to load all attrs participating in a given AK group
+    // within an entity so a composite UNIQUE constraint can be emitted.
+    // Skipped null rows because most columns have no AK group.
+    index('idx_data_model_attributes_ak_group')
+      .on(t.entityId, t.altKeyGroup)
+      .where(sql`alt_key_group IS NOT NULL`),
   ],
 );
 
@@ -2193,11 +2229,18 @@ export const dataModelRelationships = pgTable(
       .notNull()
       .references(() => dataModelEntities.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 128 }),
+    // Step 6 Direction A — inverse verb phrase (target → source
+    // direction). Pair with `name` (source → target) so the edge
+    // renders both phrases (e.g. "manages" / "is_managed_by").
+    // Optional; a rel with a single forward verb still renders fine.
+    inverseName: varchar('inverse_name', { length: 128 }),
     sourceCardinality: varchar('source_cardinality', { length: 20 }).notNull(),
     targetCardinality: varchar('target_cardinality', { length: 20 }).notNull(),
     isIdentifying: boolean('is_identifying').notNull().default(false),
     layer: varchar('layer', { length: 20 }).notNull(),
     metadata: jsonb('metadata').notNull().default('{}'),
+    // Optimistic concurrency token — PATCH bumps this; stale PATCH → 409.
+    version: integer('version').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -2208,6 +2251,18 @@ export const dataModelRelationships = pgTable(
     index('idx_data_model_rels_source_entity').on(t.sourceEntityId),
     // Index: find relationships where an entity is the target
     index('idx_data_model_rels_target_entity').on(t.targetEntityId),
+    // Unique: guarantees 409 on duplicate rel within a model. COALESCE lets
+    // two unnamed rels between the same pair co-exist only if one has a name.
+    uniqueIndex('idx_data_model_rels_unique_triple').on(
+      t.dataModelId,
+      t.sourceEntityId,
+      t.targetEntityId,
+      sql`COALESCE(name, '')`,
+    ),
+    // Partial: cycle-detection walk only considers identifying rels
+    index('idx_data_model_rels_identifying')
+      .on(t.sourceEntityId, t.targetEntityId)
+      .where(sql`is_identifying = true`),
   ],
 );
 
@@ -2233,6 +2288,10 @@ export const dataModelCanvasStates = pgTable(
     nodePositions: jsonb('node_positions').notNull().default('{}'),
     // { x: number, y: number, zoom: number } — JSONB viewport
     viewport: jsonb('viewport').notNull().default('{"x":0,"y":0,"zoom":1}'),
+    // Per-user notation preference. Values match packages/shared/src/utils/
+    // model-studio.schemas.ts NOTATION enum ('ie' | 'idef1x'). A DB-level
+    // CHECK constraint (created by runOnce migration) enforces the enum.
+    notation: varchar('notation', { length: 10 }).notNull().default('ie'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { lintAttribute, lintIdentifier, toSnakeCase } from '../utils/naming-lint.js';
+import {
+  lintAttribute,
+  lintEntityForBusinessKey,
+  lintIdentifier,
+  toSnakeCase,
+} from '../utils/naming-lint.js';
 
 /**
  * Step 4 — naming-lint groundwork (D6).
@@ -142,6 +147,42 @@ describe('naming-lint', () => {
     it('base lintIdentifier rules flow through (snake_case violation preserved)', () => {
       const issues = lintAttribute('customerID', 'physical', { dataType: 'uuid' });
       expect(issues.find((i) => i.rule === 'snake_case')).toBeDefined();
+    });
+  });
+
+  // ================================================================
+  // Step 6 Direction A — lintEntityForBusinessKey
+  // ================================================================
+
+  describe('lintEntityForBusinessKey', () => {
+    it('surrogate PK (uuid) with no AK group → info warning', () => {
+      const issues = lintEntityForBusinessKey({ name: 'customer', layer: 'logical' }, [
+        { isPrimaryKey: true, dataType: 'uuid', altKeyGroup: null },
+        { isPrimaryKey: false, dataType: 'varchar', altKeyGroup: null },
+      ]);
+      const rule = issues.find((i) => i.rule === 'entity_missing_business_key');
+      expect(rule).toBeDefined();
+      expect(rule!.severity).toBe('info');
+      expect(rule!.message).toContain('business key');
+    });
+
+    it('natural PK (varchar ISBN) → silent (PK itself is the business key)', () => {
+      const issues = lintEntityForBusinessKey({ name: 'book', layer: 'logical' }, [
+        // ISBN as the natural PK — varchar is NOT surrogate, so the
+        // rule should not fire.
+        { isPrimaryKey: true, dataType: 'varchar', altKeyGroup: null },
+        { isPrimaryKey: false, dataType: 'varchar', altKeyGroup: null },
+      ]);
+      expect(issues).toEqual([]);
+    });
+
+    it('surrogate PK WITH an AK1 alt-key group → silent', () => {
+      const issues = lintEntityForBusinessKey({ name: 'customer', layer: 'logical' }, [
+        { isPrimaryKey: true, dataType: 'uuid', altKeyGroup: null },
+        // `email` is the business key, flagged AK1.
+        { isPrimaryKey: false, dataType: 'varchar', altKeyGroup: 'AK1' },
+      ]);
+      expect(issues).toEqual([]);
     });
   });
 });

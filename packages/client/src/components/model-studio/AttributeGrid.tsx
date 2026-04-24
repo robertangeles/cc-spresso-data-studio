@@ -51,18 +51,79 @@ import type { AttributeSummary } from '../../hooks/useAttributes';
  * dnd-kit announcements are wired so screen readers get drag state.
  */
 
+/**
+ * Canonical data-type list — Postgres-native names that Step 9 DDL
+ * export will translate per target dialect (datetime2 for SQL Server,
+ * timestamp_ntz for Snowflake, etc.). Grouped below by category for
+ * reviewer clarity; the dropdown renders them in this order.
+ *
+ * Monetary values: use `numeric` with precision/scale columns on the
+ * attribute row (e.g. numeric(18,2)). Postgres `money` is deliberately
+ * excluded — locale-dependent and widely discouraged.
+ *
+ * Binary/hash: `bytea` stores raw bytes (hashes, file blobs, etc.).
+ * Store hex-encoded hashes in `varchar` only when human-readable
+ * inspection matters — use `bytea` by default.
+ *
+ * Vector: pgvector embedding column (this project uses it for RAG).
+ */
 const DATA_TYPES = [
+  // Identifiers
   'uuid',
+  // Strings
   'varchar',
+  'char',
   'text',
+  // Integers
+  'smallint',
   'integer',
   'bigint',
+  // Decimals / floating point
   'numeric',
+  'decimal',
+  'real',
+  'double precision',
+  // Boolean
   'boolean',
+  // Date / time
   'date',
+  'time',
   'timestamp',
+  'timestamptz',
+  'interval',
+  // Binary / hash
+  'bytea',
+  // Structured / semi-structured
+  'json',
   'jsonb',
+  // AI / ML
+  'vector',
 ];
+
+/** Types that accept `precision`/`scale` modifiers. Numeric/decimal
+ *  takes both (e.g. `numeric(18,2)` for money). Vector takes a single
+ *  dimensions value — modelled as `precision` (scale unused) to reuse
+ *  the same columns.
+ *
+ *  Note on time-family types (timestamp, timestamptz, time, interval):
+ *  Postgres/SQL Server accept a fractional-seconds precision (0–6),
+ *  but 99% of users leave it at the default. We deliberately hide the
+ *  inline input to keep the Add/edit row uncluttered — matches Erwin
+ *  convention of moving this to an advanced property dialog. */
+const PRECISION_SCALE_TYPES = new Set(['numeric', 'decimal']);
+const PRECISION_ONLY_TYPES = new Set(['vector']);
+/** Types that accept a `length` modifier (e.g. `varchar(255)`). */
+const LENGTH_TYPES = new Set(['varchar', 'char']);
+
+function typeModifierKind(
+  dataType: string | null | undefined,
+): 'precision+scale' | 'precision' | 'length' | 'none' {
+  if (!dataType) return 'none';
+  if (PRECISION_SCALE_TYPES.has(dataType)) return 'precision+scale';
+  if (PRECISION_ONLY_TYPES.has(dataType)) return 'precision';
+  if (LENGTH_TYPES.has(dataType)) return 'length';
+  return 'none';
+}
 
 /** Tone per classification — muted but distinct palettes so scanning
  *  a grid-full of rows gives the governance story at a glance. */
@@ -131,6 +192,9 @@ export function AttributeGrid({
 }: AttributeGridProps) {
   const [newName, setNewName] = useState('');
   const [newDataType, setNewDataType] = useState('varchar');
+  const [newPrecision, setNewPrecision] = useState('');
+  const [newScale, setNewScale] = useState('');
+  const [newLength, setNewLength] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -154,12 +218,27 @@ export function AttributeGrid({
     setAddError(null);
     try {
       const isFirst = attributes.length === 0;
+      const finalDataType = isFirst ? 'uuid' : newDataType;
+      const kind = typeModifierKind(finalDataType);
+      const parseNonNeg = (raw: string): number | null => {
+        const s = raw.trim();
+        if (s === '') return null;
+        const n = Number(s);
+        return Number.isFinite(n) && n >= 0 && Number.isInteger(n) ? n : null;
+      };
       const created = await onCreate({
         name: trimmed,
-        dataType: isFirst ? 'uuid' : newDataType,
+        dataType: finalDataType,
         isPrimaryKey: isFirst,
+        length: kind === 'length' ? parseNonNeg(newLength) : null,
+        precision:
+          kind === 'precision+scale' || kind === 'precision' ? parseNonNeg(newPrecision) : null,
+        scale: kind === 'precision+scale' ? parseNonNeg(newScale) : null,
       });
       setNewName('');
+      setNewPrecision('');
+      setNewScale('');
+      setNewLength('');
       onSelect(created.id);
     } catch (e) {
       setAddError(e instanceof Error ? e.message : 'Add failed');
@@ -180,14 +259,14 @@ export function AttributeGrid({
           <SortableContext items={ids} strategy={verticalListSortingStrategy}>
             <table className="w-full border-separate border-spacing-0 font-sans">
               <thead>
-                <tr className="sticky top-0 z-10 bg-surface-2/90 backdrop-blur-xl">
+                <tr>
                   <Th className="w-7" title="Drag the handle in a row to reorder attributes." />
                   <Th title="Column identifier. Snake_case is required on the physical layer; free-form elsewhere.">
                     Name
                   </Th>
                   <Th
-                    className="w-[120px]"
-                    title="SQL data type (uuid, varchar, numeric, timestamp, …). Drives DDL generation."
+                    className="w-[160px]"
+                    title="SQL data type with size modifiers — numeric(18,2), varchar(255), vector(1024). Click to edit type and size separately. Drives DDL generation."
                   >
                     Data Type
                   </Th>
@@ -216,14 +295,22 @@ export function AttributeGrid({
                     UQ
                   </Th>
                   <Th
+                    className="w-[70px] text-center"
+                    title="Alt Key Group — columns sharing the same AKn label form one composite business key. NN + UQ are auto-enforced."
+                  >
+                    AK
+                  </Th>
+                  <Th
                     className="w-[110px]"
                     title="Governance classification — PII, PCI, PHI, Financial, etc. Drives compliance reporting and access policy."
                   >
                     Classification
                   </Th>
-                  <Th title="One-line preview of the column's definition. Read-only — edit in the Documentation tab below.">
-                    Definition
-                  </Th>
+                  {/* Definition column dropped to match Erwin / ER Studio
+                      convention: the attribute grid shows roles + constraints,
+                      and the prose Definition lives in the property sheet
+                      (General tab). Row-hover tooltip preserves at-a-glance
+                      access — see AttributeRow's `title` prop below. */}
                   <Th className="w-8" title="Delete this attribute." />
                 </tr>
               </thead>
@@ -249,6 +336,7 @@ export function AttributeGrid({
                     onSelect={() => onSelect(attr.id)}
                     onUpdate={(patch) => onUpdate(attr.id, patch)}
                     onDelete={() => onDelete(attr.id)}
+                    allAttributes={attributes}
                   />
                 ))}
               </tbody>
@@ -277,7 +365,14 @@ export function AttributeGrid({
           <select
             data-testid="attribute-add-type"
             value={newDataType}
-            onChange={(e) => setNewDataType(e.target.value)}
+            onChange={(e) => {
+              setNewDataType(e.target.value);
+              // Clear modifiers that no longer apply to the new type.
+              const kind = typeModifierKind(e.target.value);
+              if (kind !== 'precision+scale' && kind !== 'precision') setNewPrecision('');
+              if (kind !== 'precision+scale') setNewScale('');
+              if (kind !== 'length') setNewLength('');
+            }}
             style={{ colorScheme: 'dark' }}
             className="rounded-md border border-white/10 bg-surface-1/60 px-2 py-1 font-mono text-[11px] text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
           >
@@ -287,6 +382,57 @@ export function AttributeGrid({
               </option>
             ))}
           </select>
+          {(() => {
+            const kind = typeModifierKind(newDataType);
+            if (kind === 'none') return null;
+            const sizeInputClass =
+              'w-14 rounded-md border border-white/10 bg-surface-1/60 px-2 py-1 text-center font-mono text-[11px] text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40';
+            if (kind === 'precision+scale') {
+              return (
+                <>
+                  <input
+                    data-testid="attribute-add-precision"
+                    value={newPrecision}
+                    onChange={(e) => setNewPrecision(e.target.value)}
+                    placeholder="p"
+                    title="Precision — total digits (e.g. 18)"
+                    className={sizeInputClass}
+                  />
+                  <input
+                    data-testid="attribute-add-scale"
+                    value={newScale}
+                    onChange={(e) => setNewScale(e.target.value)}
+                    placeholder="s"
+                    title="Scale — digits after decimal (e.g. 2)"
+                    className={sizeInputClass}
+                  />
+                </>
+              );
+            }
+            if (kind === 'precision') {
+              return (
+                <input
+                  data-testid="attribute-add-precision"
+                  value={newPrecision}
+                  onChange={(e) => setNewPrecision(e.target.value)}
+                  placeholder="dim"
+                  title="Dimensions — e.g. 1024 for OpenAI embeddings"
+                  className={sizeInputClass}
+                />
+              );
+            }
+            // length
+            return (
+              <input
+                data-testid="attribute-add-length"
+                value={newLength}
+                onChange={(e) => setNewLength(e.target.value)}
+                placeholder="len"
+                title="Length — max characters (e.g. 255)"
+                className={sizeInputClass}
+              />
+            );
+          })()}
           <button
             type="button"
             data-testid="attribute-add-button"
@@ -324,7 +470,10 @@ function Th({
       scope="col"
       title={title}
       className={[
-        'border-b border-white/10 px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider text-text-secondary/80',
+        // Opaque bg on each cell so sticky header never bleeds the row
+        // beneath it. bg-surface-2 alone on the <tr> doesn't always
+        // paint under position:sticky — it paints per-cell reliably.
+        'sticky top-0 z-10 bg-surface-2 border-b border-white/10 px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider text-text-secondary/80',
         className ?? '',
       ].join(' ')}
     >
@@ -345,9 +494,192 @@ interface RowProps {
   onSelect: () => void;
   onUpdate: (patch: AttributeUpdate) => Promise<AttributeSummary>;
   onDelete: () => Promise<void>;
+  /** Every attribute on the entity — needed by the AK picker so the
+   *  "New group…" option can compute the next unused AKn label. */
+  allAttributes: AttributeSummary[];
 }
 
-function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDelete }: RowProps) {
+/** Compute the next AKn label not yet used by any attribute on the
+ *  entity. Used by the "New group…" option in the AK picker — if the
+ *  entity already has AK1 + AK2, the next pick is AK3. Capped at AK99
+ *  to stay under the `VARCHAR(10)` column width; in practice an
+ *  entity with ≥ 3 distinct BKs is already a red flag. */
+function nextAltKeyGroup(attributes: AttributeSummary[]): string {
+  const used = new Set<string>();
+  for (const a of attributes) {
+    if (a.altKeyGroup && /^AK\d+$/.test(a.altKeyGroup)) used.add(a.altKeyGroup);
+  }
+  for (let i = 1; i <= 99; i += 1) {
+    const candidate = `AK${i}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  return 'AK99';
+}
+
+/** Format a data type + its modifiers as a single DDL-style string.
+ *  Erwin / ER Studio / PowerDesigner convention: numeric(18,2),
+ *  varchar(255), vector(1024), time(6). Matches what practitioners
+ *  read in DDL scripts at a glance. */
+export function formatDataType(
+  dataType: string | null | undefined,
+  precision: number | null,
+  scale: number | null,
+  length: number | null,
+): string {
+  if (!dataType) return '—';
+  const kind = typeModifierKind(dataType);
+  if (kind === 'precision+scale') {
+    if (precision == null && scale == null) return dataType;
+    if (scale == null) return `${dataType}(${precision})`;
+    return `${dataType}(${precision},${scale})`;
+  }
+  if (kind === 'precision') {
+    if (precision == null) return dataType;
+    return `${dataType}(${precision})`;
+  }
+  if (kind === 'length') {
+    if (length == null) return dataType;
+    return `${dataType}(${length})`;
+  }
+  return dataType;
+}
+
+/** Combined Data Type + size-modifier cell. Displays the type in
+ *  DDL-style shorthand (numeric(18,2)) when not focused; reveals the
+ *  dropdown + precision/scale/length inputs when the user clicks in
+ *  to edit. Exits edit mode when focus leaves the cell. Matches the
+ *  Erwin / ER Studio convention of showing the full type as a single
+ *  glanceable unit in the attribute grid. */
+function DataTypeCell({
+  attr,
+  disabled,
+  onCommitDataType,
+  onCommitPrecision,
+  onCommitScale,
+  onCommitLength,
+}: {
+  attr: AttributeSummary;
+  disabled: boolean;
+  onCommitDataType: (next: string) => Promise<void>;
+  onCommitPrecision: (raw: string) => Promise<void>;
+  onCommitScale: (raw: string) => Promise<void>;
+  onCommitLength: (raw: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const kind = typeModifierKind(attr.dataType);
+  const displayValue = formatDataType(attr.dataType, attr.precision, attr.scale, attr.length);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        data-testid="attribute-datatype-display"
+        onClick={() => setEditing(true)}
+        disabled={disabled}
+        title="Click to change type or size"
+        className="w-full rounded-sm border border-transparent bg-transparent px-1.5 py-1 text-left font-mono text-[11px] text-text-primary hover:border-white/10 hover:bg-surface-1/40 focus:border-accent/40 focus:bg-surface-1/70 focus:outline-none"
+      >
+        {attr.dataType ? displayValue : <span className="text-text-secondary/40">—</span>}
+      </button>
+    );
+  }
+
+  const inputClass =
+    'w-10 rounded-sm border border-white/10 bg-surface-1/60 px-1 py-1 text-center font-mono text-[11px] text-text-primary focus:border-accent/40 focus:outline-none';
+
+  return (
+    <div
+      className="flex items-center gap-0.5"
+      onBlur={(e) => {
+        // Exit edit mode only when focus leaves the cell entirely —
+        // moving between the dropdown and the size inputs should stay
+        // in edit mode.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setEditing(false);
+        }
+      }}
+    >
+      <select
+        data-testid="attribute-datatype"
+        autoFocus
+        value={attr.dataType ?? ''}
+        onChange={(e) => void onCommitDataType(e.target.value)}
+        disabled={disabled}
+        style={{ colorScheme: 'dark' }}
+        className="flex-1 rounded-sm border border-white/10 bg-surface-1/60 px-1.5 py-1 font-mono text-[11px] text-text-primary focus:border-accent/40 focus:outline-none"
+      >
+        <option value="" className="bg-surface-2 text-text-primary">
+          —
+        </option>
+        {DATA_TYPES.map((t) => (
+          <option key={t} value={t} className="bg-surface-2 text-text-primary">
+            {t}
+          </option>
+        ))}
+      </select>
+      {(kind === 'precision+scale' || kind === 'precision') && (
+        <input
+          data-testid="attribute-precision"
+          defaultValue={attr.precision ?? ''}
+          onBlur={(e) => void onCommitPrecision(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+          }}
+          disabled={disabled}
+          placeholder={kind === 'precision+scale' ? 'p' : 'dim'}
+          title={
+            kind === 'precision+scale'
+              ? 'Precision — total digits, e.g. 18'
+              : 'Dimensions — e.g. 1024 for OpenAI embeddings'
+          }
+          className={inputClass}
+        />
+      )}
+      {kind === 'precision+scale' && (
+        <>
+          <span className="text-text-secondary/50">,</span>
+          <input
+            data-testid="attribute-scale"
+            defaultValue={attr.scale ?? ''}
+            onBlur={(e) => void onCommitScale(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+            }}
+            disabled={disabled}
+            placeholder="s"
+            title="Scale — digits after decimal, e.g. 2"
+            className={inputClass}
+          />
+        </>
+      )}
+      {kind === 'length' && (
+        <input
+          data-testid="attribute-length"
+          defaultValue={attr.length ?? ''}
+          onBlur={(e) => void onCommitLength(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+          }}
+          disabled={disabled}
+          placeholder="len"
+          title="Length — max characters, e.g. 255"
+          className={`${inputClass} w-14`}
+        />
+      )}
+    </div>
+  );
+}
+
+function AttributeRow({
+  attr,
+  layer,
+  selected,
+  isBusy,
+  onSelect,
+  onUpdate,
+  onDelete,
+  allAttributes,
+}: RowProps) {
   const {
     attributes: dndAttributes,
     listeners,
@@ -382,7 +714,51 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
 
   async function commitDataType(next: string) {
     if (next === (attr.dataType ?? '')) return;
-    await onUpdate({ dataType: next || null });
+    // Dropping or switching to a type that doesn't accept a modifier
+    // should clear any stale precision/scale/length so the attribute
+    // doesn't retain orphaned modifiers (e.g. numeric→boolean).
+    const kind = typeModifierKind(next || null);
+    const patch: AttributeUpdate = { dataType: next || null };
+    if (kind === 'none') {
+      patch.precision = null;
+      patch.scale = null;
+      patch.length = null;
+    } else if (kind === 'precision') {
+      patch.scale = null;
+      patch.length = null;
+    } else if (kind === 'precision+scale') {
+      patch.length = null;
+    } else if (kind === 'length') {
+      patch.precision = null;
+      patch.scale = null;
+    }
+    await onUpdate(patch);
+  }
+
+  function parseSizeInput(raw: string): number | null {
+    const trimmed = raw.trim();
+    if (trimmed === '') return null;
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) return null;
+    return n;
+  }
+
+  async function commitPrecision(raw: string) {
+    const next = parseSizeInput(raw);
+    if (next === attr.precision) return;
+    await onUpdate({ precision: next });
+  }
+
+  async function commitScale(raw: string) {
+    const next = parseSizeInput(raw);
+    if (next === attr.scale) return;
+    await onUpdate({ scale: next });
+  }
+
+  async function commitLength(raw: string) {
+    const next = parseSizeInput(raw);
+    if (next === attr.length) return;
+    await onUpdate({ length: next });
   }
 
   async function commitClassification(next: string) {
@@ -406,6 +782,21 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
     await onUpdate({ [field]: !attr[field] });
   }
 
+  async function commitAltKeyGroup(next: string) {
+    // "" = None (clear); "__new__" = allocate next unused AKn.
+    // Any other value is an AKn literal the dropdown already offered.
+    let resolved: string | null;
+    if (next === '' || next === 'none') {
+      resolved = null;
+    } else if (next === '__new__') {
+      resolved = nextAltKeyGroup(allAttributes);
+    } else {
+      resolved = next;
+    }
+    if ((resolved ?? null) === (attr.altKeyGroup ?? null)) return;
+    await onUpdate({ altKeyGroup: resolved });
+  }
+
   return (
     <tr
       ref={setNodeRef}
@@ -414,6 +805,7 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
       data-attribute-id={attr.id}
       data-selected={selected ? 'true' : 'false'}
       onClick={onSelect}
+      title={attr.description?.trim() || undefined}
       className={[
         'group cursor-pointer transition-colors',
         // Zebra stripe; barely-there rhythm.
@@ -466,25 +858,18 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
         />
       </td>
 
-      {/* Data Type */}
+      {/* Data Type + size modifiers — combined Erwin-style display
+          (numeric(18,2), varchar(255), vector(1024)). Click the cell to
+          edit the type + size separately. */}
       <td className="border-b border-white/5 px-2 py-0.5 align-middle">
-        <select
-          data-testid="attribute-datatype"
-          value={attr.dataType ?? ''}
-          onChange={(e) => void commitDataType(e.target.value)}
+        <DataTypeCell
+          attr={attr}
           disabled={isBusy}
-          style={{ colorScheme: 'dark' }}
-          className="w-full rounded-sm border border-transparent bg-transparent px-1.5 py-1 font-mono text-[11px] text-text-primary hover:border-white/10 focus:border-accent/40 focus:bg-surface-1/70 focus:outline-none"
-        >
-          <option value="" className="bg-surface-2 text-text-primary">
-            —
-          </option>
-          {DATA_TYPES.map((t) => (
-            <option key={t} value={t} className="bg-surface-2 text-text-primary">
-              {t}
-            </option>
-          ))}
-        </select>
+          onCommitDataType={commitDataType}
+          onCommitPrecision={commitPrecision}
+          onCommitScale={commitScale}
+          onCommitLength={commitLength}
+        />
       </td>
 
       {/* PK */}
@@ -536,6 +921,48 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
         />
       </td>
 
+      {/* AK — alt key group picker. Columns sharing an AKn label form
+          one composite business key. Selecting "New group…" allocates
+          the next unused AKn on the entity (AK1 → AK2 → …). */}
+      <td className="border-b border-white/5 px-1 py-0.5 text-center align-middle">
+        <select
+          data-testid="attribute-ak-picker"
+          value={attr.altKeyGroup ?? ''}
+          onChange={(e) => void commitAltKeyGroup(e.target.value)}
+          disabled={isBusy}
+          onClick={(e) => e.stopPropagation()}
+          style={{ colorScheme: 'dark' }}
+          title={
+            attr.altKeyGroup
+              ? `Alt key group ${attr.altKeyGroup} — NN + UQ auto-enforced at DDL export.`
+              : 'Assign this column to an alt key group (composite business key).'
+          }
+          className={[
+            'w-full rounded-sm border px-1 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider',
+            'hover:border-white/20 focus:border-accent/40 focus:bg-surface-1/70 focus:outline-none',
+            attr.altKeyGroup
+              ? 'border-amber-400/40 bg-amber-500/10 text-amber-300'
+              : 'border-transparent bg-transparent text-text-secondary/50',
+          ].join(' ')}
+        >
+          <option value="" className="bg-surface-2 text-text-primary">
+            —
+          </option>
+          <option value="AK1" className="bg-surface-2 text-text-primary">
+            AK1
+          </option>
+          <option value="AK2" className="bg-surface-2 text-text-primary">
+            AK2
+          </option>
+          <option value="AK3" className="bg-surface-2 text-text-primary">
+            AK3
+          </option>
+          <option value="__new__" className="bg-surface-2 text-text-primary">
+            New group…
+          </option>
+        </select>
+      </td>
+
       {/* Classification — dropdown. `color-scheme: dark` tells the OS
           to render the native option list in dark mode so it matches
           our glass UI instead of flashing a bright white panel. */}
@@ -571,18 +998,6 @@ function AttributeRow({ attr, layer, selected, isBusy, onSelect, onUpdate, onDel
             </option>
           ))}
         </select>
-      </td>
-
-      {/* Definition — read-only preview; the editor lives on the
-          Documentation tab below. */}
-      <td className="border-b border-white/5 px-2 py-0.5 align-middle">
-        <div
-          data-testid="attribute-definition-preview"
-          title={attr.description ?? 'Read-only. Edit in the Documentation tab.'}
-          className="w-full min-w-0 truncate px-1.5 py-1 text-[11px] italic text-text-secondary/70"
-        >
-          {attr.description?.trim() ? attr.description : '—'}
-        </div>
       </td>
 
       {/* Delete */}

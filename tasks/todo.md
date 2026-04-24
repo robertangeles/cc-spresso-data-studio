@@ -131,6 +131,133 @@ the project memory at `project_model_studio_state.md` — use it.
       idempotent but follow the older pattern. Not urgent — they're
       explicit row-existence checks, not bulk UPDATEs.
 
+## Step 6 follow-ups (deferred from Phase 6 Playwright build)
+
+- [ ] **Entity-delete undo via soft-delete / restore endpoint.** Step 6 ships undo/redo for rel CRUD, attr CRUD, entity create+update, notation flip, and canvas drag. Entity DELETE is intentionally not reversible in MVP (cascades across attrs, rels, layer_links, canvas positions — replay requires either tombstones across the whole schema OR ID-preserving restore endpoints). See tasks/alignment-step6-patch.md §2.3 for the decision + rationale.
+
+- [x] Step 6 Showcase seed script — packages/server/src/scripts/seed-step6-showcase.ts. Run with `pnpm -C packages/server db:seed-step6-showcase`. Idempotent via runOnce.
+
+- [x] **Fixture auth rescue (S6-E2 / E5 / E6 / E7 / E8 + new
+      E11/E12 unblocked).** Spec refactored to the `dependencies:
+['setup']` project chain — one login per run via `setup`,
+      one `POST /api/auth/refresh` per suite to mint an access token
+      for API calls. Zero per-test logins, zero rate-limit burn.
+      See the header comment of
+      `packages/client/tests/e2e/model-studio-relationships.spec.ts`
+      for full strategy.
+- [ ] **S6-E1 / E3 / E4 — React Flow v12 drag-to-connect automation.**
+      Still `.fixme` in
+      `packages/client/tests/e2e/model-studio-relationships.spec.ts`.
+      Playwright's `mouse.down/move/up` sequence is not a reliable
+      driver for React Flow v12's connection mode — the synthetic
+      PointerEvents either pan the canvas or release before the
+      target handle is registered as the drop target. Options to
+      explore in a dedicated follow-up session: (a) switch to
+      `page.dispatchEvent('pointermove')` with explicit PointerEvent
+      init dicts, (b) add a test-only keyboard command `Alt+C` on
+      the source handle that starts React Flow connection mode
+      without drag, (c) drive connection via the React Flow
+      `onConnectStart`/`onConnectEnd` internals using a `page.evaluate`
+      hook. Drag-dependent cases unblock after one of these lands.
+- [x] **S6-E13 — cardinality glyphs visible in edge SVG.** GREEN after
+      Agent C's smoothstep + outward-glyph fix. Playwright asserts
+      `[data-glyph]` elements render outside the entity node bbox.
+- [ ] **S6-E14 — self-ref arc assertion tuning.** Agent C's fix makes
+      the arc visible (screenshot confirmed — `agent-c-selfref.png`),
+      but the Playwright assertion Agent F wrote speculatively expected
+      a specific path `d` attribute format and doesn't match the final
+      two-arc geometry (`M sx sy A 22 22 0 0 1 ... A 22 22 0 0 1 ...`).
+      Needs an assertion re-tune: check for `data-self-ref="true"` +
+      assert the path starts with `M ` AND contains `A 22 22` instead
+      of the current tighter regex. Currently `.fixme` in
+      `packages/client/tests/e2e/model-studio-relationships.spec.ts`.
+- [ ] **S6-E15 — undo create rel (⌘Z) assertion tuning.** Agent A's
+      undo core is live (128/128 unit green incl. 11 undo tests), but
+      the Playwright keyboard-dispatch assertion needs adjustment —
+      `page.keyboard.press('Control+Z')` on the canvas may not reach
+      the document-level keydown handler while React Flow has focus.
+      Needs `document.dispatchEvent(new KeyboardEvent('keydown', ...))`
+      pattern (same technique Agent F used for E6's Delete key). Test
+      written; `.fixme`.
+- [ ] **S6-E16 — undo notation flip (⌘Z) assertion tuning.** Same
+      keyboard-dispatch root cause as E15. Same fix. `.fixme`.
+- [ ] **S6-E9 — two-tab BroadcastChannel notation sync E2E.** Currently
+      `.fixme` in
+      `packages/client/tests/e2e/model-studio-relationships.spec.ts`.
+      Root cause: the per-test fixture launches each Playwright
+      `BrowserContext` in its own Chromium process, and
+      `BroadcastChannel` does not cross process boundaries — so a
+      notation flip in context A is never received in context B.
+      Options for un-fixme: (a) add one dedicated test that shares a
+      single `BrowserContext` across two `page`s (without breaking the
+      existing per-test auth-injection pattern), or (b) lean on
+      `S6-U21` (`useNotation` BroadcastChannel unit test) as sufficient
+      coverage. Pick one in a follow-up phase.
+- [ ] **S6-E10 — `⌘R` keyboard-draw flow.** Currently `.fixme` in the
+      same spec. There is no keyboard-draw handler on
+      `ModelStudioCanvas.tsx` today — Phase 6 investigation confirms
+      zero references to KeyR / metaKey / `'r'` anywhere in the
+      model-studio tree. Ship the handler (select source entity →
+      `⌘R` → select target → `Enter` creates the rel) then un-fixme
+      the test.
+
+- [ ] **Candidate-key-referenced foreign keys (alt-key FK targets).**
+      Today every FK references the source entity's primary key. Standard
+      SQL allows an FK to reference any column (or column-set) with a
+      UNIQUE constraint — a candidate key — which Erwin + ER Studio both
+      support as "alternate-key FK" / "role-named FK".
+
+      Gap evidence:
+        - [packages/server/src/services/model-studio-relationship-propagate.service.ts:296](packages/server/src/services/model-studio-relationship-propagate.service.ts#L296)
+          only SELECTs source attrs with `isPrimaryKey = true`; UQ-only
+          columns and AK-group members are skipped.
+        - [packages/server/src/services/model-studio-relationship.service.ts:989](packages/server/src/services/model-studio-relationship.service.ts#L989)
+          `setKeyColumns` rejects any non-PK source attribute.
+        - Relationship row has no `referencedColumn` metadata — DDL
+          generation in Step 9 will have to default to the PK.
+
+      Scope when picked up:
+        1. Schema: add `source_attribute_ids uuid[]` OR equivalent
+           per-pair metadata on the propagated FK attr so DDL can emit
+           the right `REFERENCES <entity>(<col>)` clause. Keep
+           backward-compat default to PK.
+        2. Server: relax the PK check in propagate-service + setKeyColumns
+           to allow `isPrimaryKey=true OR isUnique=true OR altKeyGroup
+           IS NOT NULL` as eligible source. Reject anything else with
+           a clear 422.
+        3. Client: RelationshipPanel's Key Columns section — add a
+           second "Source column" dropdown on each row so the user can
+           pick from any candidate key on the source entity (default =
+           a PK row per PK). Composite AKs need their member columns
+           listed together.
+        4. DDL (Step 9): emit correct REFERENCES clause based on the
+           persisted referenced column(s).
+      Blocked by: nothing. Additive; PK-referenced stays the default
+      path. Rough effort: 2-3 hrs.
+
+- [ ] **EntityEditor: tabbed property sheet (Erwin convention).**
+      Convert the EntityEditor header (name / business name /
+      definition / actions) into a compact row + tabs below:
+      **Attributes** (default) | Definition | Keys | Documentation.
+      Rationale: Erwin + ER Studio + PowerDesigner all ship this
+      exact UX — it's the convention senior CDMP practitioners expect,
+      and it keeps the attribute grid (the working surface) on screen
+      while isolating prose / keys / docs to their own tabs. This PR
+      (`feature/model-studio-step6-relationships`) ships Direction A
+      (collapsible Definition with 1-line preview + localStorage
+      persistence) in
+      [packages/client/src/components/model-studio/EntityEditor.tsx](packages/client/src/components/model-studio/EntityEditor.tsx)
+      as the quick win — 1hr, zero new abstractions, immediate fix
+      for "long Definition pushes grid off-screen". The tabbed
+      refactor is deferred because it's ~4-6hrs of scaffolding (tab
+      container + route state + migrating the existing Row 4 /
+      action-strip sections + updating Playwright selectors) that
+      doesn't block the demo. Where to start: model the tabs as a
+      reusable `<PropertySheetTabs>` primitive since the
+      `AttributePropertyEditor` (already tabbed) can adopt the same
+      component in a follow-up pass. Blocked by: nothing — can ship
+      any time after Step 6 merges.
+
 ## Phase 1 (legacy content-builder scaffold — pre-rebrand, kept for history)
 
 - [x] Monorepo scaffold

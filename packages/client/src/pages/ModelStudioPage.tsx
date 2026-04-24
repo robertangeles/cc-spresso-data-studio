@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Boxes,
@@ -12,11 +12,17 @@ import {
   Building2,
   Briefcase,
   FolderKanban,
+  MoreVertical,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { useModelStudioFlag } from '../hooks/useModelStudioFlag';
 import { useModels, type DataModelSummary } from '../hooks/useModels';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/ui/Toast';
 import { CreateModelDialog } from '../components/model-studio/CreateModelDialog';
+import { EditModelDialog } from '../components/model-studio/EditModelDialog';
+import { DeleteModelDialog } from '../components/model-studio/DeleteModelDialog';
 
 /**
  * Model Studio page — Step 2.
@@ -38,15 +44,32 @@ export function ModelStudioPage() {
   // Call useModels unconditionally to keep hook order stable even when the
   // flag is OFF (the hook's effect short-circuits via the eventual 404 from
   // the feature-flag gate, which is harmless).
-  const { models, total, isLoading: modelsLoading, refresh } = useModels();
+  const { models, total, isLoading: modelsLoading, refresh, update, remove } = useModels();
+  const { toast } = useToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<DataModelSummary | null>(null);
+  const [deletingModel, setDeletingModel] = useState<DataModelSummary | null>(null);
   const navigate = useNavigate();
 
   const handleCreated = (m: DataModelSummary) => {
     setDialogOpen(false);
     refresh();
     navigate(`/model-studio/${m.id}`);
+  };
+
+  const handleSaveEdit = async (patch: { name?: string; description?: string | null }) => {
+    if (!editingModel) return;
+    await update(editingModel.id, patch);
+    toast(`Model "${patch.name ?? editingModel.name}" updated`, 'success');
+    void refresh();
+  };
+
+  const handleDeleteConfirmed = async (id: string) => {
+    const name = deletingModel?.name ?? 'Model';
+    await remove(id);
+    toast(`Model "${name}" deleted`, 'success');
+    void refresh();
   };
 
   if (flagLoading || !enabled) {
@@ -67,6 +90,8 @@ export function ModelStudioPage() {
           total={total}
           onCreateClick={() => setDialogOpen(true)}
           onOpen={(id) => navigate(`/model-studio/${id}`)}
+          onEdit={(m) => setEditingModel(m)}
+          onDelete={(m) => setDeletingModel(m)}
         />
       )}
       {view === 'empty' && <ModelStudioEmptyState onStartBlank={() => setDialogOpen(true)} />}
@@ -74,6 +99,16 @@ export function ModelStudioPage() {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onCreated={handleCreated}
+      />
+      <EditModelDialog
+        model={editingModel}
+        onClose={() => setEditingModel(null)}
+        onSave={handleSaveEdit}
+      />
+      <DeleteModelDialog
+        model={deletingModel}
+        onClose={() => setDeletingModel(null)}
+        onDelete={handleDeleteConfirmed}
       />
     </>
   );
@@ -345,11 +380,15 @@ function ModelsLibraryView({
   total,
   onCreateClick,
   onOpen,
+  onEdit,
+  onDelete,
 }: {
   models: DataModelSummary[];
   total: number;
   onCreateClick: () => void;
   onOpen: (id: string) => void;
+  onEdit: (m: DataModelSummary) => void;
+  onDelete: (m: DataModelSummary) => void;
 }) {
   const groups = groupModels(models);
   const clientCount = groups.filter((g) => g.clientName).length;
@@ -401,13 +440,29 @@ function ModelsLibraryView({
       </header>
 
       {groups.map((g, i) => (
-        <ClientSection key={g.clientId ?? `no-client-${i}`} group={g} onOpen={onOpen} />
+        <ClientSection
+          key={g.clientId ?? `no-client-${i}`}
+          group={g}
+          onOpen={onOpen}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
       ))}
     </div>
   );
 }
 
-function ClientSection({ group, onOpen }: { group: GroupByClient; onOpen: (id: string) => void }) {
+function ClientSection({
+  group,
+  onOpen,
+  onEdit,
+  onDelete,
+}: {
+  group: GroupByClient;
+  onOpen: (id: string) => void;
+  onEdit: (m: DataModelSummary) => void;
+  onDelete: (m: DataModelSummary) => void;
+}) {
   const displayLabel = group.clientName ?? 'Direct under organisation';
   return (
     <section className="relative flex flex-col gap-5">
@@ -447,7 +502,13 @@ function ClientSection({ group, onOpen }: { group: GroupByClient; onOpen: (id: s
 
       <div className="flex flex-col gap-8 pl-4 border-l border-white/5">
         {group.projects.map((p) => (
-          <ProjectShelf key={p.projectId} project={p} onOpen={onOpen} />
+          <ProjectShelf
+            key={p.projectId}
+            project={p}
+            onOpen={onOpen}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
         ))}
       </div>
     </section>
@@ -457,9 +518,13 @@ function ClientSection({ group, onOpen }: { group: GroupByClient; onOpen: (id: s
 function ProjectShelf({
   project,
   onOpen,
+  onEdit,
+  onDelete,
 }: {
   project: GroupByProject;
   onOpen: (id: string) => void;
+  onEdit: (m: DataModelSummary) => void;
+  onDelete: (m: DataModelSummary) => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -474,14 +539,30 @@ function ProjectShelf({
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {project.models.map((m) => (
-          <ModelCard key={m.id} model={m} onOpen={() => onOpen(m.id)} />
+          <ModelCard
+            key={m.id}
+            model={m}
+            onOpen={() => onOpen(m.id)}
+            onEdit={() => onEdit(m)}
+            onDelete={() => onDelete(m)}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function ModelCard({ model, onOpen }: { model: DataModelSummary; onOpen: () => void }) {
+function ModelCard({
+  model,
+  onOpen,
+  onEdit,
+  onDelete,
+}: {
+  model: DataModelSummary;
+  onOpen: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const layerColor =
     model.activeLayer === 'conceptual'
       ? 'text-amber-300 border-amber-300/30 bg-amber-300/5'
@@ -489,15 +570,29 @@ function ModelCard({ model, onOpen }: { model: DataModelSummary; onOpen: () => v
         ? 'text-sky-300 border-sky-300/30 bg-sky-300/5'
         : 'text-emerald-300 border-emerald-300/30 bg-emerald-300/5';
 
+  // Card is a div (not button) so the kebab menu can live inside
+  // without nesting interactive elements. Keyboard users get a
+  // focusable region + Enter/Space activation.
+  const handleKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onOpen();
+    }
+  };
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
+      onKeyDown={handleKey}
       className={[
         'group relative flex flex-col gap-3 rounded-2xl border p-5 text-left min-h-[172px]',
-        'bg-surface-2/50 backdrop-blur border-white/5',
+        'bg-surface-2/50 backdrop-blur border-white/5 cursor-pointer',
         'transition-all duration-300 ease-out',
         'hover:-translate-y-1 hover:border-accent/40 hover:shadow-[0_0_24px_rgba(255,214,10,0.18)]',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
       ].join(' ')}
     >
       <div className="flex items-center justify-between">
@@ -509,7 +604,10 @@ function ModelCard({ model, onOpen }: { model: DataModelSummary; onOpen: () => v
         >
           {model.activeLayer}
         </span>
-        <ArrowRight className="h-3.5 w-3.5 text-text-secondary/40 group-hover:text-accent transition-colors" />
+        <div className="flex items-center gap-1">
+          <ModelCardMenu onEdit={onEdit} onDelete={onDelete} />
+          <ArrowRight className="h-3.5 w-3.5 text-text-secondary/40 group-hover:text-accent transition-colors" />
+        </div>
       </div>
 
       <h3 className="text-sm font-semibold text-text-primary line-clamp-1 leading-snug">
@@ -533,7 +631,101 @@ function ModelCard({ model, onOpen }: { model: DataModelSummary; onOpen: () => v
         </span>
         <span className="tabular-nums">{relativeTime(model.updatedAt)}</span>
       </div>
-    </button>
+    </div>
+  );
+}
+
+/**
+ * Kebab menu per model card — Edit / Delete. Erwin-style: hidden in
+ * resting state, revealed on hover/focus, so the card surface stays
+ * uncluttered for the library view. stopPropagation on every click so
+ * the parent card's navigation doesn't fire.
+ */
+function ModelCardMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const k = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    document.addEventListener('keydown', k);
+    return () => {
+      document.removeEventListener('mousedown', h);
+      document.removeEventListener('keydown', k);
+    };
+  }, [open]);
+
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  return (
+    <div ref={ref} className="relative" onClick={stop} onKeyDown={stop}>
+      <button
+        type="button"
+        aria-label="Model actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-testid="model-card-menu"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className={[
+          'inline-flex h-6 w-6 items-center justify-center rounded-md',
+          'text-text-secondary/60 hover:text-text-primary hover:bg-surface-1/50',
+          'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+          'transition-opacity',
+          open ? 'opacity-100 bg-surface-1/50 text-text-primary' : '',
+        ].join(' ')}
+      >
+        <MoreVertical className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className={[
+            'absolute right-0 top-7 z-30 w-40 overflow-hidden rounded-lg',
+            'bg-surface-2 border border-white/10',
+            'shadow-[0_8px_24px_rgba(0,0,0,0.5)]',
+          ].join(' ')}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="model-card-edit"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+              onEdit();
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-surface-1/60 transition-colors"
+          >
+            <Pencil className="h-3 w-3 text-text-secondary" />
+            Edit model
+          </button>
+          <div className="h-px bg-white/5" />
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="model-card-delete"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+              onDelete();
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 transition-colors"
+          >
+            <Trash2 className="h-3 w-3" />
+            Delete model
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

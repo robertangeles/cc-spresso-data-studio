@@ -227,3 +227,225 @@ describe('formatAuditEvent — edge cases', () => {
     expect(lines.length).toBeGreaterThan(0);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// Step 6 — relationship-scoped phrases (S6-U22)
+// ────────────────────────────────────────────────────────────────────
+
+describe('formatAuditEvent — relationship actions (S6-U22)', () => {
+  it('create rel → "Linked X to Y (srcCard:tgtCard, identifying)"', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'create',
+        objectType: 'relationship',
+        afterState: {
+          source: { name: 'Customer' },
+          target: { name: 'Order' },
+          sourceCardinality: 'one',
+          targetCardinality: 'many',
+          isIdentifying: true,
+        },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toBe('Linked Customer to Order (one:many, identifying).');
+  });
+
+  it('create rel non-identifying → no identifying tail', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'create',
+        objectType: 'relationship',
+        afterState: {
+          source: { name: 'A' },
+          target: { name: 'B' },
+          sourceCardinality: 'one',
+          targetCardinality: 'many',
+          isIdentifying: false,
+        },
+      }),
+    );
+    expect(lines).toEqual(['Linked A to B (one:many).']);
+  });
+
+  it('update rel cardinality renders as many→one arrow', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        objectType: 'relationship',
+        beforeState: { targetCardinality: 'many' },
+        afterState: { targetCardinality: 'one' },
+      }),
+    );
+    expect(lines).toEqual(['Changed target cardinality from many→one.']);
+  });
+
+  it('update rel isIdentifying true↔false phrases as state toggles', () => {
+    const on = formatAuditEvent(
+      event({
+        action: 'update',
+        objectType: 'relationship',
+        beforeState: { isIdentifying: false },
+        afterState: { isIdentifying: true },
+      }),
+    );
+    expect(on).toEqual(['Marked as identifying.']);
+
+    const off = formatAuditEvent(
+      event({
+        action: 'update',
+        objectType: 'relationship',
+        beforeState: { isIdentifying: true },
+        afterState: { isIdentifying: false },
+      }),
+    );
+    expect(off).toEqual(['Unmarked as identifying.']);
+  });
+
+  it('update rel rename phrases as "Renamed to X"', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        objectType: 'relationship',
+        beforeState: { name: 'owns' },
+        afterState: { name: 'has_many' },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Renamed to');
+    expect(lines[0]).toContain('has_many');
+  });
+
+  it('delete rel → "Removed relationship X→Y"', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'delete',
+        objectType: 'relationship',
+        beforeState: {
+          source: { name: 'Customer' },
+          target: { name: 'Order' },
+        },
+      }),
+    );
+    expect(lines).toEqual(['Removed relationship Customer→Order.']);
+  });
+
+  it('propagate action narrates count + attribute names', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'propagate',
+        objectType: 'relationship',
+        afterState: {
+          propagatedCount: 3,
+          propagatedAttributeNames: ['customer_id', 'region_id', 'tenant_id'],
+        },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('3 composite PK attributes');
+    expect(lines[0]).toContain('customer_id');
+    expect(lines[0]).toContain('region_id');
+    expect(lines[0]).toContain('tenant_id');
+  });
+
+  it('unwind action narrates removed count', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'unwind',
+        objectType: 'relationship',
+        afterState: { unwoundCount: 2 },
+      }),
+    );
+    expect(lines).toEqual(['Removed 2 propagated PK attributes.']);
+  });
+
+  it('infer action narrates proposal count', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'infer',
+        objectType: 'relationship',
+        afterState: { proposalCount: 5 },
+      }),
+    );
+    expect(lines).toEqual(['Generated 5 relationship proposals from FK graph.']);
+  });
+});
+
+describe('formatAuditEvent — Step 6 Direction A phrases', () => {
+  it('narrates altKeyGroup assignment (null → AK1)', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { altKeyGroup: null },
+        afterState: { altKeyGroup: 'AK1' },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Flagged as');
+    expect(lines[0]).toContain('AK1');
+  });
+
+  it('narrates altKeyGroup clear (AK2 → null)', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { altKeyGroup: 'AK2' },
+        afterState: { altKeyGroup: null },
+      }),
+    );
+    expect(lines).toEqual(['Cleared alt key group.']);
+  });
+
+  it('narrates inverse verb phrase set (null → value)', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { inverseName: null },
+        afterState: { inverseName: 'is_managed_by' },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Set inverse verb phrase to');
+    expect(lines[0]).toContain('is_managed_by');
+  });
+
+  it('narrates display id assignment (null → E007)', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { displayId: null },
+        afterState: { displayId: 'E007' },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Assigned display id');
+    expect(lines[0]).toContain('E007');
+  });
+
+  it('narrates alt-key purpose set (empty → {AK1: "NI number"})', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { altKeyLabels: {} },
+        afterState: { altKeyLabels: { AK1: 'NI number' } },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Set');
+    expect(lines[0]).toContain('AK1');
+    expect(lines[0]).toContain('NI number');
+  });
+
+  it('narrates alt-key purpose cleared ({AK1: "X"} → {})', () => {
+    const lines = formatAuditEvent(
+      event({
+        action: 'update',
+        beforeState: { altKeyLabels: { AK1: 'NI number' } },
+        afterState: { altKeyLabels: {} },
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Cleared');
+    expect(lines[0]).toContain('AK1');
+  });
+});
