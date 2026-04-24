@@ -166,7 +166,7 @@ describe('RelationshipPanel — Key Columns section', () => {
     await waitFor(() => {
       expect(screen.getByTestId('rel-key-columns-no-pk')).toBeTruthy();
     });
-    expect(screen.getByTestId('rel-key-columns-no-pk').textContent).toMatch(/no primary key/i);
+    expect(screen.getByTestId('rel-key-columns-no-pk').textContent).toMatch(/no candidate key/i);
   });
 
   it('lists target-entity attrs as options and POSTs on change', async () => {

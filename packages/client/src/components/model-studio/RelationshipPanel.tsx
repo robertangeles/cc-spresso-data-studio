@@ -88,6 +88,11 @@ export interface RelationshipPanelProps {
   ) => Promise<Relationship | { conflict: true; serverVersion: number | null }>;
   onDelete: (relId: string) => Promise<void>;
   onConflict: () => void;
+  /** Invoked after a Key Columns mutation that may have changed target-
+   *  entity attributes (auto-FK created, manual FK tagged/untagged, or
+   *  a pair removed). Parent uses this to refresh the entity-card
+   *  attribute list so the canvas stays in sync with the DB. */
+  onAttributesMayHaveChanged?: () => Promise<void> | void;
 }
 
 export function RelationshipPanel(props: RelationshipPanelProps) {
@@ -295,6 +300,7 @@ function RelationshipShell(props: ShellProps) {
           auditLoading={auditLoading}
           onUpdate={onUpdate}
           onConflict={onConflict}
+          onAttributesMayHaveChanged={props.onAttributesMayHaveChanged}
         />
       </div>
     </aside>
@@ -483,6 +489,7 @@ function ActiveTabContent({
   auditLoading,
   onUpdate,
   onConflict,
+  onAttributesMayHaveChanged,
 }: {
   activeTab: TabId;
   relationship: Relationship;
@@ -492,6 +499,7 @@ function ActiveTabContent({
   auditLoading: boolean;
   onUpdate: RelationshipPanelProps['onUpdate'];
   onConflict: () => void;
+  onAttributesMayHaveChanged?: () => Promise<void> | void;
 }) {
   switch (activeTab) {
     case 'general':
@@ -502,6 +510,7 @@ function ActiveTabContent({
           target={target}
           onUpdate={onUpdate}
           onConflict={onConflict}
+          onAttributesMayHaveChanged={onAttributesMayHaveChanged}
         />
       );
     case 'cardinality':
@@ -553,12 +562,14 @@ function GeneralRelTab({
   target,
   onUpdate,
   onConflict,
+  onAttributesMayHaveChanged,
 }: {
   relationship: Relationship;
   source: EntitySummary | null;
   target: EntitySummary | null;
   onUpdate: RelationshipPanelProps['onUpdate'];
   onConflict: () => void;
+  onAttributesMayHaveChanged?: () => Promise<void> | void;
 }) {
   const { toast } = useToast();
   const [name, setName] = useState<string>(relationship.name ?? '');
@@ -655,7 +666,12 @@ function GeneralRelTab({
           className="w-full rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-1.5 font-mono text-sm text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
         />
       </Row>
-      <KeyColumnsSection relationship={relationship} source={source} target={target} />
+      <KeyColumnsSection
+        relationship={relationship}
+        source={source}
+        target={target}
+        onAttributesMayHaveChanged={onAttributesMayHaveChanged}
+      />
     </div>
   );
 }
@@ -674,10 +690,12 @@ function KeyColumnsSection({
   relationship,
   source,
   target,
+  onAttributesMayHaveChanged,
 }: {
   relationship: Relationship;
   source: EntitySummary | null;
   target: EntitySummary | null;
+  onAttributesMayHaveChanged?: () => Promise<void> | void;
 }) {
   const { toast } = useToast();
   const undo = useUndoStack();
@@ -719,7 +737,13 @@ function KeyColumnsSection({
       try {
         await undo.execute({
           label: 'Update key columns',
-          do: () => kc.setPair(pair.sourceAttributeId, nextTargetAttrId),
+          do: async () => {
+            await kc.setPair(pair.sourceAttributeId, nextTargetAttrId);
+            // Forward mutation may have auto-created an FK on target or
+            // re-tagged an existing attr — refresh the canvas entity
+            // cards so they reflect the new state. See lessons.md #32.
+            await onAttributesMayHaveChanged?.();
+          },
           undo: async () => {
             // Restore the prior pair list attr-by-attr. The server
             // accepts the full list via setPair per source-attr; we
@@ -727,6 +751,7 @@ function KeyColumnsSection({
             for (const prev of prevPairs) {
               await kc.setPair(prev.sourceAttributeId, prev.targetAttributeId);
             }
+            await onAttributesMayHaveChanged?.();
           },
         });
         toast('Key columns updated', 'success');
@@ -734,7 +759,35 @@ function KeyColumnsSection({
         // kc.error is already set — the banner will render it.
       }
     },
-    [kc, undo, toast],
+    [kc, undo, toast, onAttributesMayHaveChanged],
+  );
+
+  const onRemovePair = useCallback(
+    async (pair: RelationshipKeyColumnPair) => {
+      const prevTarget = pair.targetAttributeId;
+      const wasAutoCreated = pair.isAutoCreated;
+      try {
+        await undo.execute({
+          label: 'Remove key column pair',
+          do: async () => {
+            await kc.removePair(pair.sourceAttributeId);
+            // Deletes an auto FK or strips manual tags on target —
+            // entity card needs a refresh.
+            await onAttributesMayHaveChanged?.();
+          },
+          undo: async () => {
+            // Re-create the prior pair — server will auto-create if
+            // wasAutoCreated, or re-tag the named target otherwise.
+            await kc.setPair(pair.sourceAttributeId, wasAutoCreated ? null : prevTarget);
+            await onAttributesMayHaveChanged?.();
+          },
+        });
+        toast('Key column pair removed', 'success');
+      } catch {
+        // kc.error is already set — the banner will render it.
+      }
+    },
+    [kc, undo, toast, onAttributesMayHaveChanged],
   );
 
   const headerRow = (
@@ -755,12 +808,12 @@ function KeyColumnsSection({
         <div className="rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-2 text-[11px] text-text-secondary/70">
           Loading key columns...
         </div>
-      ) : kc.sourceHasNoPk ? (
+      ) : (kc.sourceHasNoCandidateKey ?? kc.sourceHasNoPk) ? (
         <div
           data-testid="rel-key-columns-no-pk"
           className="rounded-md border border-amber-400/40 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-100"
         >
-          Source entity has no primary key — add one to enable FK propagation.
+          Source entity has no candidate key (PK or AK) — add one to enable FK pairing.
         </div>
       ) : kc.error ? (
         <div
@@ -779,16 +832,53 @@ function KeyColumnsSection({
             const optionsForPair = targetAttrs.filter(
               (a) => a.id === p.targetAttributeId || !boundAttrIds.has(a.id),
             );
-            // An auto-created FK is server-managed — show it as
-            // "Auto-create (...)" even though a target attr exists. A
-            // user-chosen attr (isAutoCreated=false) shows as
-            // "Existing: <name>". Empty string = auto-create option.
-            const selectValue = p.isAutoCreated ? '' : (p.targetAttributeId ?? '');
+            const role = p.sourceAttributeRole ?? 'pk';
+            // Dropdown value semantics differ by role:
+            //   PK → '' = Auto-create (default behavior for PKs);
+            //        UUID = Existing target attr
+            //   AK/UQ → '' = — not paired — (default; no FK on target);
+            //           '__auto__' = Auto-create;
+            //           UUID = Existing target attr
+            //
+            // For AK/UQ, distinguishing "unpaired" from "auto-create"
+            // prevents the UI from showing "Auto-create" as the selected
+            // state when the actual DB state is "no FK paired" — which
+            // happens e.g. after the user deletes a manually-paired FK
+            // attribute on the target entity.
+            let selectValue: string;
+            if (role === 'pk') {
+              selectValue = p.isAutoCreated ? '' : (p.targetAttributeId ?? '');
+            } else if (p.isAutoCreated) {
+              selectValue = '__auto__';
+            } else if (p.targetAttributeId) {
+              selectValue = p.targetAttributeId;
+            } else {
+              selectValue = '';
+            }
+            const roleBadgeClass =
+              role === 'pk'
+                ? 'border-accent/50 bg-accent/15 text-accent'
+                : role === 'ak'
+                  ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-300'
+                  : 'border-sky-400/50 bg-sky-500/10 text-sky-300';
+            const roleLabel = role === 'pk' ? 'PK' : role === 'ak' ? 'AK' : 'UQ';
             return (
               <div
                 key={p.sourceAttributeId}
                 className="flex items-center gap-2 rounded-md border border-white/10 bg-surface-1/40 px-2.5 py-1.5"
               >
+                <span
+                  className={`inline-flex h-4 min-w-[22px] items-center justify-center rounded border px-1 font-mono text-[9px] font-semibold uppercase tracking-wide ${roleBadgeClass}`}
+                  title={
+                    role === 'pk'
+                      ? 'Primary key'
+                      : role === 'ak'
+                        ? 'Alternate key'
+                        : 'Unique (candidate key)'
+                  }
+                >
+                  {roleLabel}
+                </span>
                 <span className="font-mono text-xs text-text-primary">
                   {(source?.name ?? '?') + '.' + p.sourceAttributeName}
                 </span>
@@ -799,11 +889,35 @@ function KeyColumnsSection({
                   value={selectValue}
                   onChange={(e) => {
                     const raw = e.target.value;
-                    void onChangePair(p, raw === '' ? null : raw);
+                    // PK '' = auto-create (backward compat).
+                    // AK/UQ '' = not paired:
+                    //   - if currently unpaired → no-op
+                    //   - if currently paired/auto → server-side remove
+                    // AK/UQ '__auto__' → auto-create (null target).
+                    // Any UUID → manual pair.
+                    if (role === 'pk') {
+                      void onChangePair(p, raw === '' ? null : raw);
+                      return;
+                    }
+                    if (raw === '') {
+                      if (!p.targetAttributeId && !p.isAutoCreated) return;
+                      void onRemovePair(p);
+                      return;
+                    }
+                    if (raw === '__auto__') {
+                      void onChangePair(p, null);
+                      return;
+                    }
+                    void onChangePair(p, raw);
                   }}
                   className="ml-auto rounded-md border border-white/10 bg-surface-1/60 px-2 py-1 font-mono text-xs text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
                 >
-                  <option value="">{`Auto-create (${p.sourceAttributeName})`}</option>
+                  <option value="">
+                    {role === 'pk' ? `Auto-create (${p.sourceAttributeName})` : '— not paired —'}
+                  </option>
+                  {role !== 'pk' && (
+                    <option value="__auto__">{`Auto-create (${p.sourceAttributeName})`}</option>
+                  )}
                   {optionsForPair.map((a) => (
                     <option key={a.id} value={a.id}>
                       {`Existing: ${a.name}`}
