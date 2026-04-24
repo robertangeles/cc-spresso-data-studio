@@ -358,59 +358,44 @@ function RelationshipEdgeComponent(props: EdgeProps) {
     srcAngleDeg = 180;
     tgtAngleDeg = 180;
   } else if (currentWaypoints.length > 0) {
-    // User-routed — orthogonal L-segments through each waypoint.
-    //
-    // Stub-anchored routing (fix for "stuck glyph"): insert a 20px
-    // stub in each handle's OUTWARD direction before the first / after
-    // the last user waypoint. This guarantees the line exits / enters
-    // each handle along the same axis the cardinality glyph points.
-    // Without this, a waypoint dragged BEHIND the handle would produce
-    // a path that immediately backtracks through the entity card while
-    // the glyph continued to point outward — visually detaching the
-    // crow's-foot from its line. The stub + perpendicular-first routing
-    // forces an early bend AWAY from the card instead.
-    //
-    // Source handle → stub → (perpendicular corner) → wp1 → … → wpN →
-    // (perpendicular corner) → stub → Target handle.
-    const srcOutAxis = outwardAxis(sourcePosition);
-    const tgtOutAxis = outwardAxis(targetPosition);
+    // User-routed — orthogonal L-segments through each waypoint with
+    // a 20px stub at each end. The stub is collinear with the handle's
+    // outward direction, so the cardinality glyph (rotated by the
+    // handle's cardinal) visually sits on a line segment that moves
+    // in that same direction — no more "stuck glyph" when a waypoint
+    // is placed behind the handle. Middle segments use the generic
+    // `orthogonalSegment` heuristic, so normal waypoint placements
+    // produce clean V/U dips rather than forced perpendicular zigzags.
     const srcDelta = outwardStubDelta(sourcePosition);
     const tgtDelta = outwardStubDelta(targetPosition);
     const srcStub = { x: sourceX + srcDelta.dx, y: sourceY + srcDelta.dy };
     const tgtStub = { x: targetX + tgtDelta.dx, y: targetY + tgtDelta.dy };
 
-    const firstWp = currentWaypoints[0];
-    const lastWp = currentWaypoints[currentWaypoints.length - 1];
-
-    const segments: string[] = [`M ${sourceX} ${sourceY}`];
-    // Straight stub in outward direction — this is the segment the
-    // source glyph's tangent points along.
-    segments.push(`L ${srcStub.x} ${srcStub.y}`);
-    // Stub → first user waypoint, perpendicular-first.
-    segments.push(stubToAnchor(srcOutAxis, srcStub, firstWp));
-    // Interior waypoint-to-waypoint segments use the generic heuristic.
-    for (let i = 1; i < currentWaypoints.length; i += 1) {
-      segments.push(orthogonalSegment(currentWaypoints[i - 1], currentWaypoints[i]));
+    const pts = [
+      { x: sourceX, y: sourceY },
+      srcStub,
+      ...currentWaypoints,
+      tgtStub,
+      { x: targetX, y: targetY },
+    ];
+    const segments: string[] = [`M ${pts[0].x} ${pts[0].y}`];
+    for (let i = 1; i < pts.length; i += 1) {
+      segments.push(orthogonalSegment(pts[i - 1], pts[i]));
     }
-    // Last user waypoint → target stub, perpendicular to tgt outward.
-    segments.push(stubToAnchor(tgtOutAxis, lastWp, tgtStub));
-    // Stub → target handle in the handle's outward axis — this is the
-    // segment the target glyph's tangent points along.
-    segments.push(`L ${targetX} ${targetY}`);
     edgePath = segments.join(' ');
 
     // Label: midpoint of the middle user waypoint span (not the stubs).
-    // Straight-line approx is fine; user can drag a waypoint to reposition.
+    const firstWp = currentWaypoints[0];
+    const lastWp = currentWaypoints[currentWaypoints.length - 1];
     const midIdx = Math.max(0, Math.floor(currentWaypoints.length / 2) - 1);
     const labelA = currentWaypoints[midIdx] ?? firstWp;
     const labelB = currentWaypoints[midIdx + 1] ?? lastWp;
     labelX = (labelA.x + labelB.x) / 2;
     labelY = (labelA.y + labelB.y) / 2;
 
-    // Cardinality glyphs rotate by the handle's outward cardinal
-    // direction. Now that the path ALSO always exits along the same
-    // axis (via the stubs above), the glyph tangent and line tangent
-    // agree — the crow's-foot visually terminates the stub segment.
+    // Glyph rotations still use the handle's outward cardinal direction.
+    // The 20px stub at each end is colinear with that direction, so the
+    // glyph's visual tangent matches the line's tangent at the handle.
     srcAngleDeg = outwardAngleFor(sourcePosition);
     tgtAngleDeg = outwardAngleFor(targetPosition);
   } else {
