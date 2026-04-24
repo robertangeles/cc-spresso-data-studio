@@ -490,7 +490,14 @@ function RelationshipEdgeComponent(props: EdgeProps) {
    * and drag" docs exactly.
    */
   const DRAG_THRESHOLD_PX = 3;
-  const WP_HIT_PX = 10;
+  // Distance (in flow-space units) within which a click-drag on the
+  // line will GRAB an existing waypoint instead of inserting a new one.
+  // 10px was too tight — re-dragging to "clean up" a route accumulated
+  // 3+ redundant waypoints at past drop points, producing zigzag
+  // paths. 30px lets users re-grab the same waypoint reliably on a
+  // second pass; they can still create a new waypoint by clicking
+  // anywhere 30px+ away from existing ones.
+  const WP_HIT_PX = 30;
 
   const beginLineDrag = useCallback(
     (startEvent: React.PointerEvent<SVGPathElement>) => {
