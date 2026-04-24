@@ -37,7 +37,12 @@ import { NotationSwitcher } from './NotationSwitcher';
 import { TidyButton } from './TidyButton';
 import { pickHandle } from './edge-routing/pickHandle';
 import { useNotation } from '../../hooks/useNotation';
-import { UndoStackProvider, useUndoStack, NotUndoableError } from '../../hooks/useUndoStack';
+import {
+  UndoStackProvider,
+  useUndoStack,
+  NotUndoableError,
+  type UndoCommand,
+} from '../../hooks/useUndoStack';
 import { UndoRedoButtons } from './UndoRedoButtons';
 import type { AuditEvent } from '../../lib/auditFormatter';
 import '@xyflow/react/dist/style.css';
@@ -83,6 +88,13 @@ function InnerCanvas({ modelId, layer }: Props) {
 
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [selectedRelId, setSelectedRelId] = useState<string | null>(null);
+  /** Separate from selectedRelId — selection drives the visual edge
+   *  highlight (React Flow's `edge.selected`), panelRelId drives the
+   *  RelationshipPanel. We split so single-click selects without
+   *  opening the panel, matching Erwin / ER Studio where properties
+   *  open via double-click (avoids the panel blocking the canvas
+   *  while the user is just scanning the diagram). */
+  const [panelRelId, setPanelRelId] = useState<string | null>(null);
   const [newlyCreatedRelId, setNewlyCreatedRelId] = useState<string | null>(null);
   const [showOrphanBadges, setShowOrphanBadges] = useState(true);
   const [inferOpen, setInferOpen] = useState(false);
@@ -140,6 +152,33 @@ function InnerCanvas({ modelId, layer }: Props) {
     void loadAllAttrs();
   }, [loadAllAttrs]);
 
+  /**
+   * Wrap an undo command so `attrs.loadAll()` runs after BOTH the forward
+   * and reverse actions succeed. Required for any mutation whose server-
+   * side path cascades to `data_model_attributes` — e.g. relationship
+   * create (propagates FKs), relationship delete (unwinds FKs), cardinality/
+   * isIdentifying flips (reconciles FK flags), and Key Columns changes.
+   *
+   * Without this wrapper the client's attributesByEntity cache goes stale
+   * and the canvas entity cards render pre-mutation attributes even though
+   * the DB is correct. See tasks/lessons.md #32 for the full pattern.
+   */
+  const wrapCascading = useCallback(
+    <T, S>(cmd: UndoCommand<T, S>): UndoCommand<T, S> => ({
+      ...cmd,
+      do: async () => {
+        const result = await cmd.do();
+        await loadAllAttrs();
+        return result;
+      },
+      undo: async (snapshot, result) => {
+        await cmd.undo(snapshot, result);
+        await loadAllAttrs();
+      },
+    }),
+    [loadAllAttrs],
+  );
+
   // Edge context-menu trigger (from RelationshipEdge's onContextMenu).
   useEffect(() => {
     const onCtx = (evt: Event) => {
@@ -151,6 +190,56 @@ function InnerCanvas({ modelId, layer }: Props) {
     window.addEventListener('rel:context-menu', onCtx as EventListener);
     return () => window.removeEventListener('rel:context-menu', onCtx as EventListener);
   }, [rels.relationships]);
+
+  // Waypoint persistence trigger (from RelationshipEdge drag handle).
+  // RelationshipEdge dispatches `rel:waypoints-change` after a drag
+  // release or shift-click remove; we PATCH the rel with the new
+  // metadata.waypoints. Pure metadata PATCH doesn't cascade to
+  // attributes, so no wrapCascading wrap.
+  //
+  // Version handling — we look up the CURRENT version from state via
+  // a ref rather than trusting the version captured when the edge
+  // rendered. Rapid-succession drags would otherwise conflict on the
+  // second PATCH (first PATCH's response hasn't landed, so the edge's
+  // d.relVersion is still stale). Combined with silentOnConflict on
+  // rels.update, a 409 during a waypoint drag triggers a silent
+  // refetch instead of an error toast — the user may have lost that
+  // one waypoint position but doesn't see a scary "someone else
+  // edited" message for a pure UI-cosmetic action.
+  const relsRef = useRef(rels.relationships);
+  useEffect(() => {
+    relsRef.current = rels.relationships;
+  }, [rels.relationships]);
+  useEffect(() => {
+    const onWp = (evt: Event) => {
+      const ce = evt as CustomEvent<{
+        relId: string;
+        waypoints: Array<{ x: number; y: number }>;
+        metadata: Record<string, unknown>;
+      }>;
+      const { relId, waypoints, metadata } = ce.detail;
+      const current = relsRef.current.find((r) => r.id === relId);
+      if (!current) return;
+      const nextMeta = { ...metadata, waypoints };
+      void rels
+        .update(relId, { metadata: nextMeta }, current.version, { silentOnConflict: true })
+        .then((res) => {
+          if (res && isVersionConflictResult(res)) {
+            // Silent recovery — refetch so the next drag has the
+            // latest version. The user's last waypoint movement
+            // might not have persisted but the system state is
+            // consistent and no scary toast.
+            void rels.loadAll();
+          }
+        })
+        .catch(() => {
+          // Non-409 errors already surface a toast from inside the
+          // hook; swallow here so the listener doesn't log.
+        });
+    };
+    window.addEventListener('rel:waypoints-change', onWp as EventListener);
+    return () => window.removeEventListener('rel:waypoints-change', onWp as EventListener);
+  }, [rels]);
 
   // Count rels per entity for the orphan badge.
   const relCountByEntity = useMemo(() => {
@@ -284,12 +373,35 @@ function InnerCanvas({ modelId, layer }: Props) {
       .filter((r) => r.layer === layer)
       .map((r) => {
         const selfRef = r.sourceEntityId === r.targetEntityId;
+        // Extract persisted waypoints from metadata if any. Shape:
+        // Array<{x: number, y: number}> in flow-space coords.
+        const meta = (r.metadata ?? {}) as Record<string, unknown>;
+        const rawWaypoints = Array.isArray(meta.waypoints) ? meta.waypoints : [];
+        const waypoints: { x: number; y: number }[] = rawWaypoints
+          .filter(
+            (w): w is { x: number; y: number } =>
+              !!w &&
+              typeof w === 'object' &&
+              typeof (w as { x?: unknown }).x === 'number' &&
+              typeof (w as { y?: unknown }).y === 'number',
+          )
+          .map((w) => ({ x: w.x, y: w.y }));
+        const version = r.version;
+        // Persisted handle preferences — when the user drags an edge
+        // endpoint to a different SIDE of the same entity (e.g. from
+        // bottom to left), we store the chosen handle ids in metadata
+        // so the edge reconnects there on reload instead of React Flow
+        // auto-picking a geometry-based default.
+        const persistedSourceHandle =
+          typeof meta.sourceHandle === 'string' ? (meta.sourceHandle as string) : undefined;
+        const persistedTargetHandle =
+          typeof meta.targetHandle === 'string' ? (meta.targetHandle as string) : undefined;
         // Phase 1 — auto-pick cardinal handles based on relative node
-        // positions. Fixes ~60% of the messy-line pathology: when
-        // target sits to the right of source, we exit source on
-        // `right-top` and enter target on `left` instead of letting
-        // React Flow guess. Obstacle avoidance + edge bundling arrive
-        // in Phase 2 (ELK). Self-ref keeps its hard-coded loop.
+        // positions. This fixes ~60% of the messy-line pathology: when
+        // target sits to the right of source, we exit source on `right-top`
+        // and enter target on `left` instead of letting React Flow guess.
+        // Obstacle avoidance + bundling arrive in Phase 2 (ELK). Persisted
+        // user overrides always win; self-ref keeps its hard-coded loop.
         const srcPos = canvas.state.nodePositions[r.sourceEntityId];
         const tgtPos = canvas.state.nodePositions[r.targetEntityId];
         const autoPicked = !selfRef && srcPos && tgtPos ? pickHandle(srcPos, tgtPos) : undefined;
@@ -299,11 +411,17 @@ function InnerCanvas({ modelId, layer }: Props) {
           target: r.targetEntityId,
           type: 'relationship',
           selected: r.id === selectedRelId,
+          // Both endpoints are draggable. Drop on a different entity
+          // triggers FK re-propagation (server-side). Drop on a
+          // different handle of the SAME entity persists handle ids
+          // to metadata — see handleReconnect. Step 6 follow-up.
+          reconnectable: true,
           ...(selfRef
             ? { zIndex: 1000, sourceHandle: 'right-top', targetHandle: 'right-bottom' }
-            : autoPicked
-              ? { sourceHandle: autoPicked.sourceHandle, targetHandle: autoPicked.targetHandle }
-              : {}),
+            : {
+                sourceHandle: persistedSourceHandle ?? autoPicked?.sourceHandle ?? undefined,
+                targetHandle: persistedTargetHandle ?? autoPicked?.targetHandle ?? undefined,
+              }),
           data: {
             sourceCardinality: r.sourceCardinality,
             targetCardinality: r.targetCardinality,
@@ -317,13 +435,16 @@ function InnerCanvas({ modelId, layer }: Props) {
             ...(r.name ? { name: r.name } : {}),
             verbForward: r.name ?? null,
             verbInverse: r.inverseName ?? null,
+            waypoints,
+            relVersion: version,
+            relMetadata: meta,
           },
         };
       });
     // canvas.state.nodePositions is included so auto-picked handles
     // re-evaluate when a drag ENDS (canvas.save is only called on
-    // drag-end — see handleNodesChange). This aligns the edge-
-    // rebuild pulse with discrete user gestures rather than every
+    // drag-end — see handleNodesChange). This keeps the rebuild
+    // pulse aligned with discrete user gestures rather than every
     // mouse-move frame.
   }, [
     rels.relationships,
@@ -432,9 +553,22 @@ function InnerCanvas({ modelId, layer }: Props) {
     setSelectedRelId(null);
   }, []);
 
+  // Single click on edge → visual selection only (highlights the
+  // line). Doesn't open the properties panel — that's gated behind
+  // double-click so the panel doesn't crowd the canvas when users
+  // are just scanning a dense model.
   const handleEdgeClick: EdgeMouseHandler = useCallback((_evt, edge) => {
     setSelectedRelId(edge.id);
     setSelectedEntityId(null);
+  }, []);
+
+  // Double click on edge → open the properties panel (Erwin /
+  // ER Studio convention). Also ensures the edge is selected so the
+  // highlight matches the panel content.
+  const handleEdgeDoubleClick: EdgeMouseHandler = useCallback((_evt, edge) => {
+    setSelectedRelId(edge.id);
+    setSelectedEntityId(null);
+    setPanelRelId(edge.id);
   }, []);
 
   /** React Flow handle ids follow the contract `attr-{uuid}-{source|target}`.
@@ -470,19 +604,21 @@ function InnerCanvas({ modelId, layer }: Props) {
         layer,
       };
       try {
-        const created = await undo.execute({
-          label: 'Create relationship',
-          do: () => rels.create(payload),
-          undo: async (_snap, rel) => {
-            await rels.remove(rel.id);
-          },
-        });
+        const created = await undo.execute(
+          wrapCascading({
+            label: 'Create relationship',
+            do: () => rels.create(payload),
+            undo: async (_snap, rel) => {
+              await rels.remove(rel.id);
+            },
+          }),
+        );
         setNewlyCreatedRelId(created.id);
       } catch {
         /* handled by useRelationships toast */
       }
     },
-    [rels, layer, toast, resolveEntityId, undo],
+    [rels, layer, toast, resolveEntityId, undo, wrapCascading],
   );
 
   const handleEdgeContextMenu: EdgeMouseHandler = useCallback(
@@ -499,6 +635,121 @@ function InnerCanvas({ modelId, layer }: Props) {
     [rels.relationships],
   );
 
+  /**
+   * Endpoint drag — handles two cases:
+   *
+   *   1. Entity change (drop on a different entity) → PATCH
+   *      sourceEntityId/targetEntityId; server unwinds old FKs and
+   *      re-propagates. Wrapped in wrapCascading so attributesByEntity
+   *      refreshes on both forward and reverse (lessons.md #32).
+   *
+   *   2. Handle change (drop on a different side of the SAME entity)
+   *      → PATCH metadata.sourceHandle/targetHandle; no FK cascade
+   *      (purely visual routing), so skip wrapCascading. This is
+   *      what makes "move the line to the top of the entity" work —
+   *      without persistence React Flow auto-picks the handle on
+   *      every render and the drag appears to snap back.
+   *
+   * React Flow filters drops into empty canvas — onReconnect only
+   * fires on a valid handle drop target.
+   */
+  const handleReconnect = useCallback(
+    async (
+      oldEdge: { id: string },
+      newConnection: {
+        source: string | null;
+        target: string | null;
+        sourceHandle: string | null;
+        targetHandle: string | null;
+      },
+    ) => {
+      if (!newConnection.source || !newConnection.target) return;
+      const rel = rels.relationships.find((r) => r.id === oldEdge.id);
+      if (!rel) return;
+      const nextSource = resolveEntityId(newConnection.source);
+      const nextTarget = resolveEntityId(newConnection.target);
+      const sourceChanged = nextSource !== rel.sourceEntityId;
+      const targetChanged = nextTarget !== rel.targetEntityId;
+      const endpointChanged = sourceChanged || targetChanged;
+
+      const meta = (rel.metadata ?? {}) as Record<string, unknown>;
+      const prevSrcHandle = typeof meta.sourceHandle === 'string' ? meta.sourceHandle : null;
+      const prevTgtHandle = typeof meta.targetHandle === 'string' ? meta.targetHandle : null;
+      const nextSrcHandle = newConnection.sourceHandle;
+      const nextTgtHandle = newConnection.targetHandle;
+      const handleChanged =
+        (nextSrcHandle ?? null) !== prevSrcHandle || (nextTgtHandle ?? null) !== prevTgtHandle;
+
+      if (!endpointChanged && !handleChanged) return;
+
+      // Build the patch. Entity changes cascade FKs (wrapCascading);
+      // handle-only changes are a pure metadata PATCH that we persist
+      // silently to avoid the 409 toast on rapid repositioning.
+      const nextMeta: Record<string, unknown> = { ...meta };
+      if (nextSrcHandle) nextMeta.sourceHandle = nextSrcHandle;
+      else delete nextMeta.sourceHandle;
+      if (nextTgtHandle) nextMeta.targetHandle = nextTgtHandle;
+      else delete nextMeta.targetHandle;
+
+      // Optimistic visual update — patch React Flow's edge immediately
+      // so the endpoint lands where the user dropped it without waiting
+      // for the PATCH response. Without this the edge visibly "snaps
+      // back" to its previous position for the round-trip duration.
+      // When the PATCH lands (or fails), the edges useMemo re-computes
+      // from rels.relationships and either confirms (match → no visual
+      // change) or reverts (conflict → relsRef loadAll refresh).
+      rf.setEdges((prev) =>
+        prev.map((e) => {
+          if (e.id !== rel.id) return e;
+          return {
+            ...e,
+            source: nextSource,
+            target: nextTarget,
+            sourceHandle: nextSrcHandle ?? undefined,
+            targetHandle: nextTgtHandle ?? undefined,
+          };
+        }),
+      );
+
+      if (endpointChanged) {
+        const patch: {
+          sourceEntityId?: string;
+          targetEntityId?: string;
+          metadata?: Record<string, unknown>;
+        } = { metadata: nextMeta };
+        if (sourceChanged) patch.sourceEntityId = nextSource;
+        if (targetChanged) patch.targetEntityId = nextTarget;
+        try {
+          await undo.execute(
+            wrapCascading({
+              label: 'Reconnect relationship',
+              do: () => rels.update(rel.id, patch, rel.version),
+              undo: async (_snap, res) => {
+                if (isVersionConflictResult(res)) return;
+                const inverse: typeof patch = { metadata: meta };
+                if (sourceChanged) inverse.sourceEntityId = rel.sourceEntityId;
+                if (targetChanged) inverse.targetEntityId = rel.targetEntityId;
+                await rels.update(rel.id, inverse, res.version);
+              },
+            }),
+          );
+        } catch {
+          /* toast surfaced by useRelationships */
+        }
+      } else {
+        // Handle-only — pure metadata PATCH, no FK cascade, no toast
+        // on the occasional rapid-drag version race.
+        void rels
+          .update(rel.id, { metadata: nextMeta }, rel.version, { silentOnConflict: true })
+          .then((res) => {
+            if (res && isVersionConflictResult(res)) void rels.loadAll();
+          })
+          .catch(() => {});
+      }
+    },
+    [rels, undo, wrapCascading, resolveEntityId, rf],
+  );
+
   // Intercept entity deletes so we can show the cascade dialog.
   const handleNodesDelete = useCallback((deleted: Node[]) => {
     const first = deleted[0];
@@ -512,8 +763,8 @@ function InnerCanvas({ modelId, layer }: Props) {
   );
 
   const selectedRel: Relationship | null = useMemo(
-    () => rels.relationships.find((r) => r.id === selectedRelId) ?? null,
-    [rels.relationships, selectedRelId],
+    () => rels.relationships.find((r) => r.id === panelRelId) ?? null,
+    [rels.relationships, panelRelId],
   );
 
   // Entity mutations — Step-4/5 fields + Direction A altKeyLabels.
@@ -728,7 +979,14 @@ function InnerCanvas({ modelId, layer }: Props) {
           : patch.isIdentifying === false
             ? 'Clear identifying flag'
             : 'Update relationship';
-      return undo.execute({
+      // Pure-rename patches don't cascade to attributes; every other
+      // field (sourceCardinality, targetCardinality, isIdentifying)
+      // triggers server-side FK reconciliation.
+      const cascades =
+        patch.sourceCardinality !== undefined ||
+        patch.targetCardinality !== undefined ||
+        patch.isIdentifying !== undefined;
+      const cmd: UndoCommand<Awaited<ReturnType<typeof rels.update>>, undefined> = {
         label,
         do: () => rels.update(relId, patch, clientVersion),
         undo: async (_snap, res) => {
@@ -737,35 +995,38 @@ function InnerCanvas({ modelId, layer }: Props) {
           if (isVersionConflictResult(res)) return;
           await rels.update(relId, inversePatch, res.version);
         },
-      });
+      };
+      return undo.execute(cascades ? wrapCascading(cmd) : cmd);
     },
-    [rels, undo],
+    [rels, undo, wrapCascading],
   );
 
   const relDelete = useCallback(
     async (relId: string) => {
       const snapshot = rels.relationships.find((r) => r.id === relId);
       if (!snapshot) return;
-      await undo.execute({
-        label: 'Delete relationship',
-        do: async () => {
-          await rels.remove(relId);
-        },
-        undo: async () => {
-          await rels.create({
-            sourceEntityId: snapshot.sourceEntityId,
-            targetEntityId: snapshot.targetEntityId,
-            name: snapshot.name,
-            sourceCardinality: snapshot.sourceCardinality,
-            targetCardinality: snapshot.targetCardinality,
-            isIdentifying: snapshot.isIdentifying,
-            layer: snapshot.layer,
-          });
-        },
-      });
+      await undo.execute(
+        wrapCascading({
+          label: 'Delete relationship',
+          do: async () => {
+            await rels.remove(relId);
+          },
+          undo: async () => {
+            await rels.create({
+              sourceEntityId: snapshot.sourceEntityId,
+              targetEntityId: snapshot.targetEntityId,
+              name: snapshot.name,
+              sourceCardinality: snapshot.sourceCardinality,
+              targetCardinality: snapshot.targetCardinality,
+              isIdentifying: snapshot.isIdentifying,
+              layer: snapshot.layer,
+            });
+          },
+        }),
+      );
       setSelectedRelId(null);
     },
-    [rels, undo],
+    [rels, undo, wrapCascading],
   );
 
   const relConflict = useCallback(() => {
@@ -794,67 +1055,96 @@ function InnerCanvas({ modelId, layer }: Props) {
   const contextFlip = useCallback(async () => {
     if (!edgeMenu) return;
     const rel = edgeMenu.rel;
-    const res = await undo.execute({
-      label: 'Flip relationship direction',
-      do: () =>
-        rels.update(
-          rel.id,
-          {
-            sourceEntityId: rel.targetEntityId,
-            targetEntityId: rel.sourceEntityId,
-            sourceCardinality: rel.targetCardinality,
-            targetCardinality: rel.sourceCardinality,
-          },
-          rel.version,
-        ),
-      undo: async (_snap, r) => {
-        if (isVersionConflictResult(r)) return;
-        await rels.update(
-          rel.id,
-          {
-            sourceEntityId: rel.sourceEntityId,
-            targetEntityId: rel.targetEntityId,
-            sourceCardinality: rel.sourceCardinality,
-            targetCardinality: rel.targetCardinality,
-          },
-          r.version,
-        );
-      },
-    });
+    const res = await undo.execute(
+      wrapCascading({
+        label: 'Flip relationship direction',
+        do: () =>
+          rels.update(
+            rel.id,
+            {
+              sourceEntityId: rel.targetEntityId,
+              targetEntityId: rel.sourceEntityId,
+              sourceCardinality: rel.targetCardinality,
+              targetCardinality: rel.sourceCardinality,
+            },
+            rel.version,
+          ),
+        undo: async (_snap, r) => {
+          if (isVersionConflictResult(r)) return;
+          await rels.update(
+            rel.id,
+            {
+              sourceEntityId: rel.sourceEntityId,
+              targetEntityId: rel.targetEntityId,
+              sourceCardinality: rel.sourceCardinality,
+              targetCardinality: rel.targetCardinality,
+            },
+            r.version,
+          );
+        },
+      }),
+    );
     if (isVersionConflictResult(res)) void rels.loadAll();
-  }, [edgeMenu, rels, undo]);
+  }, [edgeMenu, rels, undo, wrapCascading]);
   const contextToggleIdentifying = useCallback(async () => {
     if (!edgeMenu) return;
     const rel = edgeMenu.rel;
     const nextFlag = !rel.isIdentifying;
-    const res = await undo.execute({
-      label: nextFlag ? 'Mark relationship as identifying' : 'Clear identifying flag',
-      do: () => rels.update(rel.id, { isIdentifying: nextFlag }, rel.version),
-      undo: async (_snap, r) => {
-        if (isVersionConflictResult(r)) return;
-        await rels.update(rel.id, { isIdentifying: rel.isIdentifying }, r.version);
-      },
-    });
+    const res = await undo.execute(
+      wrapCascading({
+        label: nextFlag ? 'Mark relationship as identifying' : 'Clear identifying flag',
+        do: () => rels.update(rel.id, { isIdentifying: nextFlag }, rel.version),
+        undo: async (_snap, r) => {
+          if (isVersionConflictResult(r)) return;
+          await rels.update(rel.id, { isIdentifying: rel.isIdentifying }, r.version);
+        },
+      }),
+    );
     if (isVersionConflictResult(res)) void rels.loadAll();
-  }, [edgeMenu, rels, undo]);
+  }, [edgeMenu, rels, undo, wrapCascading]);
   const contextDelete = useCallback(async () => {
     if (!edgeMenu) return;
     const snapshot = edgeMenu.rel;
+    await undo.execute(
+      wrapCascading({
+        label: 'Delete relationship',
+        do: async () => {
+          await rels.remove(snapshot.id);
+        },
+        undo: async () => {
+          await rels.create({
+            sourceEntityId: snapshot.sourceEntityId,
+            targetEntityId: snapshot.targetEntityId,
+            name: snapshot.name,
+            sourceCardinality: snapshot.sourceCardinality,
+            targetCardinality: snapshot.targetCardinality,
+            isIdentifying: snapshot.isIdentifying,
+            layer: snapshot.layer,
+          });
+        },
+      }),
+    );
+  }, [edgeMenu, rels, undo, wrapCascading]);
+
+  /** Clear any persisted waypoints from the rel's metadata so the edge
+   *  returns to React Flow's default smooth-step auto-routing. Also
+   *  clears persisted handle overrides so the endpoint snaps back to
+   *  the best geometry-chosen side. Mirrors Erwin's "Reset
+   *  Relationship Paths". */
+  const contextResetPath = useCallback(async () => {
+    if (!edgeMenu) return;
+    const rel = edgeMenu.rel;
+    const prevMeta = (rel.metadata ?? {}) as Record<string, unknown>;
+    const nextMeta: Record<string, unknown> = { ...prevMeta };
+    delete nextMeta.waypoints;
+    delete nextMeta.sourceHandle;
+    delete nextMeta.targetHandle;
     await undo.execute({
-      label: 'Delete relationship',
-      do: async () => {
-        await rels.remove(snapshot.id);
-      },
-      undo: async () => {
-        await rels.create({
-          sourceEntityId: snapshot.sourceEntityId,
-          targetEntityId: snapshot.targetEntityId,
-          name: snapshot.name,
-          sourceCardinality: snapshot.sourceCardinality,
-          targetCardinality: snapshot.targetCardinality,
-          isIdentifying: snapshot.isIdentifying,
-          layer: snapshot.layer,
-        });
+      label: 'Reset relationship path',
+      do: () => rels.update(rel.id, { metadata: nextMeta }, rel.version),
+      undo: async (_snap, res) => {
+        if (isVersionConflictResult(res)) return;
+        await rels.update(rel.id, { metadata: prevMeta }, res.version);
       },
     });
   }, [edgeMenu, rels, undo]);
@@ -917,10 +1207,13 @@ function InnerCanvas({ modelId, layer }: Props) {
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         onEdgeContextMenu={handleEdgeContextMenu}
+        onEdgeDoubleClick={handleEdgeDoubleClick}
         onConnect={handleConnect}
+        onReconnect={handleReconnect}
         onPaneClick={() => {
           setSelectedEntityId(null);
           setSelectedRelId(null);
+          setPanelRelId(null);
         }}
         onPaneContextMenu={(e) => e.preventDefault()}
         onDoubleClick={handlePaneDoubleClick}
@@ -989,10 +1282,11 @@ function InnerCanvas({ modelId, layer }: Props) {
         entities={ent.entities}
         auditEvents={relAuditEvents}
         auditLoading={false}
-        onClose={() => setSelectedRelId(null)}
+        onClose={() => setPanelRelId(null)}
         onUpdate={relUpdate}
         onDelete={relDelete}
         onConflict={relConflict}
+        onAttributesMayHaveChanged={loadAllAttrs}
       />
 
       {/* Synthetic data drawer (Phase 4). */}
@@ -1020,7 +1314,11 @@ function InnerCanvas({ modelId, layer }: Props) {
           await ent.remove(cascadeEntityId, { cascade: true });
           setCascadeEntityId(null);
           setSelectedEntityId(null);
+          // Entity cascade removes related rels AND their propagated FK
+          // attrs server-side. Refresh both caches so downstream entity
+          // cards update alongside the edge layer.
           void rels.loadAll();
+          void loadAllAttrs();
         }}
         onClose={() => setCascadeEntityId(null)}
       />
@@ -1045,6 +1343,15 @@ function InnerCanvas({ modelId, layer }: Props) {
           onFlip={contextFlip}
           onToggleIdentifying={contextToggleIdentifying}
           onDelete={contextDelete}
+          onResetPath={contextResetPath}
+          hasWaypoints={(() => {
+            const meta = (edgeMenu.rel.metadata ?? {}) as Record<string, unknown>;
+            const wp = meta.waypoints;
+            const hasWp = Array.isArray(wp) && wp.length > 0;
+            const hasHandles =
+              typeof meta.sourceHandle === 'string' || typeof meta.targetHandle === 'string';
+            return hasWp || hasHandles;
+          })()}
         />
       )}
 

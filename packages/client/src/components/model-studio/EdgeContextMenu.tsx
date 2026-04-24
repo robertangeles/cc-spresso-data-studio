@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Clipboard, Pencil, Repeat2, ShieldCheck, Trash2 } from 'lucide-react';
+import { Clipboard, CornerDownLeft, Pencil, Repeat2, ShieldCheck, Trash2 } from 'lucide-react';
 import type { Relationship } from '@cc/shared';
 import { escapeClipboardCell } from '../../lib/csvSafe';
 
@@ -32,6 +32,14 @@ export interface EdgeContextMenuProps {
   onFlip: () => Promise<void>;
   onToggleIdentifying: () => Promise<void>;
   onDelete: () => Promise<void>;
+  /** Clear all user-placed waypoints so the edge returns to React
+   *  Flow's default smooth-step auto-routing. Mirrors Erwin's
+   *  "Reset Relationship Paths" command (no bends, no handle
+   *  overrides). Disabled / hidden when there are no waypoints. */
+  onResetPath: () => Promise<void>;
+  /** True when the rel has any persisted waypoints — drives whether
+   *  "Reset path" is shown at all. */
+  hasWaypoints: boolean;
 }
 
 export function EdgeContextMenu(props: EdgeContextMenuProps) {
@@ -47,6 +55,8 @@ function MenuBody({
   onFlip,
   onToggleIdentifying,
   onDelete,
+  onResetPath,
+  hasWaypoints,
 }: EdgeContextMenuProps) {
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState(relationship.name ?? '');
@@ -168,6 +178,17 @@ function MenuBody({
             testId="edge-context-copy-cardinality"
             onClick={() => void copyCardinality()}
           />
+          {hasWaypoints && (
+            <MenuItem
+              icon={<CornerDownLeft className="h-3.5 w-3.5" />}
+              label="Reset path"
+              testId="edge-context-reset-path"
+              onClick={async () => {
+                await onResetPath();
+                onClose();
+              }}
+            />
+          )}
           <li className="my-1 border-t border-white/5" aria-hidden />
           <MenuItem
             icon={<Trash2 className="h-3.5 w-3.5" />}

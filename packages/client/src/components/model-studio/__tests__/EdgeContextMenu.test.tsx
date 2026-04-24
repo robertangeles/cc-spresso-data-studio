@@ -34,6 +34,8 @@ describe('EdgeContextMenu — D-R3', () => {
         onFlip={async () => {}}
         onToggleIdentifying={async () => {}}
         onDelete={async () => {}}
+        onResetPath={async () => {}}
+        hasWaypoints={false}
       />,
     );
     expect(screen.getByTestId('edge-context-rename')).toBeTruthy();
@@ -54,6 +56,8 @@ describe('EdgeContextMenu — D-R3', () => {
         onFlip={async () => {}}
         onToggleIdentifying={async () => {}}
         onDelete={async () => {}}
+        onResetPath={async () => {}}
+        hasWaypoints={false}
       />,
     );
     fireEvent.click(screen.getByTestId('edge-context-rename'));
@@ -73,6 +77,8 @@ describe('EdgeContextMenu — D-R3', () => {
         onFlip={onFlip}
         onToggleIdentifying={async () => {}}
         onDelete={async () => {}}
+        onResetPath={async () => {}}
+        hasWaypoints={false}
       />,
     );
     fireEvent.click(screen.getByTestId('edge-context-flip'));
@@ -93,11 +99,51 @@ describe('EdgeContextMenu — D-R3', () => {
         onFlip={async () => {}}
         onToggleIdentifying={async () => {}}
         onDelete={onDelete}
+        onResetPath={async () => {}}
+        hasWaypoints={false}
       />,
     );
     fireEvent.click(screen.getByTestId('edge-context-delete'));
     await Promise.resolve();
     await Promise.resolve();
     expect(onDelete).toHaveBeenCalled();
+  });
+
+  it('Reset path is hidden when the rel has no waypoints; shown and fires onResetPath when it does', async () => {
+    const onResetPath = vi.fn().mockResolvedValue(undefined);
+    const { rerender, queryByTestId, getByTestId } = render(
+      <EdgeContextMenu
+        relationship={rel}
+        x={50}
+        y={50}
+        onClose={() => {}}
+        onRename={async () => {}}
+        onFlip={async () => {}}
+        onToggleIdentifying={async () => {}}
+        onDelete={async () => {}}
+        onResetPath={onResetPath}
+        hasWaypoints={false}
+      />,
+    );
+    expect(queryByTestId('edge-context-reset-path')).toBeNull();
+
+    rerender(
+      <EdgeContextMenu
+        relationship={rel}
+        x={50}
+        y={50}
+        onClose={() => {}}
+        onRename={async () => {}}
+        onFlip={async () => {}}
+        onToggleIdentifying={async () => {}}
+        onDelete={async () => {}}
+        onResetPath={onResetPath}
+        hasWaypoints
+      />,
+    );
+    fireEvent.click(getByTestId('edge-context-reset-path'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onResetPath).toHaveBeenCalled();
   });
 });
