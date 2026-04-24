@@ -176,7 +176,11 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
     };
   }, [id]);
 
-  const allAttrs = data.attributes ?? [];
+  // Stabilise the default empty array so downstream useMemo deps don't
+  // fire on every render when `data.attributes` is undefined. Without
+  // this, `data.attributes ?? []` creates a new [] each call and the
+  // two useMemos below re-run every render (react-hooks/exhaustive-deps).
+  const allAttrs = useMemo(() => data.attributes ?? [], [data.attributes]);
   const { primaryIds, hideSurrogatePks } = useMemo(
     () => computePrimaryIdentifier(data.layer, allAttrs),
     [data.layer, allAttrs],
