@@ -51,18 +51,79 @@ import type { AttributeSummary } from '../../hooks/useAttributes';
  * dnd-kit announcements are wired so screen readers get drag state.
  */
 
+/**
+ * Canonical data-type list — Postgres-native names that Step 9 DDL
+ * export will translate per target dialect (datetime2 for SQL Server,
+ * timestamp_ntz for Snowflake, etc.). Grouped below by category for
+ * reviewer clarity; the dropdown renders them in this order.
+ *
+ * Monetary values: use `numeric` with precision/scale columns on the
+ * attribute row (e.g. numeric(18,2)). Postgres `money` is deliberately
+ * excluded — locale-dependent and widely discouraged.
+ *
+ * Binary/hash: `bytea` stores raw bytes (hashes, file blobs, etc.).
+ * Store hex-encoded hashes in `varchar` only when human-readable
+ * inspection matters — use `bytea` by default.
+ *
+ * Vector: pgvector embedding column (this project uses it for RAG).
+ */
 const DATA_TYPES = [
+  // Identifiers
   'uuid',
+  // Strings
   'varchar',
+  'char',
   'text',
+  // Integers
+  'smallint',
   'integer',
   'bigint',
+  // Decimals / floating point
   'numeric',
+  'decimal',
+  'real',
+  'double precision',
+  // Boolean
   'boolean',
+  // Date / time
   'date',
+  'time',
   'timestamp',
+  'timestamptz',
+  'interval',
+  // Binary / hash
+  'bytea',
+  // Structured / semi-structured
+  'json',
   'jsonb',
+  // AI / ML
+  'vector',
 ];
+
+/** Types that accept `precision`/`scale` modifiers. Numeric/decimal
+ *  takes both (e.g. `numeric(18,2)` for money). Vector takes a single
+ *  dimensions value — modelled as `precision` (scale unused) to reuse
+ *  the same columns.
+ *
+ *  Note on time-family types (timestamp, timestamptz, time, interval):
+ *  Postgres/SQL Server accept a fractional-seconds precision (0–6),
+ *  but 99% of users leave it at the default. We deliberately hide the
+ *  inline input to keep the Add/edit row uncluttered — matches Erwin
+ *  convention of moving this to an advanced property dialog. */
+const PRECISION_SCALE_TYPES = new Set(['numeric', 'decimal']);
+const PRECISION_ONLY_TYPES = new Set(['vector']);
+/** Types that accept a `length` modifier (e.g. `varchar(255)`). */
+const LENGTH_TYPES = new Set(['varchar', 'char']);
+
+function typeModifierKind(
+  dataType: string | null | undefined,
+): 'precision+scale' | 'precision' | 'length' | 'none' {
+  if (!dataType) return 'none';
+  if (PRECISION_SCALE_TYPES.has(dataType)) return 'precision+scale';
+  if (PRECISION_ONLY_TYPES.has(dataType)) return 'precision';
+  if (LENGTH_TYPES.has(dataType)) return 'length';
+  return 'none';
+}
 
 /** Tone per classification — muted but distinct palettes so scanning
  *  a grid-full of rows gives the governance story at a glance. */
@@ -131,6 +192,9 @@ export function AttributeGrid({
 }: AttributeGridProps) {
   const [newName, setNewName] = useState('');
   const [newDataType, setNewDataType] = useState('varchar');
+  const [newPrecision, setNewPrecision] = useState('');
+  const [newScale, setNewScale] = useState('');
+  const [newLength, setNewLength] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -154,12 +218,27 @@ export function AttributeGrid({
     setAddError(null);
     try {
       const isFirst = attributes.length === 0;
+      const finalDataType = isFirst ? 'uuid' : newDataType;
+      const kind = typeModifierKind(finalDataType);
+      const parseNonNeg = (raw: string): number | null => {
+        const s = raw.trim();
+        if (s === '') return null;
+        const n = Number(s);
+        return Number.isFinite(n) && n >= 0 && Number.isInteger(n) ? n : null;
+      };
       const created = await onCreate({
         name: trimmed,
-        dataType: isFirst ? 'uuid' : newDataType,
+        dataType: finalDataType,
         isPrimaryKey: isFirst,
+        length: kind === 'length' ? parseNonNeg(newLength) : null,
+        precision:
+          kind === 'precision+scale' || kind === 'precision' ? parseNonNeg(newPrecision) : null,
+        scale: kind === 'precision+scale' ? parseNonNeg(newScale) : null,
       });
       setNewName('');
+      setNewPrecision('');
+      setNewScale('');
+      setNewLength('');
       onSelect(created.id);
     } catch (e) {
       setAddError(e instanceof Error ? e.message : 'Add failed');
@@ -186,8 +265,8 @@ export function AttributeGrid({
                     Name
                   </Th>
                   <Th
-                    className="w-[120px]"
-                    title="SQL data type (uuid, varchar, numeric, timestamp, …). Drives DDL generation."
+                    className="w-[160px]"
+                    title="SQL data type with size modifiers — numeric(18,2), varchar(255), vector(1024). Click to edit type and size separately. Drives DDL generation."
                   >
                     Data Type
                   </Th>
@@ -286,7 +365,14 @@ export function AttributeGrid({
           <select
             data-testid="attribute-add-type"
             value={newDataType}
-            onChange={(e) => setNewDataType(e.target.value)}
+            onChange={(e) => {
+              setNewDataType(e.target.value);
+              // Clear modifiers that no longer apply to the new type.
+              const kind = typeModifierKind(e.target.value);
+              if (kind !== 'precision+scale' && kind !== 'precision') setNewPrecision('');
+              if (kind !== 'precision+scale') setNewScale('');
+              if (kind !== 'length') setNewLength('');
+            }}
             style={{ colorScheme: 'dark' }}
             className="rounded-md border border-white/10 bg-surface-1/60 px-2 py-1 font-mono text-[11px] text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40"
           >
@@ -296,6 +382,57 @@ export function AttributeGrid({
               </option>
             ))}
           </select>
+          {(() => {
+            const kind = typeModifierKind(newDataType);
+            if (kind === 'none') return null;
+            const sizeInputClass =
+              'w-14 rounded-md border border-white/10 bg-surface-1/60 px-2 py-1 text-center font-mono text-[11px] text-text-primary focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/40';
+            if (kind === 'precision+scale') {
+              return (
+                <>
+                  <input
+                    data-testid="attribute-add-precision"
+                    value={newPrecision}
+                    onChange={(e) => setNewPrecision(e.target.value)}
+                    placeholder="p"
+                    title="Precision — total digits (e.g. 18)"
+                    className={sizeInputClass}
+                  />
+                  <input
+                    data-testid="attribute-add-scale"
+                    value={newScale}
+                    onChange={(e) => setNewScale(e.target.value)}
+                    placeholder="s"
+                    title="Scale — digits after decimal (e.g. 2)"
+                    className={sizeInputClass}
+                  />
+                </>
+              );
+            }
+            if (kind === 'precision') {
+              return (
+                <input
+                  data-testid="attribute-add-precision"
+                  value={newPrecision}
+                  onChange={(e) => setNewPrecision(e.target.value)}
+                  placeholder="dim"
+                  title="Dimensions — e.g. 1024 for OpenAI embeddings"
+                  className={sizeInputClass}
+                />
+              );
+            }
+            // length
+            return (
+              <input
+                data-testid="attribute-add-length"
+                value={newLength}
+                onChange={(e) => setNewLength(e.target.value)}
+                placeholder="len"
+                title="Length — max characters (e.g. 255)"
+                className={sizeInputClass}
+              />
+            );
+          })()}
           <button
             type="button"
             data-testid="attribute-add-button"
@@ -379,6 +516,160 @@ function nextAltKeyGroup(attributes: AttributeSummary[]): string {
   return 'AK99';
 }
 
+/** Format a data type + its modifiers as a single DDL-style string.
+ *  Erwin / ER Studio / PowerDesigner convention: numeric(18,2),
+ *  varchar(255), vector(1024), time(6). Matches what practitioners
+ *  read in DDL scripts at a glance. */
+export function formatDataType(
+  dataType: string | null | undefined,
+  precision: number | null,
+  scale: number | null,
+  length: number | null,
+): string {
+  if (!dataType) return '—';
+  const kind = typeModifierKind(dataType);
+  if (kind === 'precision+scale') {
+    if (precision == null && scale == null) return dataType;
+    if (scale == null) return `${dataType}(${precision})`;
+    return `${dataType}(${precision},${scale})`;
+  }
+  if (kind === 'precision') {
+    if (precision == null) return dataType;
+    return `${dataType}(${precision})`;
+  }
+  if (kind === 'length') {
+    if (length == null) return dataType;
+    return `${dataType}(${length})`;
+  }
+  return dataType;
+}
+
+/** Combined Data Type + size-modifier cell. Displays the type in
+ *  DDL-style shorthand (numeric(18,2)) when not focused; reveals the
+ *  dropdown + precision/scale/length inputs when the user clicks in
+ *  to edit. Exits edit mode when focus leaves the cell. Matches the
+ *  Erwin / ER Studio convention of showing the full type as a single
+ *  glanceable unit in the attribute grid. */
+function DataTypeCell({
+  attr,
+  disabled,
+  onCommitDataType,
+  onCommitPrecision,
+  onCommitScale,
+  onCommitLength,
+}: {
+  attr: AttributeSummary;
+  disabled: boolean;
+  onCommitDataType: (next: string) => Promise<void>;
+  onCommitPrecision: (raw: string) => Promise<void>;
+  onCommitScale: (raw: string) => Promise<void>;
+  onCommitLength: (raw: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const kind = typeModifierKind(attr.dataType);
+  const displayValue = formatDataType(attr.dataType, attr.precision, attr.scale, attr.length);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        data-testid="attribute-datatype-display"
+        onClick={() => setEditing(true)}
+        disabled={disabled}
+        title="Click to change type or size"
+        className="w-full rounded-sm border border-transparent bg-transparent px-1.5 py-1 text-left font-mono text-[11px] text-text-primary hover:border-white/10 hover:bg-surface-1/40 focus:border-accent/40 focus:bg-surface-1/70 focus:outline-none"
+      >
+        {attr.dataType ? displayValue : <span className="text-text-secondary/40">—</span>}
+      </button>
+    );
+  }
+
+  const inputClass =
+    'w-10 rounded-sm border border-white/10 bg-surface-1/60 px-1 py-1 text-center font-mono text-[11px] text-text-primary focus:border-accent/40 focus:outline-none';
+
+  return (
+    <div
+      className="flex items-center gap-0.5"
+      onBlur={(e) => {
+        // Exit edit mode only when focus leaves the cell entirely —
+        // moving between the dropdown and the size inputs should stay
+        // in edit mode.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setEditing(false);
+        }
+      }}
+    >
+      <select
+        data-testid="attribute-datatype"
+        autoFocus
+        value={attr.dataType ?? ''}
+        onChange={(e) => void onCommitDataType(e.target.value)}
+        disabled={disabled}
+        style={{ colorScheme: 'dark' }}
+        className="flex-1 rounded-sm border border-white/10 bg-surface-1/60 px-1.5 py-1 font-mono text-[11px] text-text-primary focus:border-accent/40 focus:outline-none"
+      >
+        <option value="" className="bg-surface-2 text-text-primary">
+          —
+        </option>
+        {DATA_TYPES.map((t) => (
+          <option key={t} value={t} className="bg-surface-2 text-text-primary">
+            {t}
+          </option>
+        ))}
+      </select>
+      {(kind === 'precision+scale' || kind === 'precision') && (
+        <input
+          data-testid="attribute-precision"
+          defaultValue={attr.precision ?? ''}
+          onBlur={(e) => void onCommitPrecision(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+          }}
+          disabled={disabled}
+          placeholder={kind === 'precision+scale' ? 'p' : 'dim'}
+          title={
+            kind === 'precision+scale'
+              ? 'Precision — total digits, e.g. 18'
+              : 'Dimensions — e.g. 1024 for OpenAI embeddings'
+          }
+          className={inputClass}
+        />
+      )}
+      {kind === 'precision+scale' && (
+        <>
+          <span className="text-text-secondary/50">,</span>
+          <input
+            data-testid="attribute-scale"
+            defaultValue={attr.scale ?? ''}
+            onBlur={(e) => void onCommitScale(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+            }}
+            disabled={disabled}
+            placeholder="s"
+            title="Scale — digits after decimal, e.g. 2"
+            className={inputClass}
+          />
+        </>
+      )}
+      {kind === 'length' && (
+        <input
+          data-testid="attribute-length"
+          defaultValue={attr.length ?? ''}
+          onBlur={(e) => void onCommitLength(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+          }}
+          disabled={disabled}
+          placeholder="len"
+          title="Length — max characters, e.g. 255"
+          className={`${inputClass} w-14`}
+        />
+      )}
+    </div>
+  );
+}
+
 function AttributeRow({
   attr,
   layer,
@@ -423,7 +714,51 @@ function AttributeRow({
 
   async function commitDataType(next: string) {
     if (next === (attr.dataType ?? '')) return;
-    await onUpdate({ dataType: next || null });
+    // Dropping or switching to a type that doesn't accept a modifier
+    // should clear any stale precision/scale/length so the attribute
+    // doesn't retain orphaned modifiers (e.g. numeric→boolean).
+    const kind = typeModifierKind(next || null);
+    const patch: AttributeUpdate = { dataType: next || null };
+    if (kind === 'none') {
+      patch.precision = null;
+      patch.scale = null;
+      patch.length = null;
+    } else if (kind === 'precision') {
+      patch.scale = null;
+      patch.length = null;
+    } else if (kind === 'precision+scale') {
+      patch.length = null;
+    } else if (kind === 'length') {
+      patch.precision = null;
+      patch.scale = null;
+    }
+    await onUpdate(patch);
+  }
+
+  function parseSizeInput(raw: string): number | null {
+    const trimmed = raw.trim();
+    if (trimmed === '') return null;
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) return null;
+    return n;
+  }
+
+  async function commitPrecision(raw: string) {
+    const next = parseSizeInput(raw);
+    if (next === attr.precision) return;
+    await onUpdate({ precision: next });
+  }
+
+  async function commitScale(raw: string) {
+    const next = parseSizeInput(raw);
+    if (next === attr.scale) return;
+    await onUpdate({ scale: next });
+  }
+
+  async function commitLength(raw: string) {
+    const next = parseSizeInput(raw);
+    if (next === attr.length) return;
+    await onUpdate({ length: next });
   }
 
   async function commitClassification(next: string) {
@@ -523,25 +858,18 @@ function AttributeRow({
         />
       </td>
 
-      {/* Data Type */}
+      {/* Data Type + size modifiers — combined Erwin-style display
+          (numeric(18,2), varchar(255), vector(1024)). Click the cell to
+          edit the type + size separately. */}
       <td className="border-b border-white/5 px-2 py-0.5 align-middle">
-        <select
-          data-testid="attribute-datatype"
-          value={attr.dataType ?? ''}
-          onChange={(e) => void commitDataType(e.target.value)}
+        <DataTypeCell
+          attr={attr}
           disabled={isBusy}
-          style={{ colorScheme: 'dark' }}
-          className="w-full rounded-sm border border-transparent bg-transparent px-1.5 py-1 font-mono text-[11px] text-text-primary hover:border-white/10 focus:border-accent/40 focus:bg-surface-1/70 focus:outline-none"
-        >
-          <option value="" className="bg-surface-2 text-text-primary">
-            —
-          </option>
-          {DATA_TYPES.map((t) => (
-            <option key={t} value={t} className="bg-surface-2 text-text-primary">
-              {t}
-            </option>
-          ))}
-        </select>
+          onCommitDataType={commitDataType}
+          onCommitPrecision={commitPrecision}
+          onCommitScale={commitScale}
+          onCommitLength={commitLength}
+        />
       </td>
 
       {/* PK */}
