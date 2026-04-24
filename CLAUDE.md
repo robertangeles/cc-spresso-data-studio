@@ -49,6 +49,15 @@ Every debugging response must follow this structure:
 
 # Workflow Orchestration
 
+## 0. Approach
+
+- Read existing files before writing. Don't re-read unless changed.
+- Thorough in reasoning, concise in output.
+- Skip files over 100KB unless required.
+- No sycophantic openers or closing fluff.
+- No emojis or em-dashes.
+- Do not guess APIs, versions, flags, commit SHAs, or package names. Verify by reading code or docs before asserting.
+
 ## 1. Plan Mode Default
 
 - Enter plan mode for ANY non-trivial task (3+ steps or architectural
@@ -64,6 +73,7 @@ Every debugging response must follow this structure:
 - Offload research, exploration, and parallel analysis to subagents
 - For complex problems, use multiple subagents for parallel reasoning
 - One task per subagent for focused execution
+- Subagents should work on one decision tracket to ensure they are all sync and on the same page
 
 ## 3. Self-Improvement Loop
 

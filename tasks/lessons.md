@@ -354,3 +354,26 @@ Meanwhile Phase 6 spec keeps all 10 cases as `test.fixme` with root-cause commen
 **Secondary fix attempted + dropped:** `group-hover:!opacity-100` on `group`-wrapped parent. Tailwind JIT did not generate the `.group:hover .group-hover\!opacity-100` rule for reasons I didn't fully diagnose (the class appeared in `className` but produced no CSS match). Lesson: prefer inline-style + `hover:` for one-off Tailwind edge cases instead of fighting JIT's scan rules.
 
 **Rule:** For every UI task, **open the actual browser** before reporting done. CLAUDE.md already says this; your feedback memory says it three different ways (`visual_verification`, `e2e_verification`, `visual_verification_browser`). 464 green tests prove correctness, not discoverability. For any interactive element — drag handle, keyboard shortcut, context menu — verify that a naive user would find it without knowing what to look for. The CEO plan review's 10-section checklist did not include "walk through the first-time-user flow"; add that section to every future plan-review-skill run.
+
+## 32. Server-side attribute cascades require client-side `attrs.loadAll()` on both forward AND reverse
+
+**Problem (Step 6 follow-up, 2026-04-23):** Seven distinct bugs in one session came from the same root cause — the client's `attributesByEntity` cache going stale after a server mutation that cascades to `data_model_attributes`. The user hit it most visibly when drawing a `customer → order` relationship: the server correctly propagated `customer_id` as an FK on `order`, the Key Columns panel reported `isAutoCreated: true`, but the `order` entity card on the canvas still rendered the pre-create attribute list. Related variants surfaced for relationship delete, cardinality flip, identifying flip, Key Columns set/remove, entity cascade-delete, and even undo/redo of each.
+
+**Evidence (the audit):**
+
+| Client site                          | Server cascade                         | Was refetching?          |
+| ------------------------------------ | -------------------------------------- | ------------------------ |
+| `handleConnect` (rel create)         | `propagateOneSourcePkToTarget`         | ❌                       |
+| `relDelete` / `contextDelete`        | `unwindRelationshipFk`                 | ❌                       |
+| `contextFlip`                        | Re-propagates FKs to new target        | ❌                       |
+| `contextToggleIdentifying`           | Flips `isPrimaryKey` on FKs            | ❌                       |
+| `relUpdate` (cardinality change)     | `reconcileFkNullability`               | ❌                       |
+| `CascadeDeleteDialog.onConfirm`      | Entity cascade                         | ❌ (refreshed rels only) |
+| Key Columns `setPair` / `removePair` | Creates / deletes / un-tags target FKs | ❌                       |
+| `attrs.update` PK demotion           | Orphan cleanup                         | ✅ (earlier fix)         |
+
+**Fix:** Single `wrapCascading<T, S>(cmd: UndoCommand<T, S>): UndoCommand<T, S>` helper in `ModelStudioCanvas` that decorates an undo op so `attrs.loadAll()` runs after both `do` and `undo` succeed. Wrapped every cascade site. For components outside the canvas (e.g. `RelationshipPanel`'s Key Columns section) an optional `onAttributesMayHaveChanged?: () => Promise<void> | void` callback prop threads the refresh without creating cross-hook coupling.
+
+**Rule:** Any server mutation that can cascade to `data_model_attributes` — relationship CRUD, relationship PATCH affecting `sourceCardinality`/`targetCardinality`/`isIdentifying`, `setKeyColumns`, Key Columns `remove`, `updateAttribute` PK demotion, `deleteAttribute` on a source PK, entity cascade delete — MUST trigger a client-side `attrs.loadAll()` on BOTH the forward and the reverse (undo) paths. Pure-rename mutations (e.g. `relUpdate` with only `name`) don't cascade and don't need the wrapper. When in doubt, wrap — a redundant refresh is a single idempotent GET; a missing refresh is a stale canvas that users will call out (as they did, seven times in one session). Before shipping any new mutation surface, audit the list above and ask: "does this cascade?"
+
+**Also:** Audit the call graph, not just the one call site you're looking at. Seven of these bugs were individually easy to fix but the pattern only became visible after listing every mutation in one table. Lesson #23 (impact analysis) applies to systemic state-sync gaps too — not just to "which callers break if I change this function".

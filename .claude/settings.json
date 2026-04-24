@@ -58,7 +58,14 @@
       "Bash(python chat_image_test4.py)",
       "Bash(python chat_image_test5.py)",
       "Bash(python chat_image_test6.py)",
-      "Bash(python -c ':*)"
+      "Bash(python -c ':*)",
+      "Bash(pnpm exec *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(rm -f tsconfig.tsbuildinfo)",
+      "Bash(npx tsc *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ],
     "additionalDirectories": ["\\tmp"]
   }
