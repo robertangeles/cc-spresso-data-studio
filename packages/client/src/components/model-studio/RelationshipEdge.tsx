@@ -1,5 +1,5 @@
-import { memo, useEffect, useRef, useState } from 'react';
-import { BaseEdge, getSmoothStepPath, Position, type EdgeProps } from '@xyflow/react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { BaseEdge, getSmoothStepPath, Position, useReactFlow, type EdgeProps } from '@xyflow/react';
 import type { Cardinality, Notation } from '@cc/shared';
 
 /**
@@ -53,6 +53,17 @@ export interface RelationshipEdgeData extends Record<string, unknown> {
   /** Inverse verb phrase (e.g. "is_managed_by"). When present with
    *  verbForward, the two labels split the line in half. */
   verbInverse?: string | null;
+  /** User-authored waypoints in flow-space coords. When present, the
+   *  edge renders straight segments through them instead of React
+   *  Flow's default smooth-step routing. Shift+click a waypoint to
+   *  remove it; double-click on the edge path to insert one. */
+  waypoints?: Array<{ x: number; y: number }>;
+  /** Optimistic-lock token — required on any metadata PATCH that
+   *  persists waypoint drags. */
+  relVersion?: number;
+  /** Full relationship metadata bag (read-only). Merged with the new
+   *  waypoints array when persisting so other keys survive. */
+  relMetadata?: Record<string, unknown>;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -144,6 +155,50 @@ export function outwardAngleFor(position: Position): number {
   }
 }
 
+/** Snap the tangent from (ax,ay) → (bx,by) to the nearest cardinal
+ *  direction and return the rotation angle that orients a glyph
+ *  outward from the endpoint. Used by the waypoint-routed path where
+ *  we don't have a React Flow `Position` to read. */
+export function axisAngleToward(ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0 ? 180 : 0; // outward = opposite of tangent direction
+  }
+  return dy >= 0 ? -90 : 90;
+}
+
+/** Waypoint grid cell size (flow-space units). Dragging a waypoint
+ *  snaps its centre to the nearest multiple of this so rerouted lines
+ *  land on the same grid as the dot background — matches Erwin /
+ *  ER Studio cleanup expectations. */
+export const WAYPOINT_GRID = 10;
+
+export function snapToGrid(n: number): number {
+  return Math.round(n / WAYPOINT_GRID) * WAYPOINT_GRID;
+}
+
+/** Build the SVG sub-path from p0 to p1 as an orthogonal L-shape
+ *  (horizontal-first when dx ≥ dy, vertical-first otherwise). If the
+ *  two points already share an axis, renders a straight line. Erwin /
+ *  ER Studio relationship lines are strictly orthogonal — diagonal
+ *  segments between bend points read as sloppy on a data-model
+ *  diagram. */
+export function orthogonalSegment(
+  p0: { x: number; y: number },
+  p1: { x: number; y: number },
+): string {
+  const dx = p1.x - p0.x;
+  const dy = p1.y - p0.y;
+  if (dx === 0 || dy === 0) return `L ${p1.x} ${p1.y}`;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // Horizontal-first L: (p0) → (p1.x, p0.y) → (p1.x, p1.y)
+    return `L ${p1.x} ${p0.y} L ${p1.x} ${p1.y}`;
+  }
+  // Vertical-first L: (p0) → (p0.x, p1.y) → (p1.x, p1.y)
+  return `L ${p0.x} ${p1.y} L ${p1.x} ${p1.y}`;
+}
+
 // ────────────────────────────────────────────────────────────────────
 // Self-reference arc geometry
 // ────────────────────────────────────────────────────────────────────
@@ -179,25 +234,39 @@ export function selfRefPath(sx: number, sy: number, tx: number, ty: number): str
 function RelationshipEdgeComponent(props: EdgeProps) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected } =
     props;
-  const d = data as unknown as RelationshipEdgeData | undefined;
+  // RelationshipEdge is only registered on edges built by
+  // ModelStudioCanvas's edges memo, which ALWAYS sets `data`. Treat d
+  // as non-nullable so every hook below sits above a single early
+  // return would otherwise put them on the wrong side of — and
+  // satisfies react-hooks/rules-of-hooks without a defensive branch
+  // React Flow cannot actually trigger.
+  const d = data as unknown as RelationshipEdgeData;
 
   // Newly-created shimmer — D-R1. One-shot CSS class that the browser
   // removes after the animation finishes. Ref on the <g> so we can flip
   // the class without re-entering React on every animation frame.
-  const [shimmer, setShimmer] = useState(Boolean(d?.isNewlyCreated));
+  const [shimmer, setShimmer] = useState(Boolean(d.isNewlyCreated));
   const shimmerStart = useRef<number>(Date.now());
   useEffect(() => {
-    if (!d?.isNewlyCreated) return;
+    if (!d.isNewlyCreated) return;
     shimmerStart.current = Date.now();
     setShimmer(true);
     const t = setTimeout(() => setShimmer(false), 1500);
     return () => clearTimeout(t);
-  }, [d?.isNewlyCreated]);
-
-  if (!d) return null;
+  }, [d.isNewlyCreated]);
 
   const isSelfRef = d.isSelfRef;
   const notation = d.notation;
+  const rf = useReactFlow();
+  // Local preview of waypoints during drag so the path updates every
+  // mouse-move without waiting for server round-trips. Re-synced when
+  // props change (persisted state arrives back). Declared ABOVE path
+  // calc so the `else if (currentWaypoints.length > 0)` branch can
+  // see the drag-preview values.
+  const [localWaypoints, setLocalWaypoints] = useState<Array<{ x: number; y: number }> | null>(
+    null,
+  );
+  const currentWaypoints = localWaypoints ?? d.waypoints ?? [];
   const srcGlyph =
     notation === 'ie' ? ieSymbol(d.sourceCardinality) : idef1xSymbol(d.sourceCardinality);
   const tgtGlyph =
@@ -231,6 +300,30 @@ function RelationshipEdgeComponent(props: EdgeProps) {
     // the card body.
     srcAngleDeg = 180;
     tgtAngleDeg = 180;
+  } else if (currentWaypoints.length > 0) {
+    // User-routed — orthogonal L-segments through each waypoint.
+    // Source → wp1 → wp2 → ... → target with horizontal+vertical
+    // bends only (Erwin / ER Studio convention).
+    const pts = [{ x: sourceX, y: sourceY }, ...currentWaypoints, { x: targetX, y: targetY }];
+    const segments: string[] = [`M ${pts[0].x} ${pts[0].y}`];
+    for (let i = 1; i < pts.length; i += 1) {
+      segments.push(orthogonalSegment(pts[i - 1], pts[i]));
+    }
+    edgePath = segments.join(' ');
+    // Label: midpoint of the middle segment (straight-line approx is
+    // fine — user can drag the nearest waypoint to reposition).
+    const midIdx = Math.max(0, Math.floor(pts.length / 2) - 1);
+    labelX = (pts[midIdx].x + pts[midIdx + 1].x) / 2;
+    labelY = (pts[midIdx].y + pts[midIdx + 1].y) / 2;
+    // Cardinality glyphs ALWAYS point outward from the entity's
+    // handle, regardless of where the first waypoint is. Tying the
+    // rotation to the waypoint produced a bug where dragging a
+    // waypoint caused the glyph to swivel — sometimes pointing
+    // INTO the entity card when the user dropped a waypoint on the
+    // "wrong" side of the handle. Use the handle's cardinal direction
+    // for the same stable-outward behaviour as the no-waypoint path.
+    srcAngleDeg = outwardAngleFor(sourcePosition);
+    tgtAngleDeg = outwardAngleFor(targetPosition);
   } else {
     const [smoothPath, sLabelX, sLabelY] = getSmoothStepPath({
       sourceX,
@@ -253,8 +346,14 @@ function RelationshipEdgeComponent(props: EdgeProps) {
     tgtAngleDeg = outwardAngleFor(targetPosition);
   }
 
-  const stroke = d.isIdentifying ? 'var(--tw-colors-accent, #FFD60A)' : '#8FA3B7';
-  const dashArray = d.isIdentifying ? undefined : '6 4';
+  // Erwin-style visual grammar: both kinds of relationship share one
+  // neutral colour; the distinction between identifying and
+  // non-identifying is carried by line weight + solid/dashed. Amber
+  // is reserved for selection glow + newly-created shimmer so
+  // practitioners can scan a dense model without every line screaming
+  // for attention.
+  const stroke = '#8FA3B7';
+  const dashArray = d.isIdentifying ? undefined : '3 3';
 
   const dispatchHover = (entering: boolean) => {
     if (typeof window === 'undefined') return;
@@ -278,6 +377,176 @@ function RelationshipEdgeComponent(props: EdgeProps) {
       }),
     );
   };
+
+  /** Fire-and-forget persist — ModelStudioCanvas listens on
+   *  `rel:waypoints-change` and dispatches the rel.update + attrs
+   *  refresh. We don't await here to keep drag response snappy. */
+  const persistWaypoints = (nextWaypoints: Array<{ x: number; y: number }>) => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(
+      new CustomEvent('rel:waypoints-change', {
+        detail: {
+          relId: d.relId,
+          waypoints: nextWaypoints,
+          version: d.relVersion ?? 1,
+          metadata: d.relMetadata ?? {},
+        },
+      }),
+    );
+  };
+
+  /**
+   * Erwin / ER Studio bend-on-drag pattern. The edge LINE is the
+   * interaction surface — no visible handles at rest. Semantics:
+   *
+   *   - mouse-down + release without movement  → fall through to
+   *     React Flow's onClick (selects + opens panel, the existing
+   *     muscle memory).
+   *   - mouse-down + drag past threshold       → begin bend. If the
+   *     initial point is within WP_HIT_PX of an existing waypoint,
+   *     drag THAT waypoint. Otherwise insert a new one at the start
+   *     position and drag it.
+   *   - pointer-up after drag                   → persist via PATCH,
+   *     stopPropagation so the click-panel handler doesn't fire.
+   *
+   * Keeps selection/panel behaviour unchanged for casual use and
+   * surfaces bending as a natural "click anywhere on the line and
+   * move" gesture. Matches ER Studio's "move the cursor over the
+   * line at the point where you want to create the bend, then click
+   * and drag" docs exactly.
+   */
+  const DRAG_THRESHOLD_PX = 3;
+  const WP_HIT_PX = 10;
+
+  const beginLineDrag = useCallback(
+    (startEvent: React.PointerEvent<SVGPathElement>) => {
+      if (startEvent.button !== 0 || isSelfRef) return;
+      // Don't preventDefault upfront — that would block React Flow's
+      // click handling if the user hasn't actually dragged yet.
+      const startScreen = { x: startEvent.clientX, y: startEvent.clientY };
+      const startFlow = rf.screenToFlowPosition(startScreen);
+      const target = startEvent.currentTarget;
+      const pointerId = startEvent.pointerId;
+      let moved = false;
+      let activeIdx: number | null = null;
+
+      // Capture immediately so pointermove/up fire on `target` even
+      // when the pointer strays off the (14px-wide but invisible)
+      // interaction path mid-drag. Without this, pressing on the
+      // line and moving 4px of vertical travel would escape the hit
+      // region and the drag would die silently.
+      try {
+        target.setPointerCapture(pointerId);
+      } catch {
+        /* environments without pointer capture still work via document listeners */
+      }
+
+      const move = (ev: PointerEvent) => {
+        const dx = ev.clientX - startScreen.x;
+        const dy = ev.clientY - startScreen.y;
+        const dist = Math.hypot(dx, dy);
+        if (!moved) {
+          if (dist < DRAG_THRESHOLD_PX) return;
+          moved = true;
+          // Decide: grabbing an existing waypoint, or inserting a new one?
+          let nearestIdx: number | null = null;
+          let nearestDist = Infinity;
+          for (let i = 0; i < currentWaypoints.length; i += 1) {
+            const wp = currentWaypoints[i];
+            const d = Math.hypot(wp.x - startFlow.x, wp.y - startFlow.y);
+            if (d < nearestDist) {
+              nearestDist = d;
+              nearestIdx = i;
+            }
+          }
+          if (nearestIdx !== null && nearestDist <= WP_HIT_PX) {
+            activeIdx = nearestIdx;
+          } else {
+            // Insert a new waypoint at the closest segment index to
+            // keep ordering stable along the source→target polyline.
+            const pts = [
+              { x: sourceX, y: sourceY },
+              ...currentWaypoints,
+              { x: targetX, y: targetY },
+            ];
+            let insertAt = currentWaypoints.length;
+            let bestSegDist = Infinity;
+            for (let i = 0; i < pts.length - 1; i += 1) {
+              const sx = pts[i].x;
+              const sy = pts[i].y;
+              const ex = pts[i + 1].x;
+              const ey = pts[i + 1].y;
+              const segDx = ex - sx;
+              const segDy = ey - sy;
+              const len2 = segDx * segDx + segDy * segDy || 1;
+              const t = Math.max(
+                0,
+                Math.min(1, ((startFlow.x - sx) * segDx + (startFlow.y - sy) * segDy) / len2),
+              );
+              const px = sx + t * segDx;
+              const py = sy + t * segDy;
+              const dd = (startFlow.x - px) ** 2 + (startFlow.y - py) ** 2;
+              if (dd < bestSegDist) {
+                bestSegDist = dd;
+                insertAt = i;
+              }
+            }
+            const next = [
+              ...currentWaypoints.slice(0, insertAt),
+              { x: snapToGrid(startFlow.x), y: snapToGrid(startFlow.y) },
+              ...currentWaypoints.slice(insertAt),
+            ];
+            activeIdx = insertAt;
+            setLocalWaypoints(next);
+          }
+        }
+        // Live-update the dragged waypoint position.
+        const flow = rf.screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+        setLocalWaypoints((prev) => {
+          const base = prev ?? currentWaypoints;
+          const next = base.slice();
+          if (activeIdx === null) return base;
+          next[activeIdx] = { x: snapToGrid(flow.x), y: snapToGrid(flow.y) };
+          return next;
+        });
+      };
+
+      const up = (ev: PointerEvent) => {
+        try {
+          target.releasePointerCapture(pointerId);
+        } catch {
+          /* capture may have never been established */
+        }
+        target.removeEventListener('pointermove', move);
+        target.removeEventListener('pointerup', up);
+        target.removeEventListener('pointercancel', up);
+        if (moved) {
+          // Stop the click handler on the parent <g> from firing —
+          // dragging and selecting shouldn't happen in one gesture.
+          ev.stopPropagation();
+          ev.preventDefault();
+          setLocalWaypoints((finalState) => {
+            if (finalState) persistWaypoints(finalState);
+            return finalState;
+          });
+        }
+        // If NOT moved → do nothing here. React Flow's onClick fires
+        // as usual and the parent handles selection/panel policy.
+      };
+
+      target.addEventListener('pointermove', move);
+      target.addEventListener('pointerup', up);
+      target.addEventListener('pointercancel', up);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rf, currentWaypoints, isSelfRef, sourceX, sourceY, targetX, targetY, d.relId, d.relVersion],
+  );
+
+  // Double-click on the edge line used to insert a waypoint; the
+  // Erwin-style click-drag gesture above now owns bend creation, so
+  // there's no double-click binding on the edge anymore. Keeping an
+  // empty stub would only confuse future readers — the onDoubleClick
+  // prop is simply removed below.
 
   return (
     <g
@@ -304,14 +573,38 @@ function RelationshipEdgeComponent(props: EdgeProps) {
         path={edgePath}
         style={{
           stroke,
-          // Identifying relationships are visually heavier — a senior
-          // CDMP eye should spot the parent→weak-child hierarchy at a
-          // glance, matching Erwin / ER Studio stroke weights.
-          strokeWidth: d.isIdentifying ? 2.25 : 1.4,
+          // Erwin-parity stroke weights — lighter than our pre-refresh
+          // numbers so a dense diagram reads like a schematic, not a
+          // highlighter sketch. Identifying stays visibly thicker so
+          // parent→weak-child hierarchy is still spottable at a glance.
+          strokeWidth: d.isIdentifying ? 1.75 : 1.1,
           strokeDasharray: dashArray,
           opacity: shimmer ? 0.85 : 1,
           transition: 'opacity 200ms ease',
+          // The "move" cursor on the line hints the stroke itself is
+          // draggable (Erwin / ER Studio bend-on-drag). Single click
+          // still falls through to React Flow's onClick and opens the
+          // properties panel; the drag gesture only triggers when the
+          // pointer moves past a 3px threshold after pointerdown.
+          cursor: 'move',
         }}
+      />
+      {/* Invisible-but-wide interaction path stacked over the
+          visible stroke. Painted with `stroke-opacity=0` rather than
+          `stroke="transparent"` — some browsers (notably Chromium
+          with certain stacking contexts) treat a fully transparent
+          stroke as non-interactive. An opaque-colour + 0 opacity
+          stroke is unambiguously paintable and reliably receives
+          pointer events. */}
+      <path
+        data-testid={`rel-interaction-${id}`}
+        d={edgePath}
+        fill="none"
+        stroke="#000"
+        strokeOpacity={0}
+        strokeWidth={14}
+        style={{ cursor: 'move', pointerEvents: 'stroke' }}
+        onPointerDown={beginLineDrag}
       />
       {/* Source-end glyph — anchored at the actual source handle
           (right-edge midpoint for self-ref; outward-facing edge
@@ -361,6 +654,12 @@ function RelationshipEdgeComponent(props: EdgeProps) {
         labelY={labelY}
         edgeId={id}
       />
+      {/* No visible waypoint handles — Erwin / ER Studio style.
+          Bends live in the line geometry; grabbing one means clicking
+          on the line near the existing waypoint and dragging. New
+          waypoints are inserted at the click position of the first
+          drag-past-threshold motion. To strip all waypoints, use the
+          edge right-click menu → "Reset path". */}
     </g>
   );
 }
@@ -492,49 +791,80 @@ function GlyphMarker({
   identifying: boolean;
   testId: string;
 }) {
-  const stroke = identifying ? '#FFD60A' : '#8FA3B7';
-  const fill = identifying ? '#FFD60A' : '#8FA3B7';
-  // Glyph origin sits 12px outside the node along the edge tangent so
-  // it doesn't overlap the card border.
+  // Match the edge stroke colour (identifying was amber pre-refresh,
+  // now shares the neutral grey-blue — weight + solid stroke carry
+  // the identifying signal so the glyph doesn't need to shout).
+  const stroke = '#8FA3B7';
+  const fill = '#8FA3B7';
+  // Glyph stroke slightly heavier than the line it terminates so
+  // cardinality reads as a crisp terminator, not a thinning tail.
+  const glyphStrokeWidth = identifying ? 1.5 : 1.25;
+  // Local geometry note: the <g> is translated to the entity-edge
+  // handle (x, y) and rotated so local −x points OUTWARD from the
+  // card. All glyph coordinates use negative x so after rotation they
+  // extend outside the entity, leaving the line's path inside the
+  // entity-relationship corridor untouched.
   return (
     <g transform={`translate(${x} ${y}) rotate(${angleDeg})`} data-testid={testId}>
       {glyph.bar && (
+        // Vertical perpendicular line — canonical "one and only one"
+        // glyph (Redgate / Creately / Microsoft Visio convention).
+        // 14px tall (up from 10) reads as a deliberate terminator
+        // instead of a stray tick.
         <line
-          x1={-14}
-          y1={-6}
-          x2={-14}
-          y2={6}
+          x1={-12}
+          y1={-7}
+          x2={-12}
+          y2={7}
           stroke={stroke}
-          strokeWidth={1.25}
+          strokeWidth={glyphStrokeWidth}
           data-glyph="bar"
+          strokeLinecap="round"
         />
       )}
       {glyph.crowsFoot && (
-        <g data-glyph="crows-foot" stroke={stroke} strokeWidth={1.15} fill="none">
-          <line x1={-4} y1={0} x2={-14} y2={-7} />
-          <line x1={-4} y1={0} x2={-14} y2={0} />
-          <line x1={-4} y1={0} x2={-14} y2={7} />
+        // Three prongs radiating from the line terminus OUTWARD.
+        // Apex at (0,0) sits exactly at the entity handle; outer
+        // prongs splay ±8 (wider than the old ±6 so the crow's foot
+        // reads as three distinct claws rather than an arrowhead).
+        // Middle prong shares the same length as the outer ones for
+        // visual balance.
+        <g
+          data-glyph="crows-foot"
+          stroke={stroke}
+          strokeWidth={glyphStrokeWidth}
+          fill="none"
+          strokeLinecap="round"
+        >
+          <line x1={0} y1={0} x2={-14} y2={-8} />
+          <line x1={0} y1={0} x2={-14} y2={0} />
+          <line x1={0} y1={0} x2={-14} y2={8} />
         </g>
       )}
       {glyph.filledCircle && (
+        // IDEF1X "many" terminator — solid disc. r=3 matches the
+        // open circle below for visual parity between notations.
         <circle
-          cx={-18}
+          cx={-15}
           cy={0}
           r={3}
           fill={fill}
           stroke={stroke}
-          strokeWidth={1.15}
+          strokeWidth={glyphStrokeWidth}
           data-glyph="filled-circle"
         />
       )}
       {glyph.openCircle && (
+        // "Zero or …" optionality marker. Sits further out (x=-22)
+        // when paired with a bar or crow's foot so the two
+        // terminators don't visually merge.
         <circle
           cx={-22}
           cy={0}
           r={3}
           fill="#0B0E13"
           stroke={stroke}
-          strokeWidth={1.15}
+          strokeWidth={glyphStrokeWidth}
           data-glyph="open-circle"
         />
       )}

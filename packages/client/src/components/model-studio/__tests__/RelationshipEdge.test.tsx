@@ -256,7 +256,10 @@ describe('RelationshipEdge — identifying stroke style', () => {
   });
 
   it('identifying edge draws a thicker line than non-identifying (Direction A)', () => {
-    // Per Direction A brief: identifying = 2.25, non-identifying = 1.4.
+    // Erwin-parity aesthetic refresh — identifying = 1.75, non-
+    // identifying = 1.1. Lighter than the original 2.25 / 1.4 brief
+    // after practitioner feedback that dense diagrams read too
+    // "highlighter-sketch" at the old weights.
     const idRender = renderEdge(baseData('ie', 'one', 'many', true));
     const nonIdRender = renderEdge(baseData('ie', 'one', 'many', false));
     const idStyle =
@@ -264,8 +267,8 @@ describe('RelationshipEdge — identifying stroke style', () => {
     const nonIdStyle =
       nonIdRender.container.querySelector('path.react-flow__edge-path')?.getAttribute('style') ??
       '';
-    expect(idStyle).toMatch(/stroke-width:\s*2\.25/);
-    expect(nonIdStyle).toMatch(/stroke-width:\s*1\.4/);
+    expect(idStyle).toMatch(/stroke-width:\s*1\.75/);
+    expect(nonIdStyle).toMatch(/stroke-width:\s*1\.1/);
   });
 });
 
