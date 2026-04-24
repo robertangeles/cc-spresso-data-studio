@@ -178,6 +178,34 @@ export function snapToGrid(n: number): number {
   return Math.round(n / WAYPOINT_GRID) * WAYPOINT_GRID;
 }
 
+/** Distance (in flow units) within which two consecutive waypoints
+ *  collapse into one on save. Matches `WP_HIT_PX` used by the drag
+ *  handler: if a click-drag within this radius of an existing
+ *  waypoint would have grabbed that waypoint (not inserted a new
+ *  one), two waypoints that close to each other in storage are
+ *  effectively duplicates. Dedup cleans up legacy data captured
+ *  before the grab radius was widened. */
+export const WP_DEDUP_THRESHOLD = 30;
+
+/** Collapse consecutive waypoints that sit within WP_DEDUP_THRESHOLD
+ *  of each other into a single waypoint (keeping the first of each
+ *  cluster — subsequent ones are considered stale drop points from a
+ *  "drag again to refine" gesture that didn't grab the prior
+ *  waypoint). Runs at persist-time so users don't accumulate a
+ *  staircase of junk waypoints when a route is adjusted repeatedly. */
+export function dedupWaypoints(
+  waypoints: Array<{ x: number; y: number }>,
+  threshold: number = WP_DEDUP_THRESHOLD,
+): Array<{ x: number; y: number }> {
+  const out: Array<{ x: number; y: number }> = [];
+  for (const wp of waypoints) {
+    const last = out[out.length - 1];
+    if (last && Math.hypot(wp.x - last.x, wp.y - last.y) < threshold) continue;
+    out.push(wp);
+  }
+  return out;
+}
+
 /** Build the SVG sub-path from p0 to p1 as an orthogonal L-shape
  *  (horizontal-first when dx ≥ dy, vertical-first otherwise). If the
  *  two points already share an axis, renders a straight line. Erwin /
@@ -607,8 +635,13 @@ function RelationshipEdgeComponent(props: EdgeProps) {
           ev.stopPropagation();
           ev.preventDefault();
           setLocalWaypoints((finalState) => {
-            if (finalState) persistWaypoints(finalState);
-            return finalState;
+            if (!finalState) return finalState;
+            // Collapse consecutive close-together waypoints. Cleans up
+            // legacy zigzag data from drag-to-refine sessions made
+            // before WP_HIT_PX was widened to 30px.
+            const deduped = dedupWaypoints(finalState);
+            persistWaypoints(deduped);
+            return deduped;
           });
         }
         // If NOT moved → do nothing here. React Flow's onClick fires

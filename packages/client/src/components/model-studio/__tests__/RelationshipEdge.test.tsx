@@ -12,6 +12,8 @@ import {
   ieSymbol,
   idef1xSymbol,
   selfRefPath,
+  dedupWaypoints,
+  WP_DEDUP_THRESHOLD,
 } from '../RelationshipEdge';
 import { Position, ReactFlowProvider } from '@xyflow/react';
 
@@ -317,5 +319,69 @@ describe('RelationshipEdge — verb phrases (Direction A)', () => {
     expect(screen.queryByTestId('rel-verb-single-edge-test')).toBeFalsy();
     expect(screen.queryByTestId('rel-verb-forward-edge-test')).toBeFalsy();
     expect(screen.queryByTestId('rel-verb-inverse-edge-test')).toBeFalsy();
+  });
+});
+
+describe('dedupWaypoints', () => {
+  it('returns an empty array unchanged', () => {
+    expect(dedupWaypoints([])).toEqual([]);
+  });
+
+  it('keeps a single waypoint unchanged', () => {
+    expect(dedupWaypoints([{ x: 100, y: 200 }])).toEqual([{ x: 100, y: 200 }]);
+  });
+
+  it('keeps well-separated waypoints', () => {
+    const input = [
+      { x: 100, y: 200 },
+      { x: 300, y: 400 },
+      { x: 500, y: 600 },
+    ];
+    expect(dedupWaypoints(input)).toEqual(input);
+  });
+
+  it('collapses two consecutive waypoints within the threshold', () => {
+    const input = [
+      { x: 100, y: 200 },
+      { x: 110, y: 205 }, // ~11px from prev — under 30
+    ];
+    expect(dedupWaypoints(input)).toEqual([{ x: 100, y: 200 }]);
+  });
+
+  it('collapses a staircase of close-together waypoints to one', () => {
+    const input = [
+      { x: 100, y: 200 },
+      { x: 105, y: 210 },
+      { x: 108, y: 215 },
+      { x: 112, y: 220 },
+    ];
+    expect(dedupWaypoints(input)).toEqual([{ x: 100, y: 200 }]);
+  });
+
+  it('preserves a waypoint that jumps beyond the threshold after a cluster', () => {
+    const input = [
+      { x: 100, y: 200 },
+      { x: 110, y: 205 }, // dedupes
+      { x: 500, y: 600 }, // ~500+ px from last survivor — kept
+    ];
+    expect(dedupWaypoints(input)).toEqual([
+      { x: 100, y: 200 },
+      { x: 500, y: 600 },
+    ]);
+  });
+
+  it('uses the configured threshold', () => {
+    const tight = [
+      { x: 0, y: 0 },
+      { x: 25, y: 0 },
+    ];
+    // With threshold 30 (default): collapses.
+    expect(dedupWaypoints(tight)).toEqual([{ x: 0, y: 0 }]);
+    // With threshold 10: keeps both.
+    expect(dedupWaypoints(tight, 10)).toEqual(tight);
+  });
+
+  it('WP_DEDUP_THRESHOLD matches the drag-grab radius convention', () => {
+    expect(WP_DEDUP_THRESHOLD).toBe(30);
   });
 });
