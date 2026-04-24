@@ -199,6 +199,63 @@ export function orthogonalSegment(
   return `L ${p0.x} ${p1.y} L ${p1.x} ${p1.y}`;
 }
 
+/** Stub length in flow units — how far the line extends outward from
+ *  the handle before making its first bend toward a user waypoint.
+ *  Matches the cardinality-glyph visual length so the glyph sits on
+ *  the straight stub segment and its tangent is unambiguously
+ *  outward-pointing regardless of where the first waypoint landed. */
+export const STUB_LEN = 20;
+
+/** Outward displacement vector for the stub segment extending from a
+ *  handle of the given Position. Values match `outwardAngleFor` so
+ *  the stub direction and the glyph rotation always agree. */
+export function outwardStubDelta(position: Position): { dx: number; dy: number } {
+  switch (position) {
+    case Position.Right:
+      return { dx: STUB_LEN, dy: 0 };
+    case Position.Left:
+      return { dx: -STUB_LEN, dy: 0 };
+    case Position.Top:
+      return { dx: 0, dy: -STUB_LEN };
+    case Position.Bottom:
+      return { dx: 0, dy: STUB_LEN };
+    default:
+      return { dx: 0, dy: 0 };
+  }
+}
+
+/** Build an L-shape from a handle-adjacent stub point `from` to a
+ *  waypoint `to`, forcing the FIRST move to be PERPENDICULAR to the
+ *  handle's outward axis. This prevents the pathological "line
+ *  backtracks through the entity card" route that a generic
+ *  `orthogonalSegment` produces when the waypoint is behind the
+ *  handle. Using this for both first (stub→wp1) and last
+ *  (wpN→stub) segments guarantees the line ALWAYS leaves / enters a
+ *  handle along the outward axis, which in turn means the
+ *  cardinality glyph (rotated by the handle's cardinal direction)
+ *  stays visually attached to the line.
+ */
+export function stubToAnchor(
+  outwardAxis: 'horizontal' | 'vertical',
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): string {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (dx === 0 || dy === 0) return `L ${to.x} ${to.y}`;
+  if (outwardAxis === 'horizontal') {
+    // Handle's outward was horizontal → move PERPENDICULAR (vertical) first.
+    return `L ${from.x} ${to.y} L ${to.x} ${to.y}`;
+  }
+  // Handle's outward was vertical → move horizontal first.
+  return `L ${to.x} ${from.y} L ${to.x} ${to.y}`;
+}
+
+/** Which axis is the handle's outward direction on? */
+export function outwardAxis(position: Position): 'horizontal' | 'vertical' {
+  return position === Position.Left || position === Position.Right ? 'horizontal' : 'vertical';
+}
+
 // ────────────────────────────────────────────────────────────────────
 // Self-reference arc geometry
 // ────────────────────────────────────────────────────────────────────
@@ -302,26 +359,58 @@ function RelationshipEdgeComponent(props: EdgeProps) {
     tgtAngleDeg = 180;
   } else if (currentWaypoints.length > 0) {
     // User-routed — orthogonal L-segments through each waypoint.
-    // Source → wp1 → wp2 → ... → target with horizontal+vertical
-    // bends only (Erwin / ER Studio convention).
-    const pts = [{ x: sourceX, y: sourceY }, ...currentWaypoints, { x: targetX, y: targetY }];
-    const segments: string[] = [`M ${pts[0].x} ${pts[0].y}`];
-    for (let i = 1; i < pts.length; i += 1) {
-      segments.push(orthogonalSegment(pts[i - 1], pts[i]));
+    //
+    // Stub-anchored routing (fix for "stuck glyph"): insert a 20px
+    // stub in each handle's OUTWARD direction before the first / after
+    // the last user waypoint. This guarantees the line exits / enters
+    // each handle along the same axis the cardinality glyph points.
+    // Without this, a waypoint dragged BEHIND the handle would produce
+    // a path that immediately backtracks through the entity card while
+    // the glyph continued to point outward — visually detaching the
+    // crow's-foot from its line. The stub + perpendicular-first routing
+    // forces an early bend AWAY from the card instead.
+    //
+    // Source handle → stub → (perpendicular corner) → wp1 → … → wpN →
+    // (perpendicular corner) → stub → Target handle.
+    const srcOutAxis = outwardAxis(sourcePosition);
+    const tgtOutAxis = outwardAxis(targetPosition);
+    const srcDelta = outwardStubDelta(sourcePosition);
+    const tgtDelta = outwardStubDelta(targetPosition);
+    const srcStub = { x: sourceX + srcDelta.dx, y: sourceY + srcDelta.dy };
+    const tgtStub = { x: targetX + tgtDelta.dx, y: targetY + tgtDelta.dy };
+
+    const firstWp = currentWaypoints[0];
+    const lastWp = currentWaypoints[currentWaypoints.length - 1];
+
+    const segments: string[] = [`M ${sourceX} ${sourceY}`];
+    // Straight stub in outward direction — this is the segment the
+    // source glyph's tangent points along.
+    segments.push(`L ${srcStub.x} ${srcStub.y}`);
+    // Stub → first user waypoint, perpendicular-first.
+    segments.push(stubToAnchor(srcOutAxis, srcStub, firstWp));
+    // Interior waypoint-to-waypoint segments use the generic heuristic.
+    for (let i = 1; i < currentWaypoints.length; i += 1) {
+      segments.push(orthogonalSegment(currentWaypoints[i - 1], currentWaypoints[i]));
     }
+    // Last user waypoint → target stub, perpendicular to tgt outward.
+    segments.push(stubToAnchor(tgtOutAxis, lastWp, tgtStub));
+    // Stub → target handle in the handle's outward axis — this is the
+    // segment the target glyph's tangent points along.
+    segments.push(`L ${targetX} ${targetY}`);
     edgePath = segments.join(' ');
-    // Label: midpoint of the middle segment (straight-line approx is
-    // fine — user can drag the nearest waypoint to reposition).
-    const midIdx = Math.max(0, Math.floor(pts.length / 2) - 1);
-    labelX = (pts[midIdx].x + pts[midIdx + 1].x) / 2;
-    labelY = (pts[midIdx].y + pts[midIdx + 1].y) / 2;
-    // Cardinality glyphs ALWAYS point outward from the entity's
-    // handle, regardless of where the first waypoint is. Tying the
-    // rotation to the waypoint produced a bug where dragging a
-    // waypoint caused the glyph to swivel — sometimes pointing
-    // INTO the entity card when the user dropped a waypoint on the
-    // "wrong" side of the handle. Use the handle's cardinal direction
-    // for the same stable-outward behaviour as the no-waypoint path.
+
+    // Label: midpoint of the middle user waypoint span (not the stubs).
+    // Straight-line approx is fine; user can drag a waypoint to reposition.
+    const midIdx = Math.max(0, Math.floor(currentWaypoints.length / 2) - 1);
+    const labelA = currentWaypoints[midIdx] ?? firstWp;
+    const labelB = currentWaypoints[midIdx + 1] ?? lastWp;
+    labelX = (labelA.x + labelB.x) / 2;
+    labelY = (labelA.y + labelB.y) / 2;
+
+    // Cardinality glyphs rotate by the handle's outward cardinal
+    // direction. Now that the path ALSO always exits along the same
+    // axis (via the stubs above), the glyph tangent and line tangent
+    // agree — the crow's-foot visually terminates the stub segment.
     srcAngleDeg = outwardAngleFor(sourcePosition);
     tgtAngleDeg = outwardAngleFor(targetPosition);
   } else {
