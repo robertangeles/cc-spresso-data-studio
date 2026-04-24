@@ -295,6 +295,69 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
           transition: 'opacity 120ms ease-out',
         }}
       />
+      {/*
+        Step-6 edge-routing Phase 1 — symmetric cardinal handles.
+        The original 5 handles above are role-constrained (top/left are
+        target-only, bottom/right-top are source-only), which makes it
+        impossible for `pickHandle` to face an edge outward on any side:
+        e.g. "target is to the LEFT of source" needs source=left, but
+        no such source handle exists. These four invisible twins close
+        the gap so every cardinal side can play either role. They sit
+        at the SAME position as their existing counterpart, so a handle
+        id like `top-source` visually coincides with `top` (target).
+        React Flow resolves by id, not by pixel position.
+      */}
+      <Handle
+        id="top-source"
+        type="source"
+        position={Position.Top}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent"
+        style={{
+          opacity: isHovered ? 1 : 0,
+          boxShadow: '0 0 6px rgba(255,214,10,0.55)',
+          transition: 'opacity 120ms ease-out',
+        }}
+      />
+      <Handle
+        id="bottom-target"
+        type="target"
+        position={Position.Bottom}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent"
+        style={{
+          opacity: isHovered ? 1 : 0,
+          boxShadow: '0 0 6px rgba(255,214,10,0.55)',
+          transition: 'opacity 120ms ease-out',
+        }}
+      />
+      <Handle
+        id="left-source"
+        type="source"
+        position={Position.Left}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent"
+        style={{
+          opacity: isHovered ? 1 : 0,
+          boxShadow: '0 0 6px rgba(255,214,10,0.55)',
+          transition: 'opacity 120ms ease-out',
+        }}
+      />
+      {/*
+        right-target sits at top: 30% so it doesn't collide with
+        right-top (source, default 50%) or right-bottom (target, 70%).
+        All three co-exist on the right edge for self-ref + general-case
+        routing without visual overlap.
+      */}
+      <Handle
+        id="right-target"
+        type="target"
+        position={Position.Right}
+        className="!h-2.5 !w-2.5 !border-0 !bg-accent"
+        style={{
+          top: '30%',
+          opacity: isHovered ? 1 : 0,
+          boxShadow: '0 0 6px rgba(255,214,10,0.55)',
+          transition: 'opacity 120ms ease-out',
+        }}
+      />
 
       {/* D-R5 orphan-entity badge */}
       {data.showOrphanBadge !== false && (
