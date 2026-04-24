@@ -201,6 +201,7 @@ export function useRelationships(modelId: string | undefined) {
       relId: string,
       input: Omit<UpdateRelationshipInput, 'version'>,
       clientVersion: number,
+      options: { silentOnConflict?: boolean } = {},
     ): Promise<UpdateResult> => {
       if (!modelId) throw new Error('No model selected');
       setIsMutating(true);
@@ -215,7 +216,14 @@ export function useRelationships(modelId: string | undefined) {
       } catch (err) {
         if (isVersionConflict(err)) {
           const serverVersion = extractServerVersion(err);
-          toast('Someone else edited — refresh', 'error');
+          // silentOnConflict: used by UI-cosmetic PATCHes (e.g. waypoint
+          // drags) where the caller silently refetches. Suppressing the
+          // toast avoids spamming on rapid-drag races where the client
+          // captured a version that's about to be bumped by an in-flight
+          // PATCH of its own.
+          if (!options.silentOnConflict) {
+            toast('Someone else edited — refresh', 'error');
+          }
           return { conflict: true, serverVersion };
         }
         const msg = errorMessage(err, 'Failed to update relationship');

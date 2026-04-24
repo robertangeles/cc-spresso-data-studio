@@ -28,11 +28,18 @@ import { api } from '../lib/api';
 export interface UseRelationshipKeyColumnsApi {
   pairs: RelationshipKeyColumnPair[];
   sourceHasNoPk: boolean;
+  /** Post-alt-key-FK semantic: true when source has NO PK AND no UQ
+   *  AND no AK group. Optional on older server builds — callers should
+   *  read `sourceHasNoCandidateKey ?? sourceHasNoPk`. */
+  sourceHasNoCandidateKey?: boolean;
   isLoading: boolean;
   error: string | null;
   /** Update one source→target pair (null = auto-create). POSTs the
    *  full reconciled list to the server and refetches on success. */
   setPair: (sourceAttributeId: string, targetAttributeId: string | null) => Promise<void>;
+  /** Remove the pair for a non-PK source attr (AK/UQ). Deletes any
+   *  auto-propagated FK and strips manual tags on the target. */
+  removePair: (sourceAttributeId: string) => Promise<void>;
   /** Force a re-GET — used after an out-of-band event (e.g. undo). */
   refetch: () => Promise<void>;
 }
@@ -54,6 +61,9 @@ export function useRelationshipKeyColumns(
 ): UseRelationshipKeyColumnsApi {
   const [pairs, setPairs] = useState<RelationshipKeyColumnPair[]>([]);
   const [sourceHasNoPk, setSourceHasNoPk] = useState(false);
+  const [sourceHasNoCandidateKey, setSourceHasNoCandidateKey] = useState<boolean | undefined>(
+    undefined,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +87,7 @@ export function useRelationshipKeyColumns(
         if (activeKeyRef.current !== key) return null;
         setPairs(body.pairs);
         setSourceHasNoPk(body.sourceHasNoPk);
+        setSourceHasNoCandidateKey(body.sourceHasNoCandidateKey);
         setError(null);
         return body;
       } catch (err) {
@@ -110,6 +121,7 @@ export function useRelationshipKeyColumns(
       activeKeyRef.current = null;
       setPairs([]);
       setSourceHasNoPk(false);
+      setSourceHasNoCandidateKey(undefined);
       setError(null);
       setIsLoading(false);
       return;
@@ -154,12 +166,29 @@ export function useRelationshipKeyColumns(
       const endpoint = url();
       if (!endpoint || !modelId || !relId) return;
       const key = `${modelId}::${relId}`;
-      // Build the full pair list with this one updated.
-      const nextPairs: RelationshipKeyColumnsSet['pairs'] = pairs.map((p) =>
-        p.sourceAttributeId === sourceAttributeId
-          ? { sourceAttributeId: p.sourceAttributeId, targetAttributeId }
-          : { sourceAttributeId: p.sourceAttributeId, targetAttributeId: p.targetAttributeId },
-      );
+      // Build the full pair list with this one updated. Omit untouched
+      // AK/UQ rows that are currently unpaired — otherwise the server
+      // treats targetAttributeId=null as "auto-create" and would
+      // materialise a new FK on target whenever another row changes.
+      // PK rows are always included (backwards compat — PKs auto-create
+      // or retain by default).
+      const nextPairs: RelationshipKeyColumnsSet['pairs'] = pairs
+        .map((p) => {
+          if (p.sourceAttributeId === sourceAttributeId) {
+            return { sourceAttributeId: p.sourceAttributeId, targetAttributeId };
+          }
+          return { sourceAttributeId: p.sourceAttributeId, targetAttributeId: p.targetAttributeId };
+        })
+        .filter((entry) => {
+          const original = pairs.find((p) => p.sourceAttributeId === entry.sourceAttributeId);
+          if (!original) return true;
+          if (entry.sourceAttributeId === sourceAttributeId) return true;
+          const role = original.sourceAttributeRole ?? 'pk';
+          if (role === 'pk') return true;
+          if (original.isAutoCreated) return true;
+          if (original.targetAttributeId) return true;
+          return false;
+        });
       setError(null);
       try {
         const { data } = await api.post<{ data: RelationshipKeyColumnsResponse }>(endpoint, {
@@ -169,6 +198,7 @@ export function useRelationshipKeyColumns(
         const body = data.data;
         setPairs(body.pairs);
         setSourceHasNoPk(body.sourceHasNoPk);
+        setSourceHasNoCandidateKey(body.sourceHasNoCandidateKey);
       } catch (err) {
         if (activeKeyRef.current === key) {
           setError(errorToString(err, 'Failed to update key columns'));
@@ -179,5 +209,43 @@ export function useRelationshipKeyColumns(
     [url, modelId, relId, pairs],
   );
 
-  return { pairs, sourceHasNoPk, isLoading, error, setPair, refetch };
+  const removePair = useCallback(
+    async (sourceAttributeId: string) => {
+      const endpoint = url();
+      if (!endpoint || !modelId || !relId) return;
+      const key = `${modelId}::${relId}`;
+      // Body: a single remove directive for the source attr. Including
+      // other pairs is unnecessary — the server treats absent rows as
+      // "leave alone" for AK/UQ and "auto-retain" for PK.
+      const body: RelationshipKeyColumnsSet = {
+        pairs: [{ sourceAttributeId, targetAttributeId: null, remove: true }],
+      };
+      setError(null);
+      try {
+        const { data } = await api.post<{ data: RelationshipKeyColumnsResponse }>(endpoint, body);
+        if (activeKeyRef.current !== key) return;
+        const responseBody = data.data;
+        setPairs(responseBody.pairs);
+        setSourceHasNoPk(responseBody.sourceHasNoPk);
+        setSourceHasNoCandidateKey(responseBody.sourceHasNoCandidateKey);
+      } catch (err) {
+        if (activeKeyRef.current === key) {
+          setError(errorToString(err, 'Failed to remove key column pair'));
+        }
+        throw err;
+      }
+    },
+    [url, modelId, relId],
+  );
+
+  return {
+    pairs,
+    sourceHasNoPk,
+    sourceHasNoCandidateKey,
+    isLoading,
+    error,
+    setPair,
+    removePair,
+    refetch,
+  };
 }

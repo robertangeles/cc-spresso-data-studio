@@ -33,6 +33,10 @@ export interface AttributeSummary {
   isPrimaryKey: boolean;
   isForeignKey: boolean;
   isUnique: boolean;
+  /** Step 6 follow-up — true when the user explicitly toggled UQ (not
+   *  coerced by PK or AK). Used by the Key Columns panel to decide
+   *  whether this attr should be surfaced as a candidate-key source. */
+  isExplicitUnique: boolean;
   defaultValue: string | null;
   classification: string | null;
   transformationLogic: string | null;
@@ -182,6 +186,20 @@ export function useAttributes(modelId: string | undefined) {
           [entityId]: list.map((a) => (a.id === attrId ? updated : a)),
         };
       });
+      // PK demotion on the server cascades into deleting propagated FKs
+      // on downstream target entities. The client can't know which
+      // entities were affected without a second call — refetch the
+      // whole model's attrs to reconcile. Bounded by model size.
+      if (patch.isPrimaryKey === false) {
+        try {
+          const { data: batch } = await api.get<{ data: BatchResponse }>(
+            `/model-studio/models/${modelId}/attributes`,
+          );
+          setAttributesByEntity(batch?.data?.attributesByEntity ?? {});
+        } catch {
+          // Swallow — the next user action will naturally refetch.
+        }
+      }
       return updated;
     },
     [modelId, base],
@@ -195,9 +213,23 @@ export function useAttributes(modelId: string | undefined) {
     ): Promise<DeleteAttributeResult> => {
       if (!modelId) throw new Error('No model selected');
       const qs = opts.cascade ? '?confirm=cascade' : '';
-      const { data } = await api.delete<{ data: DeleteAttributeResult }>(
-        base(entityId, `/${attrId}${qs}`),
-      );
+      let result: DeleteAttributeResult = {
+        deleted: true,
+        cascaded: { attributeLinks: 0, semanticMappings: 0 },
+      };
+      try {
+        const { data } = await api.delete<{ data: DeleteAttributeResult }>(
+          base(entityId, `/${attrId}${qs}`),
+        );
+        result = data.data;
+      } catch (err) {
+        // 404 = attribute already gone (typically cleaned up server-side
+        // by a prior mutation: PK demotion removing a propagated FK, or
+        // relationship delete unwinding an auto-FK). Treat as success;
+        // the local state drop below reconciles the stale client cache.
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status !== 404) throw err;
+      }
       setAttributesByEntity((prev) => {
         const list = prev[entityId] ?? [];
         return {
@@ -205,7 +237,7 @@ export function useAttributes(modelId: string | undefined) {
           [entityId]: list.filter((a) => a.id !== attrId),
         };
       });
-      return data.data;
+      return result;
     },
     [modelId, base],
   );
