@@ -190,10 +190,17 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
     return allAttrs.filter((a) => !a.isPrimaryKey);
   }, [allAttrs, hideSurrogatePks]);
 
-  // Primary-identifier group (above the divider) = attrs whose id is
-  // in `primaryIds`. Non-primary = everything else in the visible set.
+  // Three-section layout (ordered top-to-bottom to surface relationship
+  // structure immediately below the identifier):
+  //   1. Primary identifier (PK or BK) — above the first divider
+  //   2. FK-only attributes — directly under the PK so the reader can
+  //      see "what does this entity reference" at a glance
+  //   3. Non-key, non-FK attributes — the entity's own data columns
+  //   FK attrs that are ALSO PK (identifying rels) stay in section 1.
   const primaryAttrs = visibleAttrs.filter((a) => primaryIds.has(a.id));
   const nonPrimaryAttrs = visibleAttrs.filter((a) => !primaryIds.has(a.id));
+  const fkAttrs = nonPrimaryAttrs.filter((a) => a.isForeignKey);
+  const nonFkAttrs = nonPrimaryAttrs.filter((a) => !a.isForeignKey);
   const hasAttrs = visibleAttrs.length > 0;
 
   return (
@@ -388,9 +395,24 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
           {primaryAttrs.length > 0 && nonPrimaryAttrs.length > 0 && (
             <div data-testid="entity-node-pk-divider" className="border-t border-white/10" />
           )}
-          {nonPrimaryAttrs.length > 0 && (
+          {fkAttrs.length > 0 && (
+            <ul data-testid="entity-node-fk-group" className="px-3 py-1.5 space-y-0.5">
+              {fkAttrs.map((a) => (
+                <AttributeLine
+                  key={a.id}
+                  attr={a}
+                  isPrimary={false}
+                  altKeyLabels={data.altKeyLabels}
+                />
+              ))}
+            </ul>
+          )}
+          {fkAttrs.length > 0 && nonFkAttrs.length > 0 && (
+            <div data-testid="entity-node-fk-divider" className="border-t border-white/5" />
+          )}
+          {nonFkAttrs.length > 0 && (
             <ul data-testid="entity-node-nonpk-group" className="px-3 py-1.5 space-y-0.5">
-              {nonPrimaryAttrs.map((a) => (
+              {nonFkAttrs.map((a) => (
                 <AttributeLine
                   key={a.id}
                   attr={a}
