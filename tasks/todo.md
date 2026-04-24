@@ -75,6 +75,50 @@ the project memory at `project_model_studio_state.md` — use it.
       empty state (D10), onboarding, keyboard shortcuts, responsive,
       error boundaries.
 
+## Step 11 polish backlog — canvas-state fetch race on page load
+
+- [ ] **Fold canvas-state into the entity fetch (eliminate page-load
+      render race).** On page load, entities render before
+      `canvas.state.nodePositions` arrives, so every entity paints at
+      `{x:0, y:0}` for 100-300ms before snapping to its saved
+      position. The jank is visible — entities appear clubbed in the
+      top-left, then flash into place.
+
+      **Root cause** (pre-existing Step-4 issue, not Step 7):
+      - [ModelStudioCanvas.tsx:265-307](../packages/client/src/components/model-studio/ModelStudioCanvas.tsx#L265)
+        — `structuralNodes` memo gives every new entity
+        `position: {x:0, y:0}` as a "placeholder" with a
+        `// Never trust this value.` comment.
+      - [ModelStudioCanvas.tsx:322](../packages/client/src/components/model-studio/ModelStudioCanvas.tsx#L322)
+        — the structural-sync effect paints those placeholders as soon
+        as entities arrive, because `canvas.state.nodePositions` is
+        still `{}` at that moment (from `useCanvasState`'s initial
+        `EMPTY`).
+      - [ModelStudioCanvas.tsx:344](../packages/client/src/components/model-studio/ModelStudioCanvas.tsx#L344)
+        — the `hasSeededPositions` effect patches positions when the
+        SEPARATE `GET /canvas-state` fetch resolves. That reconciliation
+        is what the user sees as "the flash."
+
+      **Fix (Option C — architectural):** Fold canvas-state into the
+      entity-list response so there's ONE round-trip: on model open,
+      `GET /models/:id/entities` (or a new combined endpoint) returns
+      `{ entities, attributes, canvasState, layerLinks, attributeLinks }`
+      in one payload. Client seeds React Flow with real positions from
+      the first render. No placeholder frame, no race, no flash.
+
+      Bonus: also closes the related n+1 gap the eng-review outside-
+      voice flagged for Step 7 (Lane 1 built a unified /layer-coverage
+      endpoint for similar reasons).
+
+      **Alternatives considered** (dropped in favour of C):
+      - A: delay node rendering until canvas.isLoading === false.
+        Smallest diff but costs a 100-300ms empty canvas on every open.
+      - B: render nodes with opacity 0 until seeded, then fade in.
+        Same wait as A, plus extra CSS machinery.
+
+      **Target:** Step 11 polish pass. User explicitly chose Option C
+      on 2026-04-24 during Step 7 Lane 2 build.
+
 ## Step 7 follow-ups (captured by CEO review 2026-04-24)
 
 - [ ] **`docs/architecture/model-studio-layer-linking.md`** — mandatory

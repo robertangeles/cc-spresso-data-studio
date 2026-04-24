@@ -88,6 +88,35 @@ function InnerCanvas({ modelId, layer }: Props) {
 
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [selectedRelId, setSelectedRelId] = useState<string | null>(null);
+
+  // Step 7 S7-C3 — layer crossfade. Fade the React Flow surface out
+  // when the `layer` prop changes, keep it faded until the new
+  // canvas-state fetch resolves, then fade back in (gated, not timed
+  // — per eng-review decision 0E-2). `prefers-reduced-motion` skips
+  // the animation entirely for users who opt out.
+  const [isFadingLayer, setIsFadingLayer] = useState(false);
+  const prevLayerRef = useRef<Layer>(layer);
+  useEffect(() => {
+    if (prevLayerRef.current === layer) return;
+    prevLayerRef.current = layer;
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return; // No fade for reduced-motion users; just swap.
+    }
+    setIsFadingLayer(true);
+  }, [layer]);
+
+  // Fade back in once the per-layer canvas-state fetch resolves. The
+  // 120ms minimum lets the fade-out animation visibly complete even
+  // on fast networks; without it you get a jarring flicker.
+  useEffect(() => {
+    if (!isFadingLayer) return;
+    if (canvas.isLoading) return;
+    const t = setTimeout(() => setIsFadingLayer(false), 120);
+    return () => clearTimeout(t);
+  }, [isFadingLayer, canvas.isLoading]);
   /** Separate from selectedRelId — selection drives the visual edge
    *  highlight (React Flow's `edge.selected`), panelRelId drives the
    *  RelationshipPanel. We split so single-click selects without
@@ -257,11 +286,12 @@ function InnerCanvas({ modelId, layer }: Props) {
   // external state (entities, attributes, selection, orphan badges).
   // CRITICAL: `canvas.state.nodePositions` is intentionally NOT in this
   // dep list. Positions flow through React Flow's own `useNodesState`
-  // via the sync effect below, and are seeded once on initial load via
-  // `hasSeededPositions`. Including positions here causes every
-  // `canvas.save` (drag-end, viewport pan) to re-seed node identities,
-  // which makes React Flow re-measure mid-gesture and produces the
-  // scroll/pan bouncing jank reported after commit 7801bc5.
+  // via the sync effect below, and are seeded ONCE PER LAYER on
+  // initial load + every layer change via `seededForLayer`. Including
+  // positions here causes every `canvas.save` (drag-end, viewport
+  // pan) to re-seed node identities, which makes React Flow re-measure
+  // mid-gesture and produces the scroll/pan bouncing jank reported
+  // after commit 7801bc5.
   const structuralNodes: Node<EntityNodeData>[] = useMemo(() => {
     const visible = ent.entities.filter((e) => e.layer === layer);
     return visible.map((e) => {
@@ -335,24 +365,46 @@ function InnerCanvas({ modelId, layer }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structuralNodes, setNodes]);
 
-  // One-time positional seed: when canvas.isLoading transitions to false,
-  // patch persisted positions into React Flow's internal state once.
+  // Per-layer positional seed: when canvas.isLoading transitions to
+  // false for a new layer, patch persisted positions into React
+  // Flow's internal state once. Re-fires on every layer change so
+  // returning to a previously-visited layer re-applies that layer's
+  // saved positions.
+  //
   // Subsequent `canvas.save` calls (drag-end, tidy-layout, new-entity)
-  // update `canvas.state.nodePositions` but do NOT re-seed here — those
-  // positions already live in React Flow's state from the interaction
-  // that produced them.
-  const hasSeededPositions = useRef(false);
+  // update `canvas.state.nodePositions` but do NOT re-seed here —
+  // the `seededForLayer.current === layer` guard short-circuits them.
+  // Those saved positions already live in React Flow's state from
+  // the interaction that produced them, so a re-seed would clobber
+  // live drag data.
+  //
+  // Bug this guards against: with a single boolean `hasSeededPositions`
+  // guard, the effect fires exactly once per mount. Switching to
+  // another layer and back leaves the returning-layer's entities at
+  // the {x:0, y:0} fallback the structural-sync effect produced
+  // during the canvas-state fetch window — all entities visually
+  // clubbed together in the top-left corner until the user drags
+  // them. User-reported 2026-04-24.
+  const seededForLayer = useRef<Layer | null>(null);
   useEffect(() => {
     if (canvas.isLoading) return;
-    if (hasSeededPositions.current) return;
-    hasSeededPositions.current = true;
+    // Gate on `loadedLayer === layer`. During a layer-change render
+    // `canvas.isLoading` is briefly stale-false (the canvas hook's
+    // setIsLoading(true) hasn't run yet), and `canvas.state` still
+    // holds the PRIOR layer's positions. Without this guard the seed
+    // would mark the new layer as "seeded" with empty/stale data,
+    // then short-circuit when the real fetch lands. User-reported
+    // 2026-04-25.
+    if (canvas.loadedLayer !== layer) return;
+    if (seededForLayer.current === layer) return;
+    seededForLayer.current = layer;
     setNodes((prev) =>
       prev.map((n) => {
         const pos = canvas.state.nodePositions[n.id];
         return pos ? { ...n, position: pos } : n;
       }),
     );
-  }, [canvas.isLoading, canvas.state.nodePositions, setNodes]);
+  }, [canvas.isLoading, canvas.loadedLayer, canvas.state.nodePositions, setNodes, layer]);
 
   // Edges.
   //
@@ -1198,6 +1250,16 @@ function InnerCanvas({ modelId, layer }: Props) {
       </div>
 
       <ReactFlow
+        // Step 7 crossfade — opacity interpolates via
+        // `transition-opacity`. `isFadingLayer` flips true the instant
+        // the `layer` prop changes and flips false 120ms after the
+        // new canvas-state fetch resolves (see the two effects above).
+        // 180ms total fade-in duration lets the new nodes' positions
+        // settle visually before fully opaque.
+        className={[
+          'transition-opacity ease-out',
+          isFadingLayer ? 'opacity-0 duration-[120ms]' : 'opacity-100 duration-[180ms]',
+        ].join(' ')}
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}

@@ -377,3 +377,64 @@ Meanwhile Phase 6 spec keeps all 10 cases as `test.fixme` with root-cause commen
 **Rule:** Any server mutation that can cascade to `data_model_attributes` — relationship CRUD, relationship PATCH affecting `sourceCardinality`/`targetCardinality`/`isIdentifying`, `setKeyColumns`, Key Columns `remove`, `updateAttribute` PK demotion, `deleteAttribute` on a source PK, entity cascade delete — MUST trigger a client-side `attrs.loadAll()` on BOTH the forward and the reverse (undo) paths. Pure-rename mutations (e.g. `relUpdate` with only `name`) don't cascade and don't need the wrapper. When in doubt, wrap — a redundant refresh is a single idempotent GET; a missing refresh is a stale canvas that users will call out (as they did, seven times in one session). Before shipping any new mutation surface, audit the list above and ask: "does this cascade?"
 
 **Also:** Audit the call graph, not just the one call site you're looking at. Seven of these bugs were individually easy to fix but the pattern only became visible after listing every mutation in one table. Lesson #23 (impact analysis) applies to systemic state-sync gaps too — not just to "which callers break if I change this function".
+
+## 33. "Seeded once" guards across routing / layer transitions become "never re-seeded"
+
+**Problem (Step 7, 2026-04-24):** When the user switches from physical → logical → back to physical, all entities on the returning physical layer rendered clubbed together in the top-left corner. The React Flow "positional seed" effect in `ModelStudioCanvas.tsx` used a boolean `hasSeededPositions = useRef(false)` guard that flipped to `true` on first load and never reset. The guard correctly prevented the effect from re-firing on every drag-save (which would clobber live drag positions — anti-bounce invariant), but it also prevented re-seeding after a layer change. Each layer has a distinct `canvas.state.nodePositions` row keyed on `(user, model, layer)`; returning to a previously-visited layer requires re-applying THAT layer's saved positions, not reusing React Flow's stale state from the layer the user just left.
+
+**Symptom chain:**
+
+- User on physical: positions seeded correctly on first mount (`hasSeededPositions.current = true`).
+- User switches to logical: `useCanvasState` re-fetches keyed on `layer`. `canvas.isLoading` flips true → false. Seed effect runs but `hasSeededPositions.current === true` → early-return. Logical positions never applied.
+- Return to physical: same story. `canvas.state.nodePositions` now holds physical's saved positions again, but the seed effect still refuses to run. Physical entities stuck at the `{x:0, y:0}` fallback that the structural-sync effect produced during the canvas-state fetch window.
+- The `structural-sync` effect deliberately excludes `canvas.state.nodePositions` from its deps (to avoid a drag-bounce), so positions can ONLY flow through the seed effect.
+
+**Fix:** Replace the boolean ref with a per-layer ref: `seededForLayer = useRef<Layer | null>(null)`. Add `layer` to the effect's deps. Early-return only when `seededForLayer.current === layer`. The per-layer guard still prevents the drag-bounce (the current layer stays guarded after its first seed) but allows a fresh seed each time the layer changes.
+
+```ts
+const seededForLayer = useRef<Layer | null>(null);
+useEffect(() => {
+  if (canvas.isLoading) return;
+  if (seededForLayer.current === layer) return;
+  seededForLayer.current = layer;
+  setNodes((prev) =>
+    prev.map((n) => {
+      const pos = canvas.state.nodePositions[n.id];
+      return pos ? { ...n, position: pos } : n;
+    }),
+  );
+}, [canvas.isLoading, canvas.state.nodePositions, setNodes, layer]);
+```
+
+**Rule:** Any "seed once on first load" guard (`useRef(false)` + flip-to-true) that guards a resource keyed on a ROUTING PARAMETER (layer, tab, entity id, project id, model id) must be scoped to THAT parameter — use a `useRef<Param | null>(null)` instead, compare-then-update, and include the parameter in the effect's deps. The boolean guard is safe only when the guarded resource is global and truly loads once (e.g. auth session, feature flags). If the resource is per-route or per-view, "once" means "once per route/view instance," not "once per component lifetime." Applies to canvas state, per-tab caches, per-project settings, any useEffect that gates an expensive one-time computation on navigation-scoped data.
+
+**Bonus gotcha:** This fix reveals but does not resolve the initial-page-load flicker (entities briefly render at `{x:0, y:0}` during the canvas-state fetch window). That's a separate issue tracked in `tasks/todo.md` under "Step 11 polish backlog" as Option C (fold canvas-state into the entity fetch — single round-trip).
+
+## 34. `isLoading` is stale-false on the render that captures a new routing param — gate on `loadedFor === param` instead
+
+**Problem (Step 7, 2026-04-25):** Lesson 33's per-layer seed fix wasn't enough. After switching physical → logical → physical, the seed effect ran on the FIRST render after layer changed and saw `isLoading=false` — but that was the previous layer's completed-fetch value. `useCanvasState`'s `setIsLoading(true)` is inside its own `useEffect`, which fires AFTER React commits the render that picked up the new `layer` prop. So the seed effect's first fire on a layer change observed:
+
+- `canvas.isLoading = false` (stale — hook hasn't reset it yet)
+- `canvas.state.nodePositions = {}` (or the prior layer's positions, depending on hook impl)
+- `seededForLayer.current = <prior-layer>` ≠ new `layer`
+
+It proceeded, called `setNodes` with no matching positions (every entity got the `{0,0}` fallback), and crucially **set `seededForLayer.current = layer`**. When the real fetch resolved a few ms later and the effect re-fired with correct data, the guard short-circuited (`already seeded for layer`).
+
+**Fix:** Don't trust `isLoading` alone to mean "state is ready for this layer." Track which layer the state was actually fetched for, and gate consumers on `loadedLayer === currentLayer`:
+
+```ts
+// useCanvasState.ts
+const [loadedLayer, setLoadedLayer] = useState<Layer | null>(null);
+// inside fetch effect, on success:
+setState(data?.data ?? EMPTY);
+setLoadedLayer(layer); // ← stamp the layer the state represents
+```
+
+```ts
+// seed effect in ModelStudioCanvas
+if (canvas.isLoading) return;
+if (canvas.loadedLayer !== layer) return; // ← state is stale from previous layer
+if (seededForLayer.current === layer) return;
+```
+
+**Rule:** When a hook fetches based on a routing param (`useCanvasState(modelId, layer)`, `useProjectChats(projectId)`, etc.), `isLoading` lags by one render after the param changes — the hook's `setIsLoading(true)` runs in its own `useEffect`, which fires after the parent's render commits. Any consumer `useEffect` that depends on the param AND that hook's loading flag will see a stale `isLoading=false` for one render. If that consumer makes a decision it can't undo (a "seeded" flag, a fire-once analytics event, a one-shot autosave), it'll latch on stale data. **Always expose a `loadedFor: <param> | null` field from the hook and gate on `loadedFor === currentParam`** — that's the only value guaranteed to reflect the data you actually have, not the data you're about to fetch.

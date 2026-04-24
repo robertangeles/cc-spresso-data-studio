@@ -1,27 +1,41 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Boxes, ChevronDown } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Boxes } from 'lucide-react';
+import type { Layer } from '@cc/shared';
 import { api } from '../lib/api';
 import type { DataModelSummary } from '../hooks/useModels';
 import { ModelStudioCanvas } from '../components/model-studio/ModelStudioCanvas';
+import { LayerSwitcher } from '../components/model-studio/LayerSwitcher';
+import { OriginDirectionBadge } from '../components/model-studio/OriginDirectionBadge';
+import { useBroadcastCanvas } from '../hooks/useBroadcastCanvas';
+import { useToast } from '../components/ui/Toast';
 
 /**
- * Step 2 detail shell — the Step 3 canvas lands here.
+ * Model detail shell.
  *
- * What ships today:
- *  - Header with the model name, layer selector (inert), notation
- *    selector (inert), and a back link.
- *  - Placeholder body that telegraphs "canvas arrives in Step 3"
- *    so nothing looks half-broken.
- *  - 404 handling: if the user can't access the model, show a polite
- *    "not found or no access" card with a back link (intentional —
- *    matches the server's hide-existence design).
+ * Step 2 shipped the 404/access gate + trust-chain header; Step 3 wired
+ * the React Flow canvas; Step 7 (this lane) replaces the inert layer
+ * label with a writable `LayerSwitcher`, adds an `OriginDirectionBadge`
+ * next to the model name, and owns the side effects of switching
+ * layers:
  *
- * What does NOT ship here yet (Step 3+):
- *  - React Flow canvas + node types
- *  - Entity detail side panel
- *  - Chat drawer
+ *   - URL `?layer=` stays in sync (source of truth in-session — 0E-3).
+ *   - `PATCH /models/:id { activeLayer }` autosaves on every switch
+ *     so reload-without-URL returns to the same layer (S7-C7).
+ *   - `useBroadcastCanvas` publishes the new layer so peer tabs
+ *     follow silently (0E-3 "follow silently like notation does").
+ *   - EDGE-1 (pessimistic): we only update URL + local state AFTER
+ *     the PATCH resolves, so a network failure doesn't leave the UI
+ *     showing a layer the server never saw.
+ *
+ * Breadcrumb (EXP-2) is intentionally NOT mounted here yet — wiring
+ * it requires the canvas's selection state to live at this level.
+ * That refactor is Lane 4 scope; the component sits on disk ready.
  */
+
+function isLayer(x: unknown): x is Layer {
+  return x === 'conceptual' || x === 'logical' || x === 'physical';
+}
 
 export function ModelStudioDetailPage() {
   const { modelId } = useParams<{ modelId: string }>();
@@ -29,7 +43,13 @@ export function ModelStudioDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [isSwitchingLayer, setIsSwitchingLayer] = useState(false);
+  const { toast } = useToast();
 
+  const { publish, subscribe } = useBroadcastCanvas(modelId);
+
+  // Load the model once.
   useEffect(() => {
     if (!modelId) return;
     let cancelled = false;
@@ -56,6 +76,59 @@ export function ModelStudioDetailPage() {
     };
   }, [modelId]);
 
+  // URL is the in-session source of truth. Fall back to the model's
+  // persisted activeLayer when the URL has no `?layer=` or its value
+  // is unrecognised. The `activeLayer` below is what the canvas + the
+  // switcher both render against.
+  const urlLayer = searchParams.get('layer');
+  const activeLayer: Layer | undefined = isLayer(urlLayer) ? urlLayer : model?.activeLayer;
+
+  // When the model finishes loading and the URL is missing a layer
+  // param, seed it from the model so subsequent URL changes (back
+  // button, share-link) have a consistent starting point. `replace`
+  // so this doesn't add a no-op history entry.
+  useEffect(() => {
+    if (!model) return;
+    if (isLayer(urlLayer)) return;
+    setSearchParams({ layer: model.activeLayer }, { replace: true });
+  }, [model, urlLayer, setSearchParams]);
+
+  // Peer-tab sync (0E-3) — follow silently. No toast, no confirmation;
+  // the expectation is that two tabs on the same model feel like one
+  // view, exactly like the notation switcher already does.
+  useEffect(() => {
+    const unsubscribe = subscribe('layer', (next) => {
+      if (isLayer(next)) {
+        setSearchParams({ layer: next }, { replace: true });
+      }
+    });
+    return unsubscribe;
+  }, [subscribe, setSearchParams]);
+
+  // Layer switch handler — wired into LayerSwitcher below.
+  // Pessimistic flow (EDGE-1): PATCH first, then update URL + local
+  // state + broadcast. Failure shows a toast and leaves the UI on the
+  // old layer; no optimistic flash-and-revert.
+  const handleLayerChange = useCallback(
+    async (next: Layer) => {
+      if (!modelId || !model) return;
+      if (next === activeLayer) return;
+      setIsSwitchingLayer(true);
+      try {
+        await api.patch(`/model-studio/models/${modelId}`, { activeLayer: next });
+        setSearchParams({ layer: next });
+        setModel((prev) => (prev ? { ...prev, activeLayer: next } : prev));
+        publish('layer', next);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to save layer change';
+        toast(msg, 'error');
+      } finally {
+        setIsSwitchingLayer(false);
+      }
+    },
+    [modelId, model, activeLayer, publish, setSearchParams, toast],
+  );
+
   if (isLoading) {
     return <CenteredStatus message="Loading model…" />;
   }
@@ -65,6 +138,11 @@ export function ModelStudioDetailPage() {
   if (error || !model) {
     return <CenteredStatus message={error ?? 'Something went wrong.'} showBack />;
   }
+
+  // `activeLayer` is guaranteed defined past this point because
+  // `model` exists, and the URL-seed effect above ensures the URL
+  // carries a valid layer (or we fall back to model.activeLayer).
+  const currentLayer: Layer = activeLayer ?? model.activeLayer;
 
   return (
     <div className="flex h-full flex-col">
@@ -89,6 +167,7 @@ export function ModelStudioDetailPage() {
             <Boxes className="h-3 w-3" />
           </div>
           <h1 className="text-sm font-semibold text-text-primary truncate">{model.name}</h1>
+          <OriginDirectionBadge value={model.originDirection} />
           {model.ownerName && (
             <span className="hidden md:inline text-[11px] uppercase tracking-wider text-text-secondary/60 shrink-0 pl-2">
               · by {model.ownerName}
@@ -97,12 +176,16 @@ export function ModelStudioDetailPage() {
         </div>
 
         <div className="flex items-center gap-2 ml-auto shrink-0">
-          <InertSelect label={capitalize(model.activeLayer)} />
+          <LayerSwitcher
+            value={currentLayer}
+            onChange={handleLayerChange}
+            disabled={isSwitchingLayer}
+          />
         </div>
       </header>
 
       <main className="relative flex-1 overflow-hidden">
-        <ModelStudioCanvas modelId={model.id} layer={model.activeLayer} />
+        <ModelStudioCanvas modelId={model.id} layer={currentLayer} />
       </main>
     </div>
   );
@@ -149,20 +232,4 @@ function TrustChain({
       ))}
     </span>
   );
-}
-
-function InertSelect({ label }: { label: string }) {
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] uppercase tracking-wider bg-surface-1/50 backdrop-blur border border-white/5 text-text-secondary/80"
-      aria-label={`${label} (inert — Step 3)`}
-    >
-      {label}
-      <ChevronDown className="h-3 w-3 opacity-50" />
-    </span>
-  );
-}
-
-function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }

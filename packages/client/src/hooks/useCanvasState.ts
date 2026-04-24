@@ -33,6 +33,12 @@ export function useCanvasState(modelId: string | undefined, layer: Layer) {
   const [state, setState] = useState<CanvasState>(EMPTY);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Tracks which layer the current `state` represents. Stays at the
+  // PREVIOUS layer's value during a layer-change transition until the
+  // new fetch resolves — consumers (the canvas seed effect) gate on
+  // `loadedLayer === layer` so they don't seed with stale data from
+  // the prior layer.
+  const [loadedLayer, setLoadedLayer] = useState<Layer | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -45,7 +51,10 @@ export function useCanvasState(modelId: string | undefined, layer: Layer) {
         const { data } = await api.get<GetResponse>(
           `/model-studio/models/${modelId}/canvas-state?layer=${layer}`,
         );
-        if (!cancelled) setState(data?.data ?? EMPTY);
+        if (!cancelled) {
+          setState(data?.data ?? EMPTY);
+          setLoadedLayer(layer);
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load canvas state');
       } finally {
@@ -86,5 +95,5 @@ export function useCanvasState(modelId: string | undefined, layer: Layer) {
     [modelId, layer],
   );
 
-  return { state, isLoading, error, save };
+  return { state, isLoading, error, save, loadedLayer };
 }
