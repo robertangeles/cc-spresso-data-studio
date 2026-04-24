@@ -235,12 +235,19 @@ export type EntityCreate = z.infer<typeof entityCreateSchema>;
 export const altKeyLabelsSchema = z.record(z.string().min(1).max(200));
 export type AltKeyLabels = z.infer<typeof altKeyLabelsSchema>;
 
+/** Entity update DOES NOT include `layer` — it is immutable post-create.
+ *  Changing an entity's layer would retroactively invalidate the
+ *  layer_links graph (links that were cross-layer become same-layer and
+ *  vice-versa), silently bypassing the Step 7 cycle guard and
+ *  same-layer-rejection rules. `.strict()` on this schema means a PATCH
+ *  body containing `layer` fails validation with an "unrecognized key"
+ *  error — defence-in-depth matching the service-layer guard at
+ *  `model-studio-entity.service.ts` updateEntity. */
 export const entityUpdateSchema = z
   .object({
     name: entityNameSchema.optional(),
     businessName: businessNameSchema.nullable().optional(),
     description: z.string().max(10_000).nullable().optional(),
-    layer: LAYER.optional(),
     entityType: ENTITY_TYPE.optional(),
     metadata: metadataSchema.optional(),
     tags: tagsSchema.optional(),
@@ -759,3 +766,295 @@ export const entityImpactParamsSchema = z.object({
   entityId: uuidParam,
 });
 export type EntityImpactParams = z.infer<typeof entityImpactParamsSchema>;
+
+// ============================================================
+// Layer Links (data_model_layer_links table) — Step 7
+//
+// Cross-layer entity projections. A "link" says parent entity on
+// layer A is the same conceptual thing as child entity on layer B
+// (A and B different; enforced server-side). The unique constraint
+// is `(parentId, childId)`.
+//
+// Cycle detection runs on the full link graph for the model via the
+// pure `detectCycle` BFS in `packages/server/src/utils/link-graph.utils.ts`
+// and runs inside a SERIALIZABLE transaction so a concurrent mirror-
+// link insert from another tab can't race past the check. Retries
+// up to 3x on 40001 serialization failure before surfacing 409.
+// ============================================================
+
+export const layerLinkCreateSchema = z
+  .object({
+    parentId: uuidParam,
+    childId: uuidParam,
+  })
+  .strict();
+export type LayerLinkCreate = z.infer<typeof layerLinkCreateSchema>;
+
+/** Canonical layer-link row. `parentLayer` / `childLayer` are denormalised
+ *  into the response so the UI can group by layer without a second round
+ *  trip per link. Server reads them from the referenced entity rows at
+ *  query time — they are never stored on the link itself. */
+export const layerLinkSchema = z
+  .object({
+    id: uuidParam,
+    parentId: uuidParam,
+    parentName: z.string(),
+    parentLayer: LAYER,
+    childId: uuidParam,
+    childName: z.string(),
+    childLayer: LAYER,
+    linkType: z.string().default('layer_projection'),
+    createdAt: z.string().datetime(),
+  })
+  .strict();
+export type LayerLink = z.infer<typeof layerLinkSchema>;
+
+/** Listing query: supply EITHER parentId OR childId, not both. The
+ *  server returns the entities on the OTHER side keyed off the supplied
+ *  id. Strict so typos (e.g. ?parent=...) surface as 400. */
+export const layerLinkListQuerySchema = z
+  .object({
+    parentId: uuidParam.optional(),
+    childId: uuidParam.optional(),
+  })
+  .strict()
+  .refine(
+    (v) => (v.parentId ? !v.childId : !!v.childId),
+    'Supply exactly one of parentId or childId',
+  );
+export type LayerLinkListQuery = z.infer<typeof layerLinkListQuerySchema>;
+
+/** Params for `/models/:id/layer-links/:linkId`. */
+export const layerLinkIdParamsSchema = z.object({
+  id: uuidParam,
+  linkId: uuidParam,
+});
+export type LayerLinkIdParams = z.infer<typeof layerLinkIdParamsSchema>;
+
+/** Params for `/models/:id/layer-links/suggestions`. Name-match auto-
+ *  link suggester (EXP-3). MVP is exact-match case-insensitive between
+ *  `fromLayer` and `toLayer` entity names; confidence=high only. */
+export const layerLinkSuggestionsQuerySchema = z
+  .object({
+    fromLayer: LAYER,
+    toLayer: LAYER,
+  })
+  .strict()
+  .refine((v) => v.fromLayer !== v.toLayer, 'fromLayer and toLayer must differ');
+export type LayerLinkSuggestionsQuery = z.infer<typeof layerLinkSuggestionsQuerySchema>;
+
+/** A single suggested link pair. `confidence` is always `'high'` in MVP
+ *  since we only do exact-match case-insensitive. Surfaced as a string
+ *  enum so future fuzzy-match phases can add `'medium'` / `'low'`
+ *  without a breaking schema change. */
+export const layerLinkSuggestionSchema = z
+  .object({
+    fromEntityId: uuidParam,
+    fromEntityName: z.string(),
+    toEntityId: uuidParam,
+    toEntityName: z.string(),
+    confidence: z.enum(['high']),
+  })
+  .strict();
+export type LayerLinkSuggestion = z.infer<typeof layerLinkSuggestionSchema>;
+
+export const layerLinkSuggestionsResponseSchema = z
+  .object({
+    suggestions: z.array(layerLinkSuggestionSchema),
+  })
+  .strict();
+export type LayerLinkSuggestionsResponse = z.infer<typeof layerLinkSuggestionsResponseSchema>;
+
+// ============================================================
+// Attribute Links (data_model_attribute_links table) — Step 7
+//
+// Parallel to layer_links but at the column grain. A link says
+// parent attribute on entity X (layer A) is the same concept as
+// child attribute on entity Y (layer B), where a layer_link between
+// X and Y is expected to exist — the service verifies that.
+//
+// No PATCH: links are immutable. To "change" a link, DELETE then POST.
+// Cycle detection reuses the same BFS utility as layer-links.
+// ============================================================
+
+export const attributeLinkCreateSchema = z
+  .object({
+    parentId: uuidParam,
+    childId: uuidParam,
+  })
+  .strict();
+export type AttributeLinkCreate = z.infer<typeof attributeLinkCreateSchema>;
+
+export const attributeLinkSchema = z
+  .object({
+    id: uuidParam,
+    parentId: uuidParam,
+    parentName: z.string(),
+    parentEntityId: uuidParam,
+    parentLayer: LAYER,
+    childId: uuidParam,
+    childName: z.string(),
+    childEntityId: uuidParam,
+    childLayer: LAYER,
+    linkType: z.string().default('layer_projection'),
+    createdAt: z.string().datetime(),
+  })
+  .strict();
+export type AttributeLink = z.infer<typeof attributeLinkSchema>;
+
+export const attributeLinkListQuerySchema = z
+  .object({
+    parentId: uuidParam.optional(),
+    childId: uuidParam.optional(),
+  })
+  .strict()
+  .refine(
+    (v) => (v.parentId ? !v.childId : !!v.childId),
+    'Supply exactly one of parentId or childId',
+  );
+export type AttributeLinkListQuery = z.infer<typeof attributeLinkListQuerySchema>;
+
+export const attributeLinkIdParamsSchema = z.object({
+  id: uuidParam,
+  linkId: uuidParam,
+});
+export type AttributeLinkIdParams = z.infer<typeof attributeLinkIdParamsSchema>;
+
+// ============================================================
+// Projection (auto-project: scaffold or clone across layers) — Step 7
+//
+// POST /models/:id/entities/:entityId/project
+//
+// DMBOK-aligned behaviour:
+//   conceptual → logical : scaffold logical entity shell + carry
+//                          only business-key attrs (those with a
+//                          non-null altKeyGroup on the conceptual
+//                          source). dataType is NOT set; user fills
+//                          in later. attribute_links are auto-created
+//                          for any business-key attrs that carry.
+//   logical    → physical: clone entity + clone ALL attrs preserving
+//                          flags + classification + altKeyGroup. Data
+//                          types carry through. attribute_links are
+//                          auto-created for every cloned attr.
+//   conceptual → physical: TWO-HOP projection not supported in one
+//                          call — service returns 400. Users project
+//                          conceptual→logical then logical→physical.
+//
+// The whole flow runs in ONE transaction with explicit rollback on
+// any step failure (entity insert, layer-link insert, attribute
+// inserts, attribute-link inserts).
+// ============================================================
+
+export const projectEntityRequestSchema = z
+  .object({
+    toLayer: LAYER,
+    /** Optional override for the new entity's name. Defaults to the
+     *  source entity's name if omitted. Validated against the same
+     *  physical-identifier rule when `toLayer === 'physical'` so the
+     *  scaffolded row doesn't silently admit an invalid DDL name. */
+    nameOverride: entityNameSchema.optional(),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    if (v.toLayer === 'physical' && v.nameOverride && !PHYSICAL_IDENTIFIER.test(v.nameOverride)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nameOverride'],
+        message:
+          'Physical-layer names must start with a letter or underscore and contain only letters, digits, and underscores.',
+      });
+    }
+  });
+export type ProjectEntityRequest = z.infer<typeof projectEntityRequestSchema>;
+
+/** Response: the new entity + the layer_link that was created + the
+ *  attribute_links that were auto-created (empty array for conceptual→
+ *  logical scaffold when the source has no business-key attrs). */
+export const projectEntityResponseSchema = z
+  .object({
+    entity: entitySchema,
+    layerLink: layerLinkSchema,
+    attributeLinks: z.array(attributeLinkSchema),
+  })
+  .strict();
+export type ProjectEntityResponse = z.infer<typeof projectEntityResponseSchema>;
+
+// ============================================================
+// Projection chain resolver — Step 7
+//
+// GET /models/:id/entities/:entityId/projection-chain
+//
+// Returns the full projection graph rooted at the requested entity,
+// in adjacency-list form. Tree-shaped in common cases, but the schema
+// permits a DAG (multi-parent — one logical entity projected from two
+// conceptual parents; or multi-child — one logical projected to two
+// physical partitions). Breadcrumb UI renders primary path by oldest
+// createdAt at each fork; full graph available via panel.
+//
+// Adjacency list > recursive tree here because:
+//   (a) server builds it via a recursive CTE that naturally emits flat
+//       rows — no need to re-nest
+//   (b) client renders via lookup by id for the breadcrumb, which is
+//       cheaper on the flat shape
+//   (c) Zod recursive types via z.lazy are noisy in generated typings
+//
+// `maxDepth` is capped at 3 server-side (we have 3 layers).
+// ============================================================
+
+export const projectionChainNodeSchema = z
+  .object({
+    entityId: uuidParam,
+    entityName: z.string(),
+    layer: LAYER,
+    /** IDs of entities this node projects FROM (parents). Empty on
+     *  root-most ancestor. Multiple entries indicate multi-parent DAG. */
+    parentIds: z.array(uuidParam),
+    /** IDs of entities this node projects TO (children). Empty on
+     *  leaf-most descendant. Multiple entries indicate multi-child DAG. */
+    childIds: z.array(uuidParam),
+  })
+  .strict();
+export type ProjectionChainNode = z.infer<typeof projectionChainNodeSchema>;
+
+export const projectionChainResponseSchema = z
+  .object({
+    /** The entity the chain was requested for. Every node in the
+     *  response is reachable from this root via parentIds or childIds. */
+    rootId: uuidParam,
+    /** Flat list of every node in the projection graph connected to
+     *  rootId. Clients look up by entityId. Includes the root itself. */
+    nodes: z.array(projectionChainNodeSchema),
+  })
+  .strict();
+export type ProjectionChainResponse = z.infer<typeof projectionChainResponseSchema>;
+
+// ============================================================
+// Layer coverage matrix — Step 7
+//
+// GET /models/:id/layer-coverage
+//
+// One SQL query returns a boolean matrix per entity: whether each
+// layer has a linked projection. Shared by S7-C6 (coverage badges),
+// EXP-5 (overlay sort order), EXP-6 (unlinked glow) — closes the
+// N+1 gap where each feature would otherwise load links per entity.
+// ============================================================
+
+export const layerCoverageCellSchema = z
+  .object({
+    conceptual: z.boolean(),
+    logical: z.boolean(),
+    physical: z.boolean(),
+  })
+  .strict();
+export type LayerCoverageCell = z.infer<typeof layerCoverageCellSchema>;
+
+/** Matrix is `{[entityId]: {conceptual, logical, physical}}`. Entities
+ *  NOT in the map have no projections in any direction (including the
+ *  entity's own layer — their own-layer cell is still `true` in the
+ *  map when they exist on that layer; see service docstring). */
+export const layerCoverageResponseSchema = z
+  .object({
+    coverage: z.record(uuidParam, layerCoverageCellSchema),
+  })
+  .strict();
+export type LayerCoverageResponse = z.infer<typeof layerCoverageResponseSchema>;

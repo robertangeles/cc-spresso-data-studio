@@ -6,11 +6,19 @@ import type { DataModelSummary } from '../../hooks/useModels';
 /**
  * EditModelDialog — rename / re-describe an existing model.
  *
- * Intentionally narrow scope (name + description only). `activeLayer`,
- * `notation`, and `originDirection` are model-defining decisions that
- * anchor entities, relationships, and audit history; mutating them
- * mid-stream would break traceability, so they stay locked here. A
- * senior practitioner expects that boundary to be respected.
+ * Intentionally narrow scope (name + description only). `originDirection`
+ * is the only model-defining decision here — it captures the modeller's
+ * intent at creation (greenfield vs reverse-engineering an existing
+ * system) and changing it after the fact would silently invert every
+ * unlinked-glow nudge and traversal-direction default in the UI, so
+ * it stays locked to this dialog.
+ *
+ * `activeLayer` and `notation` are VIEW STATE — the layer the user was
+ * last on and their notation preference. Both mutate freely through
+ * their dedicated controls (LayerSwitcher in the header and
+ * NotationSwitcher on the canvas, Step 7). They are persisted to
+ * `data_models` via `PATCH /models/:id` with `{activeLayer}` or
+ * `{notation}` on every change, and `modelUpdateSchema` accepts both.
  *
  * Rendered via React portal (lesson 24). ESC closes, ⌘↵ / Ctrl↵ saves.
  */

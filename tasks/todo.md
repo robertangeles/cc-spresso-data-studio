@@ -53,10 +53,18 @@ the project memory at `project_model_studio_state.md` — use it.
       5 Playwright E2E (S5-E1..E4). All green on branch tip.
 - [ ] **Step 6** — Relationships + IE + IDEF1X notation rendering +
       notation switcher (currently inert in the canvas header).
-- [ ] **Step 7** — Layer switching + crossfade animation (D3) +
-      `layer_links` CRUD + linked-objects nav panel. **Use
-      `originDirection` from Step 4.5 to set the default
-      layer-traversal direction** (greenfield: down, existing_system: up).
+- [ ] **Step 7 (FULL CATHEDRAL — per CEO review 2026-04-24)** — Layer
+      switching + crossfade + layer_links CRUD + linked-objects nav + **auto-projection** (EXP-1) + **projection chain breadcrumb**
+      (EXP-2) + **name-match auto-link suggester** (EXP-3) +
+      **attribute-link CRUD write UI** (EXP-4) + **cross-layer overlay
+      mode ⌘L** (EXP-5) + **unlinked-entity glow nudge** (EXP-6) +
+      **⌘↑/⌘↓ projection navigation** (EXP-7) + **CDMP-auditor
+      full-model PDF provenance export** (EXP-8) + 8 delights.
+      See CEO plan: `~/.gstack/projects/robertangeles-cc-spresso-data-studio/ceo-plans/2026-04-24-step7-layer-linking.md`
+      for full scope, architectural decisions, and test-row expansions.
+      Keyboard shortcuts: **Alt+1/Alt+2/Alt+3** layer switch (NOT ⌘1/⌘2/⌘3
+      which collide with browser tab switchers on macOS). ⌘↑/⌘↓ for
+      projection navigation. Effort: human ~14-16 days / CC ~17-21 hours.
 - [ ] **Step 8** — Semantic layer bridge + CSV export (with
       formula-injection guard).
 - [ ] **Step 9** — DDL export (Snowflake + SQL Server + Postgres) +
@@ -66,6 +74,73 @@ the project memory at `project_model_studio_state.md` — use it.
 - [ ] **Step 11** — Polish: Cmd+K command palette (D2), whiteboard
       empty state (D10), onboarding, keyboard shortcuts, responsive,
       error boundaries.
+
+## Step 7 follow-ups (captured by CEO review 2026-04-24)
+
+- [ ] **`docs/architecture/model-studio-layer-linking.md`** — mandatory
+      architecture doc per CLAUDE.md §Verification Before Done. Must
+      cover: cycle-detection BFS invariants, multi-parent tree-shape
+      contract for `resolveProjectionChain`, DMBOK framing (conceptual
+      has no attrs by convention), `wrapCascading` refresh list
+      extensions, action-verb framing ("Project to..." not "Link to...").
+      Write alongside Step 7 implementation.
+
+- [ ] **Composite PK with partial attribute-link (Step 9 concern).**
+      If user links logical.customer_id → physical.customer_id but NOT
+      logical.email → physical.email on a composite-PK entity, DDL
+      export has to handle the orphan half. Options: (a) emit
+      constraint only for linked attrs, (b) fail loudly and surface
+      the gap in Live DDL pane, (c) auto-propose the missing attribute-
+      link. Decide during Step 9 DDL generator design.
+
+- [ ] **Drag-and-drop entity linking** (carried from original Step 7
+      plan's NOT-shipping list). "Project to..." modal stays the
+      single entry point for MVP. Drag-to-link has its own edge cases
+      (accidental link on overlapping entities, cross-layer drag
+      through React Flow's connection mode). Defer until real users
+      surface the gesture as a preferred workflow.
+
+- [ ] **Link annotations / notes on `layer_link` rows** (carried from
+      original plan). `linkType` stays `'layer_projection'` for MVP.
+      If projections grow into typed relationships (e.g.,
+      `'materialized_view_of'`, `'denormalization_of'`), schema add
+      a `note text` column and surface in the linked-objects panel.
+
+- [ ] **Bulk "project this layer" sweep** (carried from original plan).
+      One-click "project every conceptual entity to logical." Useful
+      for greenfield users who've designed the conceptual layer and
+      want to scaffold logical wholesale. Defer past Step 7 auto-
+      project single-entity ships; revisit when users do 10+ sequential
+      manual projections.
+
+- [ ] **Extract Infection Virus design standard into `docs/architecture/DESIGN.md`.**
+      Currently the design system lives inline in CLAUDE.md's
+      "MANDATORY: Infection Virus Design Standard" section. Extraction
+      to a standalone DESIGN.md would: (a) let future `/design-consultation`
+      runs calibrate against a dedicated doc instead of a CLAUDE.md
+      section; (b) make the spec discoverable by new engineers and
+      external designers; (c) capture evolving decisions like Step 7's
+      layer palette (Conceptual=amber, Logical=blue, Physical=green) + Step 6's relationship visual language + future DDL palette.
+      Target: Step 11 polish pass. Effort: human ~2h / CC ~30min.
+      Captured by /plan-design-review 2026-04-24 as TODO-D1.
+
+- [ ] **Mobile overlay-mode viewer (<768px).** Step 7 ships overlay as
+      desktop-only with a "view on desktop" tooltip at sub-768 widths
+      (per design review Pass 6). Full mobile overlay requires:
+      stacked-layer UX (3 sections vertical, swipe between), pinch-zoom
+      for provenance arrows, touch gestures for jump-to-parent/child,
+      read-only mode enforced. Revisit when analytics show tablet
+      access or user request. Effort: human ~3 days / CC ~3h.
+      Captured by /plan-design-review 2026-04-24 as TODO-D2.
+
+- [ ] **Color-blind verification Playwright test for Step 7 overlay.**
+      Layer palette uses Conceptual=amber, Logical=cool-blue,
+      Physical=emerald. Blue/green pair confuses deuteranopia (most
+      common). Pair every color reference with a text label (already
+      specced). Add a Playwright test that screenshots the overlay
+      in a deuteranopia simulation and asserts color-distance between
+      columns stays above threshold. Small test; catches regressions
+      if palette ever shifts toward blue/green collision. Effort: CC ~30min.
 
 ## Open follow-ups (Step-4-era, address opportunistically)
 
