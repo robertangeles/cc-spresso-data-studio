@@ -459,6 +459,193 @@ export async function unwindRelationshipFk(
 }
 
 /**
+ * Cascade governance fields (classification, tags) from a source
+ * attribute to all its downstream FKs — both auto-propagated and
+ * manually-paired. Called by `updateAttribute` when those fields
+ * change on a source PK so the downstream FKs don't lie about their
+ * compliance posture. Logical reasoning: an FK stores the same data
+ * value as its parent PK, so whatever classification applies to the
+ * parent applies to every FK referencing it, regardless of whether
+ * the FK was auto-generated or user-authored.
+ *
+ * Returns the number of FK rows updated. Writes one audit row per
+ * affected relationship so governance dashboards can trace the
+ * cascade back to the triggering source-attr change.
+ */
+export async function cascadeGovernanceToFks(
+  tx: Tx,
+  input: {
+    sourceAttrId: string;
+    modelId: string;
+    changedBy: string;
+    classification?: string | null;
+    tags?: unknown;
+  },
+): Promise<number> {
+  const { sourceAttrId, modelId, changedBy, classification, tags } = input;
+
+  // Find every FK attr that references this source — both auto
+  // (propagated_from_attr_id) and manual (fk_for_source_attr_id).
+  const rows = await tx
+    .select({
+      id: dataModelAttributes.id,
+      name: dataModelAttributes.name,
+      metadata: dataModelAttributes.metadata,
+    })
+    .from(dataModelAttributes)
+    .where(
+      sql`${dataModelAttributes.metadata}->>'propagated_from_attr_id' = ${sourceAttrId}
+          OR ${dataModelAttributes.metadata}->>'fk_for_source_attr_id' = ${sourceAttrId}`,
+    );
+
+  if (rows.length === 0) return 0;
+
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  if (classification !== undefined) patch.classification = classification;
+  if (tags !== undefined) patch.tags = tags;
+
+  // Group by relationship for per-rel audit rows.
+  const relMap = new Map<string, string[]>();
+  for (const row of rows) {
+    await tx.update(dataModelAttributes).set(patch).where(eq(dataModelAttributes.id, row.id));
+    const md = (row.metadata as Record<string, unknown> | null) ?? {};
+    const relId =
+      (md.propagated_from_rel_id as string | undefined) ??
+      (md.fk_for_rel_id as string | undefined) ??
+      '__unknown__';
+    if (!relMap.has(relId)) relMap.set(relId, []);
+    relMap.get(relId)!.push(row.id);
+  }
+
+  for (const [relId, ids] of relMap) {
+    if (relId === '__unknown__') continue;
+    await recordChange({
+      dataModelId: modelId,
+      objectId: relId,
+      objectType: 'relationship',
+      action: 'propagate',
+      changedBy,
+      afterState: {
+        cause: 'source_governance_changed',
+        sourceAttrId,
+        affectedFkIds: ids,
+        ...(classification !== undefined ? { classification } : {}),
+        ...(tags !== undefined ? { tags } : {}),
+      },
+    });
+  }
+
+  logger.info(
+    {
+      sourceAttrId,
+      modelId,
+      affected: rows.length,
+      fields: Object.keys(patch).filter((k) => k !== 'updatedAt'),
+    },
+    'relationship.propagate.cascade_governance',
+  );
+
+  return rows.length;
+}
+
+/**
+ * Clean up orphaned FKs on target entities when a source attribute
+ * stops being a valid FK source — either because it was demoted from
+ * PK (isPrimaryKey: true → false) or deleted entirely.
+ *
+ * Two cases, mirroring the applyKeyColumnsInTx cleanup:
+ *   - Auto-propagated FK (metadata.propagated_from_attr_id = sourceAttrId):
+ *     delete the target attr outright. It was machine-generated for a
+ *     source PK that no longer exists.
+ *   - Manually paired FK (metadata.fk_for_source_attr_id = sourceAttrId):
+ *     strip the rel tags from metadata so the attr no longer reports as
+ *     paired. The attr itself survives — it's user-authored.
+ *
+ * Returns the number of auto-propagated attrs deleted. Writes one audit
+ * row per affected relationship so downstream analytics can trace the
+ * cascade back to the triggering source-attr change.
+ */
+export async function cleanupPropagatedFksForSourceAttr(
+  tx: Tx,
+  input: { sourceAttrId: string; modelId: string; changedBy: string },
+): Promise<{ deleted: number; untagged: number }> {
+  const { sourceAttrId, modelId, changedBy } = input;
+
+  const autoRows = await tx
+    .select({
+      id: dataModelAttributes.id,
+      name: dataModelAttributes.name,
+      metadata: dataModelAttributes.metadata,
+    })
+    .from(dataModelAttributes)
+    .where(sql`${dataModelAttributes.metadata}->>'propagated_from_attr_id' = ${sourceAttrId}`);
+
+  const manualRows = await tx
+    .select({
+      id: dataModelAttributes.id,
+      metadata: dataModelAttributes.metadata,
+    })
+    .from(dataModelAttributes)
+    .where(sql`${dataModelAttributes.metadata}->>'fk_for_source_attr_id' = ${sourceAttrId}`);
+
+  if (autoRows.length === 0 && manualRows.length === 0) return { deleted: 0, untagged: 0 };
+
+  // Group by relationship for per-rel audit rows.
+  const relMap = new Map<string, { auto: string[]; manual: string[] }>();
+
+  for (const row of autoRows) {
+    const md = (row.metadata as Record<string, unknown> | null) ?? {};
+    const relId = (md.propagated_from_rel_id as string | undefined) ?? '__unknown__';
+    if (!relMap.has(relId)) relMap.set(relId, { auto: [], manual: [] });
+    relMap.get(relId)!.auto.push(row.id);
+    await tx.delete(dataModelAttributes).where(eq(dataModelAttributes.id, row.id));
+  }
+
+  for (const row of manualRows) {
+    const md = (row.metadata as Record<string, unknown> | null) ?? {};
+    const relId = (md.fk_for_rel_id as string | undefined) ?? '__unknown__';
+    if (!relMap.has(relId)) relMap.set(relId, { auto: [], manual: [] });
+    relMap.get(relId)!.manual.push(row.id);
+    const clean: Record<string, unknown> = { ...md };
+    delete clean.fk_for_rel_id;
+    delete clean.fk_for_source_attr_id;
+    await tx
+      .update(dataModelAttributes)
+      .set({ metadata: clean, updatedAt: new Date() })
+      .where(eq(dataModelAttributes.id, row.id));
+  }
+
+  for (const [relId, groups] of relMap) {
+    if (relId === '__unknown__') continue;
+    await recordChange({
+      dataModelId: modelId,
+      objectId: relId,
+      objectType: 'relationship',
+      action: 'unwind',
+      changedBy,
+      beforeState: {
+        cause: 'source_attr_invalidated',
+        sourceAttrId,
+        autoDeletedIds: groups.auto,
+        manualUntaggedIds: groups.manual,
+      },
+    });
+  }
+
+  logger.info(
+    {
+      sourceAttrId,
+      modelId,
+      deleted: autoRows.length,
+      untagged: manualRows.length,
+    },
+    'relationship.propagate.cleanup_source_attr',
+  );
+
+  return { deleted: autoRows.length, untagged: manualRows.length };
+}
+
+/**
  * Update `isNullable` on every FK attr propagated from `rel` to match
  * the current source cardinality. Called from the rel-update path when
  * `sourceCardinality` changes (e.g. user flips 0..N → 1..N).

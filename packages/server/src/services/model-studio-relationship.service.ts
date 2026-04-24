@@ -536,7 +536,59 @@ export async function updateRelationship(
         patch.isIdentifying === undefined ? before.isIdentifying : patch.isIdentifying;
       const effectiveSourceCardinality = patch.sourceCardinality ?? before.sourceCardinality;
 
-      if (patch.isIdentifying !== undefined && patch.isIdentifying !== before.isIdentifying) {
+      // Endpoint-change handling — if either source or target was
+      // rewritten to a DIFFERENT entity, unwind propagated FKs from the
+      // OLD target and re-propagate fresh from the (possibly new)
+      // source to the new target. Same function pair that create/delete
+      // use, so the cascade shape is identical.
+      //
+      // Same-entity patches (undefined or matching the before value)
+      // skip this branch and fall through to the isIdentifying /
+      // cardinality reconcile logic below, which is the pre-Step-6-
+      // follow-up behaviour.
+      const sourceChanged =
+        patch.sourceEntityId !== undefined && patch.sourceEntityId !== before.sourceEntityId;
+      const targetChanged =
+        patch.targetEntityId !== undefined && patch.targetEntityId !== before.targetEntityId;
+      const endpointChanged = sourceChanged || targetChanged;
+
+      if (endpointChanged) {
+        // Unwind from the ORIGINAL target — FKs there still reference
+        // the old source PK and would otherwise become orphaned rows
+        // with dangling metadata. Fires even if only source changed.
+        await unwindRelationshipFk(tx, { relId, modelId, changedBy: userId });
+        // Propagate fresh from (effectiveSource → effectiveTarget).
+        // Same `source_has_no_pk` soft-handle as create / isIdentifying
+        // flip paths so the rel survives when the new source hasn't
+        // declared its PK yet on the non-identifying branch.
+        try {
+          await propagateRelationshipFk(tx, {
+            relId,
+            modelId,
+            sourceEntityId: effectiveSource,
+            targetEntityId: effectiveTarget,
+            isIdentifying: effectiveIdentifying,
+            sourceCardinality: effectiveSourceCardinality,
+            changedBy: userId,
+          });
+        } catch (err) {
+          if (
+            err instanceof InvariantError &&
+            err.code === 'source_has_no_pk' &&
+            !effectiveIdentifying
+          ) {
+            logger.info(
+              { relId, modelId },
+              'relationship.update — endpoint change with no source PK; leaving FKs empty',
+            );
+          } else {
+            throw err;
+          }
+        }
+      } else if (
+        patch.isIdentifying !== undefined &&
+        patch.isIdentifying !== before.isIdentifying
+      ) {
         const flipped = await reconcileFkIdentifyingFlag(tx, {
           relId,
           modelId,
@@ -738,11 +790,21 @@ async function loadRelWithEndpoints(
 
 type AttrRow = typeof dataModelAttributes.$inferSelect;
 
+/** Classify a source attribute as PK, AK (alt-key group), or UQ
+ *  (explicit simple unique). Used by buildPairs to badge the UI row.
+ *  PK wins over AK wins over UQ when multiple flags are set. */
+function classifySourceRole(attr: AttrRow): 'pk' | 'uq' | 'ak' {
+  if (attr.isPrimaryKey) return 'pk';
+  if (attr.altKeyGroup) return 'ak';
+  return 'uq';
+}
+
 /** Build the pair list from the target entity's FK attrs for this rel.
- *  Pairs are keyed by source PK id; auto-propagated attrs map via
- *  `propagated_from_attr_id`, manual attrs via `fk_for_source_attr_id`. */
+ *  Pairs are keyed by source candidate-key id; auto-propagated attrs
+ *  map via `propagated_from_attr_id`, manual attrs via
+ *  `fk_for_source_attr_id`. */
 function buildPairs(
-  sourcePks: AttrRow[],
+  sourceCks: AttrRow[],
   targetFks: AttrRow[],
 ): { pairs: RelationshipKeyColumnPair[]; needsBackfill: boolean } {
   const bySourceAttr = new Map<string, { target: AttrRow; isAutoCreated: boolean }>();
@@ -757,21 +819,62 @@ function buildPairs(
     }
   }
 
-  const pairs: RelationshipKeyColumnPair[] = sourcePks.map((pk) => {
-    const hit = bySourceAttr.get(pk.id);
+  const pairs: RelationshipKeyColumnPair[] = sourceCks.map((ck) => {
+    const hit = bySourceAttr.get(ck.id);
     return {
-      sourceAttributeId: pk.id,
-      sourceAttributeName: pk.name,
+      sourceAttributeId: ck.id,
+      sourceAttributeName: ck.name,
+      sourceAttributeRole: classifySourceRole(ck),
       targetAttributeId: hit?.target.id ?? null,
       targetAttributeName: hit?.target.name ?? null,
       isAutoCreated: hit?.isAutoCreated ?? false,
     };
   });
 
-  const pairedCount = pairs.filter((p) => p.targetAttributeId !== null).length;
-  const needsBackfill = sourcePks.length > 0 && pairedCount < sourcePks.length;
+  // needsBackfill fires only for PK rows — AK/UQ pairing is opt-in,
+  // so an unpaired UQ row is the default state, not a drift.
+  const pkPairs = pairs.filter((p) => p.sourceAttributeRole === 'pk');
+  const pkPaired = pkPairs.filter((p) => p.targetAttributeId !== null).length;
+  const needsBackfill = pkPairs.length > 0 && pkPaired < pkPairs.length;
 
   return { pairs, needsBackfill };
+}
+
+/** Select all FK-targetable candidate-key attributes on a source
+ *  entity. Three kinds qualify:
+ *    1. PK — `isPrimaryKey = true`
+ *    2. AK — alt-key group member (`altKeyGroup IS NOT NULL`)
+ *    3. UQ — explicit UNIQUE designation (`isExplicitUnique = true`)
+ *
+ *  `isExplicitUnique` is the provenance marker that separates "user
+ *  explicitly toggled UQ" from "UQ is sticky after a cleared PK/AK".
+ *  Without this flag, clearing a PK or AK would leak the column into
+ *  the Key Columns panel via its sticky isUnique=true state — a bug
+ *  we hit during Step 6 follow-up testing.
+ *
+ *  Ordered PK → AK → UQ so designations render top-down. */
+async function selectSourceCandidateKeys(
+  runner: typeof db | Tx,
+  sourceEntityId: string,
+): Promise<AttrRow[]> {
+  return runner
+    .select()
+    .from(dataModelAttributes)
+    .where(
+      and(
+        eq(dataModelAttributes.entityId, sourceEntityId),
+        or(
+          eq(dataModelAttributes.isPrimaryKey, true),
+          sql`${dataModelAttributes.altKeyGroup} IS NOT NULL`,
+          eq(dataModelAttributes.isExplicitUnique, true),
+        ),
+      ),
+    )
+    .orderBy(
+      sql`CASE WHEN ${dataModelAttributes.isPrimaryKey} THEN 0 WHEN ${dataModelAttributes.altKeyGroup} IS NOT NULL THEN 1 ELSE 2 END`,
+      asc(dataModelAttributes.ordinalPosition),
+      asc(dataModelAttributes.createdAt),
+    );
 }
 
 export async function getKeyColumns(
@@ -781,22 +884,14 @@ export async function getKeyColumns(
 ): Promise<RelationshipKeyColumnsResponse> {
   const { rel } = await loadRelWithEndpoints(userId, modelId, relId);
 
-  const sourcePks = await db
-    .select()
-    .from(dataModelAttributes)
-    .where(
-      and(
-        eq(dataModelAttributes.entityId, rel.sourceEntityId),
-        eq(dataModelAttributes.isPrimaryKey, true),
-      ),
-    )
-    .orderBy(asc(dataModelAttributes.ordinalPosition), asc(dataModelAttributes.createdAt));
-
+  const sourceCks = await selectSourceCandidateKeys(db, rel.sourceEntityId);
+  const sourcePks = sourceCks.filter((c) => c.isPrimaryKey);
   const sourceHasNoPk = sourcePks.length === 0;
+  const sourceHasNoCandidateKey = sourceCks.length === 0;
 
   // Fetch target attrs that either propagated from this rel OR are
   // manually tagged for this rel. Single query using JSONB predicates.
-  const targetFks = await db
+  let targetFks = await db
     .select()
     .from(dataModelAttributes)
     .where(
@@ -809,8 +904,58 @@ export async function getKeyColumns(
       ),
     );
 
-  const { pairs, needsBackfill } = buildPairs(sourcePks, targetFks);
-  return { pairs, needsBackfill, sourceHasNoPk };
+  // Self-heal: if a target FK points at a source attr that is no longer
+  // a candidate key (PK demoted, isUnique cleared, altKeyGroup removed,
+  // or the attr deleted entirely), the FK is orphaned. Reconcile on
+  // read so stale orphans don't linger.
+  const currentSourceCkIds = new Set(sourceCks.map((p) => p.id));
+  const orphans = targetFks.filter((attr) => {
+    const md = (attr.metadata as Record<string, unknown> | null) ?? {};
+    const auto = md.propagated_from_attr_id as string | undefined;
+    const manual = md.fk_for_source_attr_id as string | undefined;
+    const sourceAttrId = auto ?? manual;
+    if (!sourceAttrId) return false;
+    return !currentSourceCkIds.has(sourceAttrId);
+  });
+
+  if (orphans.length > 0) {
+    await db.transaction(async (tx) => {
+      for (const attr of orphans) {
+        const md = (attr.metadata as Record<string, unknown> | null) ?? {};
+        const isAuto = Boolean(md.propagated_from_attr_id);
+        if (isAuto) {
+          await tx.delete(dataModelAttributes).where(eq(dataModelAttributes.id, attr.id));
+        } else {
+          const clean: Record<string, unknown> = { ...md };
+          delete clean.fk_for_rel_id;
+          delete clean.fk_for_source_attr_id;
+          await tx
+            .update(dataModelAttributes)
+            .set({ metadata: clean, updatedAt: new Date() })
+            .where(eq(dataModelAttributes.id, attr.id));
+        }
+      }
+      await recordChange({
+        dataModelId: modelId,
+        objectId: relId,
+        objectType: 'relationship',
+        action: 'unwind',
+        changedBy: userId,
+        beforeState: {
+          cause: 'getKeyColumns_self_heal',
+          orphanIds: orphans.map((o) => o.id),
+          orphanNames: orphans.map((o) => o.name),
+        },
+      });
+    });
+    // Drop the orphans from the working set so buildPairs reflects the
+    // post-reconciliation state in this same response.
+    const orphanIds = new Set(orphans.map((o) => o.id));
+    targetFks = targetFks.filter((a) => !orphanIds.has(a.id));
+  }
+
+  const { pairs, needsBackfill } = buildPairs(sourceCks, targetFks);
+  return { pairs, needsBackfill, sourceHasNoPk, sourceHasNoCandidateKey };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -825,11 +970,15 @@ async function applyKeyColumnsInTx(
     modelId: string;
     userId: string;
     desiredBySource: Map<string, string | null>;
-    sourcePks: AttrRow[];
+    /** Source attr ids the caller wants un-paired (delete auto FK /
+     *  strip manual tags). Caller already enforced that none of these
+     *  are PKs. */
+    removeSet: Set<string>;
+    sourceCks: AttrRow[];
     existingTargetFks: AttrRow[];
   },
 ): Promise<void> {
-  const { rel, modelId, userId, desiredBySource, sourcePks, existingTargetFks } = input;
+  const { rel, modelId, userId, desiredBySource, removeSet, sourceCks, existingTargetFks } = input;
 
   // Index existing target FKs by which source attr they serve.
   const autoBySourceAttr = new Map<string, AttrRow>();
@@ -856,15 +1005,62 @@ async function applyKeyColumnsInTx(
     return nextOrdinal;
   }
 
-  for (const pk of sourcePks) {
-    const desired = desiredBySource.has(pk.id) ? desiredBySource.get(pk.id)! : null;
+  for (const ck of sourceCks) {
+    const isPk = ck.isPrimaryKey;
+
+    // Explicit remove directive — delete the auto FK if any, strip the
+    // manual rel tags if any. Caller has already validated that remove
+    // is not set for PK sources.
+    if (removeSet.has(ck.id)) {
+      const auto = autoBySourceAttr.get(ck.id);
+      if (auto) {
+        await tx.delete(dataModelAttributes).where(eq(dataModelAttributes.id, auto.id));
+      }
+      const manual = manualBySourceAttr.get(ck.id);
+      if (manual && manual.id !== auto?.id) {
+        const md = (manual.metadata as Record<string, unknown> | null) ?? {};
+        const clean: Record<string, unknown> = { ...md };
+        delete clean.fk_for_rel_id;
+        delete clean.fk_for_source_attr_id;
+        await tx
+          .update(dataModelAttributes)
+          .set({ metadata: clean, updatedAt: new Date() })
+          .where(eq(dataModelAttributes.id, manual.id));
+      }
+      if (auto || manual) {
+        await recordChange({
+          dataModelId: modelId,
+          objectId: rel.id,
+          objectType: 'relationship',
+          action: 'unwind',
+          changedBy: userId,
+          beforeState: {
+            keyColumnPair: {
+              sourceAttributeId: ck.id,
+              targetAttributeId: auto?.id ?? manual?.id ?? null,
+              mode: auto ? 'auto_removed' : 'manual_unpaired',
+            },
+          },
+        });
+      }
+      continue;
+    }
+
+    const hasExplicitRequest = desiredBySource.has(ck.id);
+    // Non-PK candidate keys only get processed when the user explicitly
+    // includes them in the pairs list. PKs keep their legacy behavior —
+    // absent from the request means "auto-create if missing" (backwards
+    // compat). AK/UQ absent from the request means "leave alone".
+    if (!hasExplicitRequest && !isPk) continue;
+
+    const desired = hasExplicitRequest ? desiredBySource.get(ck.id)! : null;
 
     if (desired === null) {
-      // Auto — ensure an auto-propagated FK exists for this source PK.
-      if (!autoBySourceAttr.has(pk.id)) {
+      // Auto — ensure an auto-propagated FK exists for this source attr.
+      if (!autoBySourceAttr.has(ck.id)) {
         // Drop any stale manual tag for this source attr to avoid a
         // double-count in GET.
-        const stale = manualBySourceAttr.get(pk.id);
+        const stale = manualBySourceAttr.get(ck.id);
         if (stale) {
           const md = (stale.metadata as Record<string, unknown> | null) ?? {};
           const clean: Record<string, unknown> = { ...md };
@@ -880,7 +1076,7 @@ async function applyKeyColumnsInTx(
         nextOrdinal = ordinal + 1;
         await propagateOneSourcePkToTarget(tx, {
           relId: rel.id,
-          sourceAttr: pk,
+          sourceAttr: ck,
           sourceEntityId: rel.sourceEntityId,
           targetEntityId: rel.targetEntityId,
           isIdentifying: rel.isIdentifying,
@@ -896,7 +1092,7 @@ async function applyKeyColumnsInTx(
           changedBy: userId,
           afterState: {
             keyColumnPair: {
-              sourceAttributeId: pk.id,
+              sourceAttributeId: ck.id,
               targetAttributeId: null,
               mode: 'auto_created',
             },
@@ -907,7 +1103,7 @@ async function applyKeyColumnsInTx(
     }
 
     // Desired = specific target attr UUID. Validate it lives on the
-    // target entity; adopt it as the manual FK for this source PK.
+    // target entity; adopt it as the manual FK for this source attr.
     const [targetRow] = await tx
       .select()
       .from(dataModelAttributes)
@@ -933,16 +1129,16 @@ async function applyKeyColumnsInTx(
     // reject — the user must clear that pairing first.
     if (
       (existingRelTag && existingRelTag !== rel.id) ||
-      (existingSrcTag && existingSrcTag !== pk.id)
+      (existingSrcTag && existingSrcTag !== ck.id)
     ) {
       throw new ConflictError(
         `Attribute "${targetRow.name}" is already paired to another relationship. Clear that pairing first.`,
       );
     }
 
-    // Drop any stale auto-propagated FK for THIS source PK that isn't
+    // Drop any stale auto-propagated FK for THIS source attr that isn't
     // the attr the user just picked.
-    const autoRow = autoBySourceAttr.get(pk.id);
+    const autoRow = autoBySourceAttr.get(ck.id);
     if (autoRow && autoRow.id !== targetRow.id) {
       await tx.delete(dataModelAttributes).where(eq(dataModelAttributes.id, autoRow.id));
     }
@@ -951,7 +1147,7 @@ async function applyKeyColumnsInTx(
     const newMd: Record<string, unknown> = {
       ...targetMd,
       fk_for_rel_id: rel.id,
-      fk_for_source_attr_id: pk.id,
+      fk_for_source_attr_id: ck.id,
     };
     await tx
       .update(dataModelAttributes)
@@ -966,9 +1162,67 @@ async function applyKeyColumnsInTx(
       changedBy: userId,
       afterState: {
         keyColumnPair: {
-          sourceAttributeId: pk.id,
+          sourceAttributeId: ck.id,
           targetAttributeId: targetRow.id,
           mode: 'manual_paired',
+        },
+      },
+    });
+  }
+
+  // Cleanup pass — remove FK attrs whose source candidate key no longer
+  // exists on the source entity. The forward loop above only visits
+  // current sourceCks; when a source attr was demoted from PK / lost its
+  // UQ / was removed from its AK group, its paired target FK would
+  // otherwise be orphaned. Two cases to handle:
+  //   - auto-propagated (metadata.propagated_from_attr_id): delete the
+  //     whole attr row — it was machine-generated for the dropped CK.
+  //   - manually paired (metadata.fk_for_source_attr_id): strip the
+  //     relationship tags, leaving the attr itself intact (user-owned).
+  const currentSourceCkIds = new Set(sourceCks.map((c) => c.id));
+
+  for (const [sourceAttrId, attrRow] of autoBySourceAttr) {
+    if (currentSourceCkIds.has(sourceAttrId)) continue;
+    await tx.delete(dataModelAttributes).where(eq(dataModelAttributes.id, attrRow.id));
+    await recordChange({
+      dataModelId: modelId,
+      objectId: rel.id,
+      objectType: 'relationship',
+      action: 'unwind',
+      changedBy: userId,
+      beforeState: {
+        keyColumnPair: {
+          sourceAttributeId: sourceAttrId,
+          targetAttributeId: attrRow.id,
+          mode: 'auto_removed',
+        },
+      },
+    });
+  }
+
+  for (const [sourceAttrId, attrRow] of manualBySourceAttr) {
+    if (currentSourceCkIds.has(sourceAttrId)) continue;
+    // Skip if the same attr was already deleted via the auto path.
+    if (autoBySourceAttr.get(sourceAttrId)?.id === attrRow.id) continue;
+    const md = (attrRow.metadata as Record<string, unknown> | null) ?? {};
+    const clean: Record<string, unknown> = { ...md };
+    delete clean.fk_for_rel_id;
+    delete clean.fk_for_source_attr_id;
+    await tx
+      .update(dataModelAttributes)
+      .set({ metadata: clean, updatedAt: new Date() })
+      .where(eq(dataModelAttributes.id, attrRow.id));
+    await recordChange({
+      dataModelId: modelId,
+      objectId: rel.id,
+      objectType: 'relationship',
+      action: 'unwind',
+      changedBy: userId,
+      beforeState: {
+        keyColumnPair: {
+          sourceAttributeId: sourceAttrId,
+          targetAttributeId: attrRow.id,
+          mode: 'manual_unpaired',
         },
       },
     });
@@ -983,26 +1237,36 @@ export async function setKeyColumns(
 ): Promise<RelationshipKeyColumnsResponse> {
   const { rel } = await loadRelWithEndpoints(userId, modelId, relId);
 
-  // Validate every sourceAttributeId is actually a PK on source.
-  const sourcePks = await db
-    .select()
-    .from(dataModelAttributes)
-    .where(
-      and(
-        eq(dataModelAttributes.entityId, rel.sourceEntityId),
-        eq(dataModelAttributes.isPrimaryKey, true),
-      ),
-    )
-    .orderBy(asc(dataModelAttributes.ordinalPosition), asc(dataModelAttributes.createdAt));
-
-  const sourcePkIds = new Set(sourcePks.map((a) => a.id));
+  // Validate every sourceAttributeId is a candidate key (PK OR simple
+  // UQ OR alt-key group member) on source.
+  const sourceCks = await selectSourceCandidateKeys(db, rel.sourceEntityId);
+  const sourceCkIds = new Set(sourceCks.map((a) => a.id));
+  const sourceCkById = new Map(sourceCks.map((a) => [a.id, a] as const));
   for (const p of input.pairs) {
-    if (!sourcePkIds.has(p.sourceAttributeId)) {
+    if (!sourceCkIds.has(p.sourceAttributeId)) {
       throw new ValidationError({
         sourceAttributeId: [
-          `Attribute ${p.sourceAttributeId} is not a primary key on the source entity.`,
+          `Attribute ${p.sourceAttributeId} is not a candidate key on the source entity. Only primary keys and alt-key (AK) group members are FK-pairable.`,
         ],
       });
+    }
+    if (p.remove) {
+      // Removing a PK's FK would leave the relationship without a
+      // complete FK. Reject — users must demote the PK or delete the
+      // relationship instead.
+      const ck = sourceCkById.get(p.sourceAttributeId);
+      if (ck?.isPrimaryKey) {
+        throw new ValidationError({
+          remove: [
+            `Cannot remove the pair for "${ck.name}" — primary keys are required participants in the relationship's FK. Demote the PK or delete the relationship.`,
+          ],
+        });
+      }
+      if (p.targetAttributeId !== null) {
+        throw new ValidationError({
+          remove: ['When remove=true, targetAttributeId must be null.'],
+        });
+      }
     }
   }
   // Reject duplicate source ids in the body.
@@ -1017,7 +1281,14 @@ export async function setKeyColumns(
   }
 
   const desiredBySource = new Map<string, string | null>();
-  for (const p of input.pairs) desiredBySource.set(p.sourceAttributeId, p.targetAttributeId);
+  const removeSet = new Set<string>();
+  for (const p of input.pairs) {
+    if (p.remove) {
+      removeSet.add(p.sourceAttributeId);
+    } else {
+      desiredBySource.set(p.sourceAttributeId, p.targetAttributeId);
+    }
+  }
 
   try {
     await db.transaction(async (tx) => {
@@ -1043,7 +1314,8 @@ export async function setKeyColumns(
         modelId,
         userId,
         desiredBySource,
-        sourcePks,
+        removeSet,
+        sourceCks,
         existingTargetFks,
       });
     });

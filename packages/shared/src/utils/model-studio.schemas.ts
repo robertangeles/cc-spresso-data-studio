@@ -398,6 +398,12 @@ export const attributeCreateSchema = z
     isPrimaryKey: z.boolean().optional().default(false),
     isForeignKey: z.boolean().optional().default(false),
     isUnique: z.boolean().optional().default(false),
+    /** Step 6 follow-up — explicit UNIQUE designation (as opposed to UQ
+     *  coerced by PK or AK). Only explicit-UQ columns appear as FK-
+     *  targetable candidate keys in the Key Columns panel. Usually the
+     *  server auto-derives this from `isUnique` patches; callers can
+     *  also set it directly. */
+    isExplicitUnique: z.boolean().optional(),
     defaultValue: defaultValueSchema.optional().nullable(),
     classification: ATTRIBUTE_CLASSIFICATION.optional().nullable(),
     transformationLogic: transformationLogicSchema.optional().nullable(),
@@ -428,6 +434,8 @@ export const attributeUpdateSchema = z
     isPrimaryKey: z.boolean().optional(),
     isForeignKey: z.boolean().optional(),
     isUnique: z.boolean().optional(),
+    /** Explicit UNIQUE designation. See `attributeCreateSchema`. */
+    isExplicitUnique: z.boolean().optional(),
     defaultValue: defaultValueSchema.nullable().optional(),
     classification: ATTRIBUTE_CLASSIFICATION.nullable().optional(),
     transformationLogic: transformationLogicSchema.nullable().optional(),
@@ -686,12 +694,17 @@ export type RelationshipIdParams = z.infer<typeof relationshipIdParamsSchema>;
 
 /** One request row in the setKeyColumns body. `targetAttributeId=null`
  *  tells the server to auto-create (or retain) a generated FK attr
- *  named after the source PK. A UUID tells the server to tag that
- *  existing attr as the FK for this source PK. */
+ *  named after the source attr. A UUID tells the server to tag that
+ *  existing attr as the FK for this source attr. Set `remove=true` to
+ *  delete any existing pair for this source (auto FK gets deleted,
+ *  manually-paired attr gets its rel tags stripped). Valid only for
+ *  AK/UQ candidate keys — removing a PK-sourced FK is rejected since
+ *  PKs are always required participants in the FK. */
 export const relationshipKeyColumnPairInputSchema = z
   .object({
     sourceAttributeId: uuidParam,
     targetAttributeId: uuidParam.nullable(),
+    remove: z.boolean().optional(),
   })
   .strict();
 export type RelationshipKeyColumnPairInput = z.infer<typeof relationshipKeyColumnPairInputSchema>;
@@ -706,11 +719,15 @@ export type RelationshipKeyColumnsSet = z.infer<typeof relationshipKeyColumnsSet
 
 /** Reconciled pair returned by GET / POST responses. `isAutoCreated`
  *  tells the client whether the target attr is server-managed (auto)
- *  or a user-chosen existing attribute. */
+ *  or a user-chosen existing attribute. `sourceAttributeRole` lets the
+ *  client badge the source row: PK (primary key — default FK target),
+ *  UQ (simple unique — candidate-key FK, Step-6 follow-up), AK
+ *  (composite alt-key group — surfaced read-only in v1). */
 export const relationshipKeyColumnPairSchema = z
   .object({
     sourceAttributeId: uuidParam,
     sourceAttributeName: z.string(),
+    sourceAttributeRole: z.enum(['pk', 'uq', 'ak']).optional(),
     targetAttributeId: uuidParam.nullable(),
     targetAttributeName: z.string().nullable(),
     isAutoCreated: z.boolean(),
@@ -720,12 +737,16 @@ export type RelationshipKeyColumnPair = z.infer<typeof relationshipKeyColumnPair
 
 /** Response for both GET and POST. `needsBackfill` is true when the
  *  source has N PKs but fewer than N propagated FKs exist on the
- *  target — lets the client trigger a silent auto-backfill. */
+ *  target — lets the client trigger a silent auto-backfill.
+ *  `sourceHasNoCandidateKey` is the post-alt-key semantic ("no PK AND
+ *  no UQ AND no AK on source"); `sourceHasNoPk` is retained for
+ *  backwards compat with existing clients. */
 export const relationshipKeyColumnsResponseSchema = z
   .object({
     pairs: z.array(relationshipKeyColumnPairSchema),
     needsBackfill: z.boolean(),
     sourceHasNoPk: z.boolean(),
+    sourceHasNoCandidateKey: z.boolean().optional(),
   })
   .strict();
 export type RelationshipKeyColumnsResponse = z.infer<typeof relationshipKeyColumnsResponseSchema>;

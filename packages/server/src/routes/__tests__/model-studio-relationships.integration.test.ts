@@ -929,6 +929,446 @@ describe('Model Studio — Key Columns (Step 6 follow-up)', () => {
     // ConflictError → 409.
     expect(del.status).toBe(409);
   });
+
+  it('S6-KC-I6.1: classification on source PK cascades to auto-propagated + manually-paired FKs', async () => {
+    const [src] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_govcasc_src', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+    const [pkAttr] = await db
+      .insert(dataModelAttributes)
+      .values([
+        {
+          entityId: src.id,
+          name: 'govc_id',
+          dataType: 'uuid',
+          isPrimaryKey: true,
+          isNullable: false,
+          isUnique: true,
+          ordinalPosition: 1,
+        },
+      ])
+      .returning({ id: dataModelAttributes.id });
+
+    const [tgt] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_govcasc_tgt', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId: src.id,
+        targetEntityId: tgt.id,
+        name: 'kc_govcasc_rel',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+
+    // Auto-propagated FK exists on target, no classification yet.
+    const [autoFk] = await db
+      .select({ id: dataModelAttributes.id, classification: dataModelAttributes.classification })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, tgt.id));
+    expect(autoFk).toBeDefined();
+    expect(autoFk.classification).toBeNull();
+
+    // Set PII on the source PK — should cascade to the auto FK.
+    const patchRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${src.id}/attributes/${pkAttr.id}`,
+      {
+        method: 'PATCH',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({ classification: 'PII' }),
+      },
+    );
+    expect(patchRes.status).toBe(200);
+
+    const [afterCascade] = await db
+      .select({ classification: dataModelAttributes.classification })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.id, autoFk.id));
+    expect(afterCascade.classification).toBe('PII');
+
+    // Clearing classification on source should cascade the clear too.
+    const clearRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${src.id}/attributes/${pkAttr.id}`,
+      {
+        method: 'PATCH',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({ classification: null }),
+      },
+    );
+    expect(clearRes.status).toBe(200);
+
+    const [afterClear] = await db
+      .select({ classification: dataModelAttributes.classification })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.id, autoFk.id));
+    expect(afterClear.classification).toBeNull();
+  });
+
+  it('S6-KC-I7: demoting a source PK (true→false) deletes its orphaned FK on target', async () => {
+    // Isolate: own source entity with two PKs so we can demote one
+    // without affecting the suite-wide sourceEntity.
+    const [src] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_demote_src', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+    const pkRows = await db
+      .insert(dataModelAttributes)
+      .values([
+        {
+          entityId: src.id,
+          name: 'demote_id',
+          dataType: 'uuid',
+          isPrimaryKey: true,
+          isNullable: false,
+          isUnique: true,
+          ordinalPosition: 1,
+        },
+        {
+          entityId: src.id,
+          name: 'demote_region',
+          dataType: 'text',
+          isPrimaryKey: true,
+          isNullable: false,
+          isUnique: true,
+          ordinalPosition: 2,
+        },
+      ])
+      .returning({ id: dataModelAttributes.id, name: dataModelAttributes.name });
+    const regionPkId = pkRows.find((r) => r.name === 'demote_region')!.id;
+
+    const [tgt] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_demote_tgt', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+
+    // Create relationship — both PKs auto-propagate to target as FKs.
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId: src.id,
+        targetEntityId: tgt.id,
+        name: 'kc_demote_rel',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+
+    const beforeDemote = await db
+      .select({ id: dataModelAttributes.id, name: dataModelAttributes.name })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, tgt.id));
+    expect(beforeDemote.length).toBe(2);
+    expect(beforeDemote.map((r) => r.name).sort()).toEqual(['demote_id', 'demote_region']);
+
+    // Demote demote_region from PK to non-PK.
+    const patchRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/entities/${src.id}/attributes/${regionPkId}`,
+      {
+        method: 'PATCH',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({ isPrimaryKey: false }),
+      },
+    );
+    expect(patchRes.status).toBe(200);
+
+    // The target-side FK for demote_region should be gone; demote_id's FK stays.
+    const afterDemote = await db
+      .select({ id: dataModelAttributes.id, name: dataModelAttributes.name })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, tgt.id));
+    expect(afterDemote.length).toBe(1);
+    expect(afterDemote[0].name).toBe('demote_id');
+  });
+
+  it('S6-KC-I10: PATCH targetEntityId re-propagates FKs from old → new target', async () => {
+    const [src] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_rep_src', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+    await db.insert(dataModelAttributes).values([
+      {
+        entityId: src.id,
+        name: 'rep_id',
+        dataType: 'uuid',
+        isPrimaryKey: true,
+        isNullable: false,
+        isUnique: true,
+        ordinalPosition: 1,
+      },
+    ]);
+    const [tgtA] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_rep_tgt_a', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+    const [tgtB] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_rep_tgt_b', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId: src.id,
+        targetEntityId: tgtA.id,
+        name: 'kc_rep_rel',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const rel = (await createRes.json()) as ApiResponse<RelationshipDTO>;
+    const relId = rel.data.id;
+    const relVersion = rel.data.version;
+
+    // Target A has the FK.
+    const beforeA = await db
+      .select({ id: dataModelAttributes.id, name: dataModelAttributes.name })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, tgtA.id));
+    expect(beforeA.map((r) => r.name)).toEqual(['rep_id']);
+
+    // PATCH targetEntityId → Target B.
+    const patchRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/relationships/${relId}`,
+      {
+        method: 'PATCH',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({ targetEntityId: tgtB.id, version: relVersion }),
+      },
+    );
+    expect(patchRes.status).toBe(200);
+
+    // Old target loses its FK.
+    const afterA = await db
+      .select({ id: dataModelAttributes.id })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, tgtA.id));
+    expect(afterA.length).toBe(0);
+
+    // New target has the fresh FK.
+    const afterB = await db
+      .select({ id: dataModelAttributes.id, name: dataModelAttributes.name })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, tgtB.id));
+    expect(afterB.map((r) => r.name)).toEqual(['rep_id']);
+  });
+
+  it('S6-KC-I9: remove=true on an AK pair deletes the auto FK; PK remove=true is rejected', async () => {
+    const [src] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_rm_src', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+    const [pkAttr, akAttr] = await db
+      .insert(dataModelAttributes)
+      .values([
+        {
+          entityId: src.id,
+          name: 'rm_id',
+          dataType: 'uuid',
+          isPrimaryKey: true,
+          isNullable: false,
+          isUnique: true,
+          ordinalPosition: 1,
+        },
+        {
+          entityId: src.id,
+          name: 'rm_code',
+          dataType: 'text',
+          isPrimaryKey: false,
+          isNullable: false,
+          isUnique: true,
+          ordinalPosition: 2,
+        },
+      ])
+      .returning({ id: dataModelAttributes.id, name: dataModelAttributes.name });
+
+    const [tgt] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_rm_tgt', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId: src.id,
+        targetEntityId: tgt.id,
+        name: 'kc_rm_rel',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const rel = (await createRes.json()) as ApiResponse<RelationshipDTO>;
+    const relId = rel.data.id;
+
+    // Opt the AK into an auto-propagated FK via setKeyColumns.
+    const addAk = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/relationships/${relId}/key-columns`,
+      {
+        method: 'POST',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({
+          pairs: [{ sourceAttributeId: akAttr.id, targetAttributeId: null }],
+        }),
+      },
+    );
+    expect(addAk.status).toBe(200);
+
+    // Both PK and AK should now have target FKs (PK auto on rel create,
+    // AK auto from setKeyColumns above).
+    const beforeRemove = await db
+      .select({ id: dataModelAttributes.id, name: dataModelAttributes.name })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, tgt.id));
+    expect(beforeRemove.map((r) => r.name).sort()).toEqual(['rm_code', 'rm_id']);
+
+    // remove=true on the AK — should delete only rm_code.
+    const removeRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/relationships/${relId}/key-columns`,
+      {
+        method: 'POST',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({
+          pairs: [{ sourceAttributeId: akAttr.id, targetAttributeId: null, remove: true }],
+        }),
+      },
+    );
+    expect(removeRes.status).toBe(200);
+
+    const afterRemove = await db
+      .select({ id: dataModelAttributes.id, name: dataModelAttributes.name })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, tgt.id));
+    expect(afterRemove.map((r) => r.name)).toEqual(['rm_id']);
+
+    // remove=true on the PK — should be rejected with a validation error.
+    const rejectRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/relationships/${relId}/key-columns`,
+      {
+        method: 'POST',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({
+          pairs: [{ sourceAttributeId: pkAttr.id, targetAttributeId: null, remove: true }],
+        }),
+      },
+    );
+    expect(rejectRes.status).toBe(400);
+    const body = (await rejectRes.json()) as { error?: string; message?: string };
+    const errText = body.error ?? body.message ?? '';
+    expect(errText).toMatch(/primary key/i);
+  });
+
+  it('S6-KC-I8: setKeyColumns with a pair removed cleans up the orphaned auto FK', async () => {
+    const [src] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_rmpair_src', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+    const pkRows = await db
+      .insert(dataModelAttributes)
+      .values([
+        {
+          entityId: src.id,
+          name: 'rmp_id',
+          dataType: 'uuid',
+          isPrimaryKey: true,
+          isNullable: false,
+          isUnique: true,
+          ordinalPosition: 1,
+        },
+        {
+          entityId: src.id,
+          name: 'rmp_region',
+          dataType: 'text',
+          isPrimaryKey: true,
+          isNullable: false,
+          isUnique: true,
+          ordinalPosition: 2,
+        },
+      ])
+      .returning({ id: dataModelAttributes.id, name: dataModelAttributes.name });
+    const idPkId = pkRows.find((r) => r.name === 'rmp_id')!.id;
+    const regionPkId = pkRows.find((r) => r.name === 'rmp_region')!.id;
+
+    const [tgt] = await db
+      .insert(dataModelEntities)
+      .values({ dataModelId: modelId, name: 'kc_rmpair_tgt', layer: 'logical' })
+      .returning({ id: dataModelEntities.id });
+
+    const createRes = await fetch(`${BASE_URL}/api/model-studio/models/${modelId}/relationships`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: JSON.stringify({
+        sourceEntityId: src.id,
+        targetEntityId: tgt.id,
+        name: 'kc_rmpair_rel',
+        sourceCardinality: 'one',
+        targetCardinality: 'many',
+        isIdentifying: false,
+        layer: 'logical',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const rel = (await createRes.json()) as ApiResponse<RelationshipDTO>;
+    const relId = rel.data.id;
+
+    // Both FKs propagated.
+    const before = await db
+      .select({ id: dataModelAttributes.id })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, tgt.id));
+    expect(before.length).toBe(2);
+
+    // Simulate the user demoting rmp_region from PK OUTSIDE the Key
+    // Columns path (e.g. via the attribute editor in a different UI) so
+    // the rel still "remembers" it as a propagated FK until the next
+    // setKeyColumns save. Flip via direct DB update to isolate the
+    // setKeyColumns cleanup path from the updateAttribute cleanup path
+    // exercised by the previous test.
+    await db
+      .update(dataModelAttributes)
+      .set({ isPrimaryKey: false })
+      .where(eq(dataModelAttributes.id, regionPkId));
+
+    // User saves Key Columns with only rmp_id as a pair. The cleanup pass
+    // should delete rmp_region's orphaned auto-FK on the target.
+    const postRes = await fetch(
+      `${BASE_URL}/api/model-studio/models/${modelId}/relationships/${relId}/key-columns`,
+      {
+        method: 'POST',
+        headers: authHeader(accessToken),
+        body: JSON.stringify({
+          pairs: [{ sourceAttributeId: idPkId, targetAttributeId: null }],
+        }),
+      },
+    );
+    expect(postRes.status).toBe(200);
+
+    const after = await db
+      .select({ id: dataModelAttributes.id, name: dataModelAttributes.name })
+      .from(dataModelAttributes)
+      .where(eq(dataModelAttributes.entityId, tgt.id));
+    expect(after.length).toBe(1);
+    expect(after[0].name).toBe('rmp_id');
+  });
 });
 
 // --------------------------------------------------------------------

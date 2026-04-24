@@ -2128,6 +2128,14 @@ export const dataModelAttributes = pgTable(
     isPrimaryKey: boolean('is_primary_key').notNull().default(false),
     isForeignKey: boolean('is_foreign_key').notNull().default(false),
     isUnique: boolean('is_unique').notNull().default(false),
+    // Step 6 follow-up — distinguishes "user explicitly toggled UQ" from
+    // "UQ was coerced by PK or AK designation". Only explicit UQ counts
+    // as a FK-targetable candidate key. When PK or AK is cleared, isUnique
+    // stays sticky but is_explicit_unique stays at whatever the user set it
+    // to — so cleared-PK/AK rows don't leak into the Key Columns panel.
+    // Normaliser auto-flips this flag when the user patches isUnique
+    // outside of a PK/AK coercion context.
+    isExplicitUnique: boolean('is_explicit_unique').notNull().default(false),
     defaultValue: text('default_value'),
     ordinalPosition: integer('ordinal_position').notNull().default(0),
     // Step 5 follow-up: governance classification. Nullable — null

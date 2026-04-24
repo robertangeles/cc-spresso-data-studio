@@ -21,6 +21,7 @@ describe('normalizeAttributeFlags — create-path (no current row)', () => {
       isForeignKey: false,
       isNullable: true,
       isUnique: false,
+      isExplicitUnique: false,
       altKeyGroup: null,
     });
   });
@@ -54,19 +55,34 @@ describe('normalizeAttributeFlags — create-path (no current row)', () => {
       isForeignKey: true,
       isNullable: true,
       isUnique: false,
+      isExplicitUnique: false,
       altKeyGroup: null,
     });
   });
 
-  it('UQ alone is legal with nullable (Postgres allows multiple nulls in a UNIQUE index)', () => {
+  it('UQ alone is legal with nullable (Postgres allows multiple nulls in a UNIQUE index); auto-marks explicit', () => {
     const result = normalizeAttributeFlags({ isUnique: true });
     expect(result).toEqual({
       isPrimaryKey: false,
       isForeignKey: false,
       isNullable: true,
       isUnique: true,
+      // isUnique=true patched on a non-PK, non-AK row → explicit intent.
+      isExplicitUnique: true,
       altKeyGroup: null,
     });
+  });
+
+  it('UQ coerced by PK does NOT mark isExplicitUnique (separates sticky UQ from user intent)', () => {
+    const result = normalizeAttributeFlags({ isPrimaryKey: true });
+    expect(result.isUnique).toBe(true);
+    expect(result.isExplicitUnique).toBe(false);
+  });
+
+  it('UQ coerced by AK does NOT mark isExplicitUnique', () => {
+    const result = normalizeAttributeFlags({ altKeyGroup: 'AK1' });
+    expect(result.isUnique).toBe(true);
+    expect(result.isExplicitUnique).toBe(false);
   });
 });
 
@@ -76,6 +92,7 @@ describe('normalizeAttributeFlags — update-path (merge with current row)', () 
     isForeignKey: false,
     isNullable: false,
     isUnique: true,
+    isExplicitUnique: false,
     altKeyGroup: null,
   };
 
@@ -111,6 +128,7 @@ describe('normalizeAttributeFlags — update-path (merge with current row)', () 
       isForeignKey: true,
       isNullable: true,
       isUnique: false,
+      isExplicitUnique: false,
       altKeyGroup: null,
     };
     const result = normalizeAttributeFlags({ isPrimaryKey: true }, fkCurrent);
@@ -144,6 +162,7 @@ describe('normalizeAttributeFlags — BK / alt-key-group (Direction A)', () => {
     isForeignKey: false,
     isNullable: true,
     isUnique: false,
+    isExplicitUnique: false,
     altKeyGroup: null,
   };
 
@@ -196,6 +215,7 @@ describe('normalizeAttributeFlags — BK / alt-key-group (Direction A)', () => {
       isForeignKey: false,
       isNullable: false,
       isUnique: true,
+      isExplicitUnique: false,
       altKeyGroup: 'AK1',
     };
     const result = normalizeAttributeFlags({ altKeyGroup: null }, bkCurrent);
@@ -205,6 +225,11 @@ describe('normalizeAttributeFlags — BK / alt-key-group (Direction A)', () => {
     // NULL" expectation.
     expect(result.isNullable).toBe(false);
     expect(result.isUnique).toBe(true);
+    // But isExplicitUnique stays false — the UQ is sticky from the
+    // cleared AK, not user-intended. Candidate-key queries will NOT
+    // surface this column until the user toggles UQ explicitly or
+    // re-designates as PK/AK.
+    expect(result.isExplicitUnique).toBe(false);
   });
 
   it('invalid group name (lowercase): altKeyGroup="ak1" → AltKeyGroupFormatError', () => {
@@ -234,6 +259,7 @@ describe('normalizeAttributeFlags — BK / alt-key-group (Direction A)', () => {
       isForeignKey: false,
       isNullable: false,
       isUnique: true,
+      isExplicitUnique: false,
       altKeyGroup: 'AK2',
     };
     // Patch only touches the name — altKeyGroup must survive unchanged.
@@ -249,6 +275,7 @@ describe('normalizeAttributeFlags — BK / alt-key-group (Direction A)', () => {
       isForeignKey: false,
       isNullable: false,
       isUnique: true,
+      isExplicitUnique: false,
       altKeyGroup: 'AK1',
     };
     const result = normalizeAttributeFlags({ altKeyGroup: 'AK2' }, bkCurrent);

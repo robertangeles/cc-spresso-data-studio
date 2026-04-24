@@ -32,6 +32,10 @@ import { recordChange } from './model-studio-changelog.service.js';
 import { enqueueEmbedding } from './model-studio-embedding.service.js';
 import { providerRegistry } from './ai/index.js';
 import { AltKeyGroupFormatError, normalizeAttributeFlags } from './model-studio-attribute-flags.js';
+import {
+  cascadeGovernanceToFks,
+  cleanupPropagatedFksForSourceAttr,
+} from './model-studio-relationship-propagate.service.js';
 
 /**
  * Step 5 — Attribute CRUD + Synthetic Data (D9).
@@ -332,6 +336,7 @@ export async function updateAttribute(
         isForeignKey: patch.isForeignKey,
         isNullable: patch.isNullable,
         isUnique: patch.isUnique,
+        isExplicitUnique: patch.isExplicitUnique,
         altKeyGroup: patch.altKeyGroup,
       },
       {
@@ -339,6 +344,7 @@ export async function updateAttribute(
         isForeignKey: before.isForeignKey,
         isNullable: before.isNullable,
         isUnique: before.isUnique,
+        isExplicitUnique: before.isExplicitUnique,
         altKeyGroup: before.altKeyGroup,
       },
     );
@@ -373,6 +379,7 @@ export async function updateAttribute(
     updates.isPrimaryKey = normalisedFlags.isPrimaryKey;
     updates.isForeignKey = normalisedFlags.isForeignKey;
     updates.isUnique = normalisedFlags.isUnique;
+    updates.isExplicitUnique = normalisedFlags.isExplicitUnique;
     updates.altKeyGroup = normalisedFlags.altKeyGroup;
   }
   if (patch.defaultValue !== undefined) updates.defaultValue = patch.defaultValue;
@@ -382,15 +389,53 @@ export async function updateAttribute(
   if (patch.metadata !== undefined) updates.metadata = patch.metadata;
   if (patch.tags !== undefined) updates.tags = patch.tags;
 
+  // PK demotion (true → false) requires cleanup of propagated FKs on
+  // downstream target entities. Run the update + cleanup in a single
+  // transaction so the two states never diverge. Detect by comparing
+  // the normalised final PK flag against the before state.
+  const demotingFromPk =
+    flagTouched && before.isPrimaryKey === true && normalisedFlags.isPrimaryKey === false;
+
+  // Governance cascade — when the user changes `classification` or
+  // `tags` on a source attr, every downstream FK that references it
+  // should inherit the new value so compliance dashboards stay in
+  // sync. Only fire if the patch actually touched the field AND the
+  // value changed. Runs alongside the update in the same transaction.
+  const classificationChanged =
+    patch.classification !== undefined && patch.classification !== before.classification;
+  const tagsChanged =
+    patch.tags !== undefined && JSON.stringify(patch.tags) !== JSON.stringify(before.tags ?? []);
+
   try {
-    const [updated] = await db
-      .update(dataModelAttributes)
-      .set(updates)
-      .where(
-        and(eq(dataModelAttributes.id, attributeId), eq(dataModelAttributes.entityId, entityId)),
-      )
-      .returning();
-    if (!updated) throw new NotFoundError('Attribute');
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(dataModelAttributes)
+        .set(updates)
+        .where(
+          and(eq(dataModelAttributes.id, attributeId), eq(dataModelAttributes.entityId, entityId)),
+        )
+        .returning();
+      if (!row) throw new NotFoundError('Attribute');
+
+      if (demotingFromPk) {
+        await cleanupPropagatedFksForSourceAttr(tx, {
+          sourceAttrId: attributeId,
+          modelId,
+          changedBy: userId,
+        });
+      }
+
+      if (classificationChanged || tagsChanged) {
+        await cascadeGovernanceToFks(tx, {
+          sourceAttrId: attributeId,
+          modelId,
+          changedBy: userId,
+          ...(classificationChanged ? { classification: patch.classification ?? null } : {}),
+          ...(tagsChanged ? { tags: patch.tags } : {}),
+        });
+      }
+      return row;
+    });
 
     await recordChange({
       dataModelId: modelId,
@@ -417,7 +462,7 @@ export async function updateAttribute(
     }
 
     logger.info(
-      { userId, modelId, entityId, attributeId, fields: Object.keys(patch) },
+      { userId, modelId, entityId, attributeId, fields: Object.keys(patch), demotingFromPk },
       'Model Studio: attribute updated',
     );
     return withLint(updated, entity.layer as Layer);

@@ -57,6 +57,12 @@ export interface AttributeFlags {
   isForeignKey: boolean;
   isNullable: boolean;
   isUnique: boolean;
+  /** True when the user explicitly set `isUnique=true` (not coerced by
+   *  PK or AK designation). Used to distinguish intentional UNIQUE
+   *  constraints from sticky-UQ leftovers after a PK or AK is cleared.
+   *  Only explicit-UQ columns are surfaced as FK-targetable candidate
+   *  keys alongside PK and AK members. */
+  isExplicitUnique: boolean;
   /** `AK1`, `AK2`, …, or `null` (no business-key group). */
   altKeyGroup: string | null;
 }
@@ -66,6 +72,10 @@ export interface AttributeFlagsInput {
   isForeignKey?: boolean;
   isNullable?: boolean;
   isUnique?: boolean;
+  /** Explicit override. Usually callers should omit this and let the
+   *  normaliser auto-derive it from `isUnique` patches (see behaviour
+   *  below) — but admin/migration paths can set it directly. */
+  isExplicitUnique?: boolean;
   /** Supply `null` (or an empty string — treated as null) to clear. */
   altKeyGroup?: string | null;
 }
@@ -75,6 +85,7 @@ const CREATE_DEFAULTS: AttributeFlags = {
   isForeignKey: false,
   isNullable: true,
   isUnique: false,
+  isExplicitUnique: false,
   altKeyGroup: null,
 };
 
@@ -127,8 +138,24 @@ export function normalizeAttributeFlags(
     isForeignKey: input.isForeignKey ?? base.isForeignKey,
     isNullable: input.isNullable ?? base.isNullable,
     isUnique: input.isUnique ?? base.isUnique,
+    isExplicitUnique: input.isExplicitUnique ?? base.isExplicitUnique,
     altKeyGroup: effectiveAkGroup,
   };
+
+  // Derive isExplicitUnique from isUnique patches when the caller didn't
+  // override it directly. A UQ toggle outside of a PK/AK coercion context
+  // = explicit user intent. A UQ toggle to false = user explicitly
+  // removing the constraint (also clears explicit marker).
+  if (input.isExplicitUnique === undefined && input.isUnique !== undefined) {
+    if (input.isUnique === false) {
+      merged.isExplicitUnique = false;
+    } else if (!merged.isPrimaryKey && merged.altKeyGroup === null) {
+      // isUnique=true patched on a non-PK, non-AK row → explicit intent.
+      merged.isExplicitUnique = true;
+    }
+    // else: PK or AK is also being set in this patch and would have
+    // coerced UQ anyway — don't auto-mark as explicit.
+  }
 
   // Invariant #1 — PK implies NN + UQ. Silent coerce.
   if (merged.isPrimaryKey) {
