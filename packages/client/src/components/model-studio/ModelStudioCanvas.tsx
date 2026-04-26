@@ -16,7 +16,13 @@ import {
   type NodeMouseHandler,
   type Viewport,
 } from '@xyflow/react';
-import type { Cardinality, CreateRelationshipInput, Layer, Relationship } from '@cc/shared';
+import type {
+  Cardinality,
+  CreateRelationshipInput,
+  Layer,
+  LayerCoverageResponse,
+  Relationship,
+} from '@cc/shared';
 import { Sparkles } from 'lucide-react';
 import { useCanvasState } from '../../hooks/useCanvasState';
 import { useEntities, type EntitySummary } from '../../hooks/useEntities';
@@ -24,8 +30,10 @@ import { useAttributes, type SyntheticDataResult } from '../../hooks/useAttribut
 import { isVersionConflictResult, useRelationships } from '../../hooks/useRelationships';
 import { useRelationshipSyncBridge } from '../../hooks/useRelationshipSyncBridge';
 import { useBroadcastCanvas } from '../../hooks/useBroadcastCanvas';
+import { useProjection } from '../../hooks/useProjection';
 import { useToast } from '../ui/Toast';
 import { EntityNode, type EntityNodeData } from './EntityNode';
+import type { OriginDirection } from './layer-direction';
 import { EntityEditor } from './EntityEditor';
 import { SyntheticDataDrawer } from './SyntheticDataDrawer';
 import { RelationshipEdge, type RelationshipEdgeData } from './RelationshipEdge';
@@ -57,6 +65,22 @@ import '@xyflow/react/dist/style.css';
 interface Props {
   modelId: string;
   layer: Layer;
+  /** Lifted to the detail page so the projection-chain breadcrumb +
+   *  linked-objects panel can react to canvas selection without prop-
+   *  drilling state down through React Flow. Null means nothing selected. */
+  selectedEntityId: string | null;
+  onSelectEntity: (id: string | null) => void;
+  /** Step 7 — coverage matrix shared across siblings (canvas badges,
+   *  layer switcher glow, linked-objects panel). When undefined, the
+   *  badges + glow degrade gracefully (everything reads as "unknown").
+   *  Reload through `onProjectionMutated` after auto-project succeeds. */
+  coverage?: LayerCoverageResponse['coverage'];
+  /** Step 7 — model.originDirection. Drives the unlinked-glow logic
+   *  on entity cards and the auto-project button's target layer. */
+  originDirection?: OriginDirection;
+  /** Called after a successful auto-projection so the parent can
+   *  refresh coverage + invalidate the projection-chain cache. */
+  onProjectionMutated?: () => void;
 }
 
 export function ModelStudioCanvas(props: Props) {
@@ -74,11 +98,20 @@ const EDGE_TYPES = { relationship: RelationshipEdge };
 
 const DEFAULT_ENTITY_NAME = 'new_entity';
 
-function InnerCanvas({ modelId, layer }: Props) {
+function InnerCanvas({
+  modelId,
+  layer,
+  selectedEntityId,
+  onSelectEntity,
+  coverage,
+  originDirection,
+  onProjectionMutated,
+}: Props) {
   const canvas = useCanvasState(modelId, layer);
   const ent = useEntities(modelId);
   const attrs = useAttributes(modelId);
   const rels = useRelationships(modelId);
+  const projection = useProjection(modelId);
   const { notation } = useNotation(modelId, layer);
   const { publish, subscribe } = useBroadcastCanvas(modelId);
   const bridge = useRelationshipSyncBridge();
@@ -86,7 +119,6 @@ function InnerCanvas({ modelId, layer }: Props) {
   const rf = useReactFlow();
   const undo = useUndoStack();
 
-  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [selectedRelId, setSelectedRelId] = useState<string | null>(null);
 
   // Step 7 S7-C3 — layer crossfade. Fade the React Flow surface out
@@ -282,6 +314,39 @@ function InnerCanvas({ modelId, layer }: Props) {
     return m;
   }, [rels.relationships]);
 
+  // Auto-project handler — wraps the projection mutation with the local
+  // refreshes the canvas needs (entities + attributes get a NEW row on
+  // success, so the canvas's caches must reload before the new card
+  // can render). The detail-page-supplied callback then refreshes the
+  // shared coverage matrix + invalidates the projection-chain cache.
+  //
+  // CRITICAL: this callback MUST be stable across renders. It lives in
+  // `EntityNodeData` via `structuralNodes`, so an unstable identity
+  // here cascades into structuralNodes recomputing every render, which
+  // re-fires the structural-sync effect, which calls setNodes with a
+  // fresh array, which triggers another render... infinite loop.
+  // useEntities/useProjection return fresh object references every
+  // render, so we route through refs instead of putting them in deps.
+  const loadAllAttrsRef = useRef(attrs.loadAll);
+  loadAllAttrsRef.current = attrs.loadAll;
+  const refreshEntitiesRef = useRef(ent.refresh);
+  refreshEntitiesRef.current = ent.refresh;
+  const projectRef = useRef(projection.project);
+  projectRef.current = projection.project;
+  const onProjectionMutatedRef = useRef(onProjectionMutated);
+  onProjectionMutatedRef.current = onProjectionMutated;
+  const handleProjectEntity = useCallback(async (entityId: string, toLayer: Layer) => {
+    try {
+      await projectRef.current(entityId, toLayer);
+      await Promise.all([refreshEntitiesRef.current(), loadAllAttrsRef.current()]);
+      onProjectionMutatedRef.current?.();
+    } catch {
+      // useProjection already toasts non-409 errors. 409 ("already
+      // projected") is a no-op here — the user can navigate to the
+      // existing projection via the breadcrumb / linked-objects panel.
+    }
+  }, []);
+
   // "Structural" nodes — identity + data shape derived purely from
   // external state (entities, attributes, selection, orphan badges).
   // CRITICAL: `canvas.state.nodePositions` is intentionally NOT in this
@@ -324,6 +389,9 @@ function InnerCanvas({ modelId, layer }: Props) {
           relCount: relCountByEntity.get(e.id) ?? 0,
           showOrphanBadge: showOrphanBadges,
           altKeyLabels: e.altKeyLabels ?? {},
+          coverageCell: coverage?.[e.id],
+          originDirection,
+          onProjectEntity: handleProjectEntity,
         },
       };
     });
@@ -334,6 +402,9 @@ function InnerCanvas({ modelId, layer }: Props) {
     attrs.attributesByEntity,
     relCountByEntity,
     showOrphanBadges,
+    coverage,
+    originDirection,
+    handleProjectEntity,
   ]);
 
   // React Flow v12 node state. Owning node identity here fixes the
@@ -592,7 +663,7 @@ function InnerCanvas({ modelId, layer }: Props) {
             });
           },
         });
-        setSelectedEntityId(created.id);
+        onSelectEntity(created.id);
       } catch {
         /* errors surface via ent.error */
       }
@@ -601,7 +672,7 @@ function InnerCanvas({ modelId, layer }: Props) {
   );
 
   const handleNodeClick: NodeMouseHandler<Node<EntityNodeData>> = useCallback((_evt, node) => {
-    setSelectedEntityId(node.id);
+    onSelectEntity(node.id);
     setSelectedRelId(null);
   }, []);
 
@@ -611,7 +682,7 @@ function InnerCanvas({ modelId, layer }: Props) {
   // are just scanning a dense model.
   const handleEdgeClick: EdgeMouseHandler = useCallback((_evt, edge) => {
     setSelectedRelId(edge.id);
-    setSelectedEntityId(null);
+    onSelectEntity(null);
   }, []);
 
   // Double click on edge → open the properties panel (Erwin /
@@ -619,7 +690,7 @@ function InnerCanvas({ modelId, layer }: Props) {
   // highlight matches the panel content.
   const handleEdgeDoubleClick: EdgeMouseHandler = useCallback((_evt, edge) => {
     setSelectedRelId(edge.id);
-    setSelectedEntityId(null);
+    onSelectEntity(null);
     setPanelRelId(edge.id);
   }, []);
 
@@ -883,7 +954,7 @@ function InnerCanvas({ modelId, layer }: Props) {
           throw new NotUndoableError('Entity deletion is not reversible in MVP');
         },
       });
-      setSelectedEntityId(null);
+      onSelectEntity(null);
     },
     [ent, selectedEntityId, canvas, undo],
   );
@@ -1273,7 +1344,7 @@ function InnerCanvas({ modelId, layer }: Props) {
         onConnect={handleConnect}
         onReconnect={handleReconnect}
         onPaneClick={() => {
-          setSelectedEntityId(null);
+          onSelectEntity(null);
           setSelectedRelId(null);
           setPanelRelId(null);
         }}
@@ -1326,7 +1397,7 @@ function InnerCanvas({ modelId, layer }: Props) {
         entity={selectedEntity}
         attributes={attrs.getFor(selectedEntityId)}
         attributesBusy={attrs.isLoading}
-        onClose={() => setSelectedEntityId(null)}
+        onClose={() => onSelectEntity(null)}
         onUpdate={updateSelected}
         onAutoDescribe={autoDescribeSelected}
         onDelete={deleteSelected}
@@ -1375,7 +1446,7 @@ function InnerCanvas({ modelId, layer }: Props) {
           if (!cascadeEntityId) return;
           await ent.remove(cascadeEntityId, { cascade: true });
           setCascadeEntityId(null);
-          setSelectedEntityId(null);
+          onSelectEntity(null);
           // Entity cascade removes related rels AND their propagated FK
           // attrs server-side. Refresh both caches so downstream entity
           // cards update alongside the edge layer.
