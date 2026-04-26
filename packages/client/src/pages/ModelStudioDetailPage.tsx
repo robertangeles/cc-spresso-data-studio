@@ -10,11 +10,13 @@ import { OriginDirectionBadge } from '../components/model-studio/OriginDirection
 import { ProjectionChainBreadcrumb } from '../components/model-studio/ProjectionChainBreadcrumb';
 import { LinkedObjectsPanel } from '../components/model-studio/LinkedObjectsPanel';
 import { ProjectToModal } from '../components/model-studio/ProjectToModal';
+import { LayerLinkSuggestionsPanel } from '../components/model-studio/LayerLinkSuggestionsPanel';
 import { useBroadcastCanvas } from '../hooks/useBroadcastCanvas';
 import { useProjectionChain } from '../hooks/useProjectionChain';
 import { useLayerCoverage } from '../hooks/useLayerCoverage';
+import { useLayerLinks } from '../hooks/useLayerLinks';
 import { useToast } from '../components/ui/Toast';
-import { Link as LinkIcon } from 'lucide-react';
+import { Link as LinkIcon, Sparkles } from 'lucide-react';
 
 /**
  * Model detail shell.
@@ -57,11 +59,13 @@ export function ModelStudioDetailPage() {
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [linkedPanelOpen, setLinkedPanelOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const { toast } = useToast();
 
   const { publish, subscribe } = useBroadcastCanvas(modelId);
   const projectionChain = useProjectionChain(modelId);
   const layerCoverage = useLayerCoverage(modelId);
+  const layerLinks = useLayerLinks(modelId);
 
   // Load the model once.
   useEffect(() => {
@@ -260,6 +264,27 @@ export function ModelStudioDetailPage() {
         </div>
 
         <div className="flex items-center gap-2 ml-auto shrink-0">
+          {/* Suggestions toggle — model-wide so it's always visible
+              regardless of selection. Opens the bottom-docked
+              LayerLinkSuggestionsPanel which scans for name-matched
+              candidate pairs across two layers. */}
+          <button
+            type="button"
+            data-testid="open-suggestions-button"
+            aria-pressed={suggestionsOpen}
+            aria-label="Toggle layer-link suggestions panel"
+            onClick={() => setSuggestionsOpen((prev) => !prev)}
+            className={[
+              'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1',
+              'text-[11px] font-medium backdrop-blur-xl',
+              suggestionsOpen
+                ? 'border border-accent/40 bg-gradient-to-r from-accent/15 to-amber-500/10 text-accent shadow-[0_0_8px_rgba(255,214,10,0.2)]'
+                : 'border border-white/10 bg-surface-2/70 text-text-secondary hover:text-text-primary',
+            ].join(' ')}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Suggest
+          </button>
           {/* Linked-objects toggle — only meaningful when an entity is
               selected. The breadcrumb above shows the canonical chain;
               this opens a richer per-layer view (multi-parent / multi-
@@ -339,6 +364,22 @@ export function ModelStudioDetailPage() {
             }}
           />
         )}
+
+        <LayerLinkSuggestionsPanel
+          isOpen={suggestionsOpen}
+          onClose={() => setSuggestionsOpen(false)}
+          defaultFrom={currentLayer}
+          defaultTo={
+            (['conceptual', 'logical', 'physical'] as Layer[]).find((l) => l !== currentLayer) ??
+            'logical'
+          }
+          suggestions={layerCoverage.suggestions}
+          isLoading={layerCoverage.isLoading}
+          loadSuggestions={layerCoverage.loadSuggestions}
+          clearSuggestions={layerCoverage.clearSuggestions}
+          onAccept={layerLinks.create}
+          onAccepted={handleProjectionMutated}
+        />
       </main>
     </div>
   );
