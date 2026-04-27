@@ -13,12 +13,13 @@ import {
   ShieldCheck,
   Workflow,
 } from 'lucide-react';
-import type { AttributeUpdate } from '@cc/shared';
+import type { AttributeLink, AttributeUpdate, Layer, ProjectionChainResponse } from '@cc/shared';
 import type { AttributeHistoryEvent, AttributeSummary } from '../../hooks/useAttributes';
 import { GeneralTab } from './attribute-tabs/GeneralTab';
 import { HistoryTab } from './attribute-tabs/HistoryTab';
 import { RulesTab } from './attribute-tabs/RulesTab';
 import { StubTab } from './attribute-tabs/StubTab';
+import { AttributeLayerLinksTab } from './attribute-tabs/AttributeLayerLinksTab';
 
 /**
  * Step 5 follow-up — tabbed property editor below the attribute grid.
@@ -75,7 +76,7 @@ const TABS: TabMeta[] = [
     id: 'layerLinks',
     label: 'Layer Links',
     icon: <LinkIcon className="h-3 w-3" />,
-    wired: false,
+    wired: true,
     tooltip: 'Cross-layer attribute projections (logical ↔ physical).',
   },
   {
@@ -155,6 +156,26 @@ export interface AttributePropertyEditorProps {
   /** PATCH the entity's altKeyLabels map. Threaded from the canvas.
    *  When absent, the Purpose input renders disabled. */
   onUpdateEntityAltKeyLabels?: (labels: Record<string, string>) => Promise<void> | void;
+  /** Step 7 EXP-4 — bundle of data + callbacks needed by the
+   *  Layer Links tab. Optional so older mounts that haven't plumbed
+   *  it yet fall through to the stub. When present, the layerLinks
+   *  tab renders <AttributeLayerLinksTab/> instead of the placeholder. */
+  attributeLinks?: AttributeLayerLinksBundle;
+}
+
+/** Bundle of cross-layer-link state + callbacks the property editor
+ *  needs to render the Layer Links tab. Owned by the canvas (which
+ *  has access to the layer-links hook + the per-entity attribute
+ *  cache + the projection chain forwarded from the detail page). */
+export interface AttributeLayerLinksBundle {
+  entityLayer: Layer;
+  chain: ProjectionChainResponse | null;
+  attributesByEntity: Record<string, AttributeSummary[]>;
+  links: AttributeLink[];
+  loadByParent(attrId: string): Promise<unknown>;
+  loadByChild(attrId: string): Promise<unknown>;
+  onCreate(parentAttrId: string, childAttrId: string): Promise<unknown>;
+  onDelete(linkId: string): Promise<void>;
 }
 
 export function AttributePropertyEditor({
@@ -164,6 +185,7 @@ export function AttributePropertyEditor({
   loadHistory,
   entityAltKeyLabels,
   onUpdateEntityAltKeyLabels,
+  attributeLinks,
 }: AttributePropertyEditorProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
 
@@ -207,6 +229,7 @@ export function AttributePropertyEditor({
           loadHistory={loadHistory}
           entityAltKeyLabels={entityAltKeyLabels}
           onUpdateEntityAltKeyLabels={onUpdateEntityAltKeyLabels}
+          attributeLinks={attributeLinks}
         />
       </div>
     </div>
@@ -325,6 +348,7 @@ function ActiveTabContent({
   loadHistory,
   entityAltKeyLabels,
   onUpdateEntityAltKeyLabels,
+  attributeLinks,
 }: {
   activeTab: TabId;
   entityId: string;
@@ -333,6 +357,7 @@ function ActiveTabContent({
   loadHistory: (entityId: string, attrId: string) => Promise<AttributeHistoryEvent[]>;
   entityAltKeyLabels?: Record<string, string> | null;
   onUpdateEntityAltKeyLabels?: (labels: Record<string, string>) => Promise<void> | void;
+  attributeLinks?: AttributeLayerLinksBundle;
 }) {
   switch (activeTab) {
     case 'general':
@@ -383,11 +408,29 @@ function ActiveTabContent({
         />
       );
     case 'layerLinks':
+      if (!attributeLinks) {
+        // The bundle hasn't been plumbed by this entry point — fall
+        // back to the original stub so the tab still reads gracefully.
+        return (
+          <StubTab
+            title="Layer Links"
+            description="Cross-layer attribute projections — bind a logical attribute to its physical column and back. Lives in data_model_attribute_links."
+            shipsIn="Step 7"
+          />
+        );
+      }
       return (
-        <StubTab
-          title="Layer Links"
-          description="Cross-layer attribute projections — bind a logical attribute to its physical column and back. Lives in data_model_attribute_links."
-          shipsIn="Step 7"
+        <AttributeLayerLinksTab
+          entityId={entityId}
+          entityLayer={attributeLinks.entityLayer}
+          attribute={attribute}
+          chain={attributeLinks.chain}
+          attributesByEntity={attributeLinks.attributesByEntity}
+          links={attributeLinks.links}
+          loadByParent={attributeLinks.loadByParent}
+          loadByChild={attributeLinks.loadByChild}
+          onCreate={attributeLinks.onCreate}
+          onDelete={attributeLinks.onDelete}
         />
       );
     case 'keys':

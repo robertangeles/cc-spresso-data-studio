@@ -21,6 +21,7 @@ import type {
   CreateRelationshipInput,
   Layer,
   LayerCoverageResponse,
+  ProjectionChainResponse,
   Relationship,
 } from '@cc/shared';
 import { Sparkles } from 'lucide-react';
@@ -31,6 +32,7 @@ import { isVersionConflictResult, useRelationships } from '../../hooks/useRelati
 import { useRelationshipSyncBridge } from '../../hooks/useRelationshipSyncBridge';
 import { useBroadcastCanvas } from '../../hooks/useBroadcastCanvas';
 import { useProjection } from '../../hooks/useProjection';
+import { useAttributeLinks } from '../../hooks/useAttributeLinks';
 import { useToast } from '../ui/Toast';
 import { EntityNode, type EntityNodeData } from './EntityNode';
 import type { OriginDirection } from './layer-direction';
@@ -81,6 +83,10 @@ interface Props {
   /** Called after a successful auto-projection so the parent can
    *  refresh coverage + invalidate the projection-chain cache. */
   onProjectionMutated?: () => void;
+  /** Step 7 EXP-4 — projection chain for the currently-selected entity,
+   *  forwarded from the detail page so the EntityEditor's Layer Links
+   *  tab can render rows for each layer-linked partner. */
+  selectedChain?: ProjectionChainResponse | null;
 }
 
 export function ModelStudioCanvas(props: Props) {
@@ -106,12 +112,14 @@ function InnerCanvas({
   coverage,
   originDirection,
   onProjectionMutated,
+  selectedChain,
 }: Props) {
   const canvas = useCanvasState(modelId, layer);
   const ent = useEntities(modelId);
   const attrs = useAttributes(modelId);
   const rels = useRelationships(modelId);
   const projection = useProjection(modelId);
+  const attrLinks = useAttributeLinks(modelId);
   const { notation } = useNotation(modelId, layer);
   const { publish, subscribe } = useBroadcastCanvas(modelId);
   const bridge = useRelationshipSyncBridge();
@@ -885,6 +893,35 @@ function InnerCanvas({
     [ent.entities, selectedEntityId],
   );
 
+  // Step 7 EXP-4 — bundle the data + callbacks the EntityEditor's
+  // Layer Links tab needs. Built only when an entity is selected so
+  // the property editor falls through to the stub on entry. We
+  // memoise on the underlying state values to avoid recreating the
+  // bundle (and re-rendering the property editor) on unrelated canvas
+  // mutations like cursor pan or hover.
+  const attributeLinksBundle = useMemo(() => {
+    if (!selectedEntity) return undefined;
+    return {
+      entityLayer: selectedEntity.layer as Layer,
+      chain: selectedChain ?? null,
+      attributesByEntity: attrs.attributesByEntity,
+      links: attrLinks.links,
+      loadByParent: attrLinks.loadByParent,
+      loadByChild: attrLinks.loadByChild,
+      onCreate: attrLinks.create,
+      onDelete: attrLinks.delete,
+    };
+  }, [
+    selectedEntity,
+    selectedChain,
+    attrs.attributesByEntity,
+    attrLinks.links,
+    attrLinks.loadByParent,
+    attrLinks.loadByChild,
+    attrLinks.create,
+    attrLinks.delete,
+  ]);
+
   const selectedRel: Relationship | null = useMemo(
     () => rels.relationships.find((r) => r.id === panelRelId) ?? null,
     [rels.relationships, panelRelId],
@@ -1392,7 +1429,8 @@ function InnerCanvas({
         </div>
       )}
 
-      {/* Right-docked entity editor (Phase 4/5 unchanged). */}
+      {/* Right-docked entity editor (Phase 4/5; Step 7 EXP-4 adds the
+          Layer Links tab via `attributeLinks`). */}
       <EntityEditor
         entity={selectedEntity}
         attributes={attrs.getFor(selectedEntityId)}
@@ -1407,6 +1445,7 @@ function InnerCanvas({
         onAttributeReorder={attributeReorder}
         onGenerateSynthetic={generateSyntheticForSelected}
         onLoadHistory={attrs.loadHistory}
+        attributeLinks={attributeLinksBundle}
       />
 
       {/* Right-docked rel editor. */}

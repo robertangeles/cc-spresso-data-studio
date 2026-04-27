@@ -340,6 +340,7 @@ export function ModelStudioDetailPage() {
           coverage={layerCoverage.coverage}
           originDirection={model.originDirection}
           onProjectionMutated={handleProjectionMutated}
+          selectedChain={selectedChain}
         />
 
         <LinkedObjectsPanel
