@@ -3,6 +3,7 @@ import {
   attributeCreateSchema,
   attributeReorderSchema,
   attributeUpdateSchema,
+  entityUpdateSchema,
   modelCreateSchema,
   modelUpdateSchema,
   ORIGIN_DIRECTION,
@@ -151,5 +152,63 @@ describe('Model Studio — attribute schemas', () => {
       const result = syntheticDataRequestSchema.safeParse({ count: 100 });
       expect(result.success).toBe(false);
     });
+  });
+});
+
+/**
+ * Step 7 — entity.layer immutability guard.
+ *
+ * Mutating entity.layer post-create would retroactively invalidate the
+ * layer_links graph: links that were cross-layer (legal) could become
+ * same-layer (illegal), and links that were outside a chain could enter
+ * one without passing the cycle-detection BFS. `entityUpdateSchema`
+ * omits the `layer` field entirely and uses `.strict()` so a PATCH
+ * body that includes it fails fast at the zod layer. See the service
+ * guard at `model-studio-entity.service.ts` for the second layer of
+ * defence (schema + service).
+ */
+describe('entityUpdateSchema — layer immutability guard (Step 7)', () => {
+  it('accepts a normal patch with name + description', () => {
+    const result = entityUpdateSchema.safeParse({
+      name: 'Customer',
+      description: 'A person who buys things.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a patch that includes `layer` with .strict() unrecognized-key error', () => {
+    const result = entityUpdateSchema.safeParse({
+      name: 'Customer',
+      layer: 'physical',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      // zod reports strict-mode violations as `unrecognized_keys` with
+      // the offending key list. Assert the shape is visible enough for
+      // the global error handler to surface a clear 400.
+      const issue = result.error.issues.find((i) => i.code === 'unrecognized_keys');
+      expect(issue).toBeDefined();
+      expect(issue?.keys).toEqual(['layer']);
+    }
+  });
+
+  it('rejects a patch that contains only `layer` (no other fields)', () => {
+    // The schema's `.refine` also requires at least one recognised field.
+    // `layer` alone is unrecognised, so both rules fire — we just check
+    // the parse fails and that `layer` surfaces in the error.
+    const result = entityUpdateSchema.safeParse({ layer: 'logical' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const hasLayerKeyError = result.error.issues.some(
+        (i) => i.code === 'unrecognized_keys' && i.keys.includes('layer'),
+      );
+      expect(hasLayerKeyError).toBe(true);
+    }
+  });
+
+  it('still requires at least one valid field (refine rule survives)', () => {
+    // Empty object must also be rejected so the PATCH isn't a no-op.
+    const result = entityUpdateSchema.safeParse({});
+    expect(result.success).toBe(false);
   });
 });

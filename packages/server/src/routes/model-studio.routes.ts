@@ -25,6 +25,15 @@ import {
   updateRelationshipSchema,
   relationshipIdParamsSchema,
   relationshipKeyColumnsSetSchema,
+  // Step 7
+  layerLinkCreateSchema,
+  layerLinkListQuerySchema,
+  layerLinkIdParamsSchema,
+  layerLinkSuggestionsQuerySchema,
+  attributeLinkCreateSchema,
+  attributeLinkListQuerySchema,
+  attributeLinkIdParamsSchema,
+  projectEntityRequestSchema,
 } from '@cc/shared';
 import { authenticate, requireRole } from '../middleware/auth.middleware.js';
 import { validate, validateParams, validateQuery } from '../middleware/validate.middleware.js';
@@ -36,6 +45,11 @@ import * as canvasController from '../controllers/model-studio-canvas.controller
 import * as entityController from '../controllers/model-studio-entity.controller.js';
 import * as attributeController from '../controllers/model-studio-attribute.controller.js';
 import * as relationshipController from '../controllers/model-studio-relationship.controller.js';
+// Step 7 controllers
+import * as layerLinksController from '../controllers/model-studio-layer-links.controller.js';
+import * as attributeLinksController from '../controllers/model-studio-attribute-links.controller.js';
+import * as projectionController from '../controllers/model-studio-projection.controller.js';
+import * as layerOverviewController from '../controllers/model-studio-layer-overview.controller.js';
 
 /**
  * Model Studio — Step 1 routes.
@@ -356,6 +370,91 @@ router.get(
   requireRole('Administrator'),
   validateParams(modelIdParamsSchema),
   relationshipController.explainMermaid,
+);
+
+// ============================================================
+// Step 7 — Layer linking, projection, coverage, suggestions.
+//
+// All routes ride under the existing `featureFlagGate` + `authenticate`
+// wiring applied at the router level above — no extra env-flag gate
+// per CEO + eng review Step 7 plan (unlike relationships, layer-links
+// are a core traceability surface that ships on the main flag).
+//
+// Authz happens inside each service via `assertCanAccessModel`. Zod
+// validation runs at this routing layer; `.strict()` on every body +
+// query schema rejects typos with 400 per lesson L26.
+//
+// Route-ordering note: Express matches by registration order, so the
+// more-specific `/layer-links/suggestions` MUST be registered BEFORE
+// `/layer-links/:linkId` even though our DELETE uses `:linkId` — the
+// GET variants have no `:linkId` segment, but it's the safer habit.
+// ============================================================
+
+// Layer-link suggestions (EXP-3) — list first for the route-ordering
+// reason above.
+router.get(
+  '/models/:id/layer-links/suggestions',
+  validateParams(modelIdParamsSchema),
+  validateQuery(layerLinkSuggestionsQuerySchema),
+  layerOverviewController.getSuggestions,
+);
+
+// Layer-link CRUD.
+router.get(
+  '/models/:id/layer-links',
+  validateParams(modelIdParamsSchema),
+  validateQuery(layerLinkListQuerySchema),
+  layerLinksController.list,
+);
+router.post(
+  '/models/:id/layer-links',
+  validateParams(modelIdParamsSchema),
+  validate(layerLinkCreateSchema),
+  layerLinksController.create,
+);
+router.delete(
+  '/models/:id/layer-links/:linkId',
+  validateParams(layerLinkIdParamsSchema),
+  layerLinksController.remove,
+);
+
+// Attribute-link CRUD (EXP-4).
+router.get(
+  '/models/:id/attribute-links',
+  validateParams(modelIdParamsSchema),
+  validateQuery(attributeLinkListQuerySchema),
+  attributeLinksController.list,
+);
+router.post(
+  '/models/:id/attribute-links',
+  validateParams(modelIdParamsSchema),
+  validate(attributeLinkCreateSchema),
+  attributeLinksController.create,
+);
+router.delete(
+  '/models/:id/attribute-links/:linkId',
+  validateParams(attributeLinkIdParamsSchema),
+  attributeLinksController.remove,
+);
+
+// Projection (EXP-1) + projection-chain resolver (EXP-2).
+router.post(
+  '/models/:id/entities/:entityId/project',
+  validateParams(entityIdParamsSchema),
+  validate(projectEntityRequestSchema),
+  projectionController.project,
+);
+router.get(
+  '/models/:id/entities/:entityId/projection-chain',
+  validateParams(entityIdParamsSchema),
+  projectionController.chain,
+);
+
+// Layer coverage matrix — S7-C6 + EXP-5 + EXP-6 all consume this.
+router.get(
+  '/models/:id/layer-coverage',
+  validateParams(modelIdParamsSchema),
+  layerOverviewController.getCoverage,
 );
 
 export { router as modelStudioRoutes };

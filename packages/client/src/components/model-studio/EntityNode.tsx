@@ -1,9 +1,12 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import type { Layer, NamingLintRule } from '@cc/shared';
+import type { Layer, LayerCoverageCell, NamingLintRule } from '@cc/shared';
 import { OrphanBadge } from './OrphanBadge';
 import { EntityHeader } from './EntityHeader';
 import { AttributeFlagCell } from './AttributeFlagCell';
+import { CoverageBadges } from './CoverageBadges';
+import { AutoProjectButton } from './AutoProjectButton';
+import { isUnlinked, type OriginDirection } from './layer-direction';
 
 /**
  * Custom React Flow node for a Model Studio entity.
@@ -67,6 +70,18 @@ export interface EntityNodeData extends Record<string, unknown> {
    *  `{AK1: "NI number"}`). Shared across every attribute in the same
    *  group. Surfaced as the tooltip on the AK badge. */
   altKeyLabels?: Record<string, string>;
+  /** Step 7 — coverage cell from `LayerCoverageResponse.coverage[id]`.
+   *  Drives the C/L/P badge row, the unlinked glow, and the auto-
+   *  project button. Undefined when the matrix hasn't loaded yet. */
+  coverageCell?: LayerCoverageCell;
+  /** Step 7 — model.originDirection. Determines which layer is the
+   *  "next" target for projection (greenfield: top-down; existing:
+   *  bottom-up) and therefore whether the entity reads as unlinked. */
+  originDirection?: OriginDirection;
+  /** Step 7 — async projection trigger. Called when the user clicks
+   *  the AutoProjectButton on this card. Resolves once the server
+   *  has scaffolded the projection. */
+  onProjectEntity?: (entityId: string, toLayer: Layer) => Promise<void>;
 }
 
 export interface EntityNodeProps extends NodeProps {
@@ -207,6 +222,14 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
   const nonFkAttrs = nonPrimaryAttrs.filter((a) => !a.isForeignKey);
   const hasAttrs = visibleAttrs.length > 0;
 
+  // EXP-6 unlinked-entity glow. The amber dashed border whispers
+  // "this entity isn't projected yet" without screaming for attention
+  // (we don't want to overwhelm a model with 50 unlinked entities on
+  // a fresh import). Skips when origin/coverage data isn't loaded.
+  const unlinked =
+    data.originDirection !== undefined &&
+    isUnlinked(data.originDirection, data.layer, data.coverageCell);
+
   return (
     <div
       ref={rootRef}
@@ -225,7 +248,15 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
           ? 'ring-2 ring-accent shadow-[0_0_18px_rgba(255,214,10,0.35)] border-accent/40'
           : '',
         isEndpointHot ? 'ring-2 ring-accent animate-pulse' : '',
+        // Unlinked glow — softer than selected (no ring, dashed border)
+        // so it reads as a hint, not a primary state. Suppressed when
+        // the entity is selected (the selected ring already pulls
+        // attention; doubling up looks chaotic).
+        unlinked && !selected
+          ? 'border-dashed border-accent/40 shadow-[0_0_12px_rgba(255,214,10,0.18)]'
+          : '',
       ].join(' ')}
+      data-unlinked={unlinked ? 'true' : 'false'}
     >
       {/*
         Entity-level connect handles — revealed on hover per Infection Virus
@@ -382,6 +413,28 @@ function EntityNodeComponent({ id, data, selected }: EntityNodeProps) {
         displayId={data.displayId ?? null}
         hasLintViolation={Boolean(violation)}
       />
+
+      {/* Layer coverage row — C/L/P badges + (optional) project-to-next
+          button when the entity is unlinked toward its expected next
+          layer. The row only renders when we have at least the
+          coverageCell or originDirection — otherwise the card stays
+          minimal until the matrix arrives. */}
+      {(data.coverageCell || data.originDirection) && (
+        <div className="flex items-center justify-between border-t border-white/5">
+          <CoverageBadges cell={data.coverageCell} ownLayer={data.layer} />
+          {data.originDirection && data.onProjectEntity && (
+            <div className="pr-2">
+              <AutoProjectButton
+                entityId={id}
+                ownLayer={data.layer}
+                origin={data.originDirection}
+                cell={data.coverageCell}
+                onProject={data.onProjectEntity}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {hasAttrs && (
         <div data-testid="entity-node-attributes" className="border-t border-white/10">

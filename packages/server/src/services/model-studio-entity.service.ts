@@ -167,11 +167,10 @@ export async function getEntity(
  * its numeric component. Returns `0` for null / malformed values so
  * the "next" calculation below treats them as unset.
  *
- * Kept internal — the display-id allocator is only ever called from
- * `createEntity` below and the migration backfill runs once per boot
- * from a single SQL UPDATE (no race with this allocator).
+ * Exported (Step 7) so the projection service can reuse the same
+ * allocator semantics when scaffolding an entity inside its own tx.
  */
-function parseDisplayIdNumber(label: string | null | undefined): number {
+export function parseDisplayIdNumber(label: string | null | undefined): number {
   if (!label) return 0;
   const match = /^E(\d+)$/.exec(label);
   if (!match) return 0;
@@ -185,8 +184,11 @@ function parseDisplayIdNumber(label: string | null | undefined): number {
  * cleanly to 4+ digits (`E1000`, `E99999`) once the model grows
  * beyond 999 entities. Column is VARCHAR(20) so the ceiling is far
  * out of reach.
+ *
+ * Exported (Step 7) so the projection service can reuse the same
+ * allocator semantics when scaffolding an entity inside its own tx.
  */
-function formatDisplayId(n: number): string {
+export function formatDisplayId(n: number): string {
   return `E${String(n).padStart(3, '0')}`;
 }
 
@@ -290,7 +292,10 @@ export async function updateEntity(
   if (patch.name !== undefined) updates.name = patch.name;
   if (patch.businessName !== undefined) updates.businessName = patch.businessName;
   if (patch.description !== undefined) updates.description = patch.description;
-  if (patch.layer !== undefined) updates.layer = patch.layer;
+  // entity.layer is immutable post-create — `entityUpdateSchema` rejects
+  // it at the zod layer, and we intentionally don't branch on it here
+  // even if an internal caller bypassed the schema. Mutating layer would
+  // retroactively invalidate the layer_links graph (Step 7 cycle guard).
   if (patch.entityType !== undefined) updates.entityType = patch.entityType;
   if (patch.metadata !== undefined) updates.metadata = patch.metadata;
   if (patch.tags !== undefined) updates.tags = patch.tags;

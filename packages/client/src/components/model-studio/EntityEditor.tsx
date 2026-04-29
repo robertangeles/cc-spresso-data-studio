@@ -22,7 +22,7 @@ import {
 import type { EntitySummary } from '../../hooks/useEntities';
 import type { AttributeHistoryEvent, AttributeSummary } from '../../hooks/useAttributes';
 import { AttributeGrid } from './AttributeGrid';
-import { AttributePropertyEditor } from './AttributePropertyEditor';
+import { AttributePropertyEditor, type AttributeLayerLinksBundle } from './AttributePropertyEditor';
 
 /**
  * Step 5 follow-up — Erwin-style EntityEditor. Replaces
@@ -65,6 +65,10 @@ export interface EntityEditorProps {
   onAttributeReorder: (orderedIds: string[]) => Promise<void>;
   onGenerateSynthetic: () => void;
   onLoadHistory: (entityId: string, attrId: string) => Promise<AttributeHistoryEvent[]>;
+  /** Step 7 EXP-4 — bundle for the Layer Links tab inside the
+   *  property editor. Optional so legacy mounts that haven't plumbed
+   *  it yet still render the stub. */
+  attributeLinks?: AttributeLayerLinksBundle;
 }
 
 type WidthMode = 'compact' | 'expanded';
@@ -212,6 +216,7 @@ function EditorShell(props: EditorShellProps) {
     onAttributeReorder,
     onGenerateSynthetic,
     onLoadHistory,
+    attributeLinks,
   } = props;
 
   const selectedAttr = useMemo(
@@ -289,6 +294,7 @@ function EditorShell(props: EditorShellProps) {
               loadHistory={onLoadHistory}
               entityAltKeyLabels={entity.altKeyLabels ?? {}}
               onUpdateEntityAltKeyLabels={(labels) => onUpdate({ altKeyLabels: labels })}
+              attributeLinks={attributeLinks}
             />
           </div>
         )}
