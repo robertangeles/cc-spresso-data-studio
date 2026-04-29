@@ -1,3 +1,13 @@
+---
+title: Model Studio Agent Alignment Briefing
+category: synthesis
+created: 2026-04-29
+updated: 2026-04-29
+related: [[spresso-data-studio]], [[step6-decision]], [[step7-decision]], [[lessons]], [[project-status]]
+---
+
+Cross-cutting agent briefing for every Model Studio task: Nobel-Laureate mindset, Infection Virus design spec, mandatory debugging protocol, testing standards, stack conventions, locked architecture, 11-step build order, applicable lessons, impact-analysis checklist, verification ritual.
+
 # Model Studio — Agent Alignment Briefing
 
 > **Purpose:** Shared source of truth for every agent (Explore, Plan, general-purpose) working on the Model Studio feature. Before starting ANY task, read this file end-to-end. Non-negotiables are marked **MANDATORY**.
