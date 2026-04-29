@@ -45,3 +45,6 @@ packages/server/uploads/
 packages/client/playwright-report/
 packages/client/test-results/
 packages/client/tests/e2e/.auth/
+
+# Claude Code per-developer permissions (machine-specific Bash allowlist + paths)
+.claude/settings.local.json
