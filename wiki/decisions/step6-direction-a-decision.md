@@ -1,3 +1,13 @@
+---
+title: Step 6 Direction A + BK/AK Alignment
+category: decision
+created: 2026-04-29
+updated: 2026-04-29
+related: [[step6-decision]], [[relationships-feature]]
+---
+
+Locked decisions for Step 6 Direction A visual shift (JetBrains Mono typography, dot canvas background, entity-card rework) + Business Key / Alt Key first-class feature (alt_key_group column, lint, normalizer).
+
 # Step 6 — Direction A + Business Key/Alt Key alignment
 
 > **Every agent on this wave MUST read this file AND

@@ -1,3 +1,13 @@
+---
+title: Step 6 Build Brief (Relationships + IE/IDEF1X)
+category: decision
+created: 2026-04-29
+updated: 2026-04-29
+related: [[relationships-feature]], [[step6-direction-a-decision]], [[step6-patch-decision]], [[alignment-model-studio]]
+---
+
+Locked CEO-review decisions for Step 6: Relationships + IE/IDEF1X notation, identifying-rel PK propagation, all 6 delights in scope, admin diagnostics endpoint, Mermaid export.
+
 # Step 6 Build Brief — Relationships + IE/IDEF1X Notation
 
 > **Every agent working on Step 6 MUST read this file before writing code.**

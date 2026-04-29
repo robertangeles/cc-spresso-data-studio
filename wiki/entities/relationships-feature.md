@@ -1,3 +1,13 @@
+---
+title: Model Studio Relationships
+category: entity
+created: 2026-04-29
+updated: 2026-04-29
+related: [[spresso-data-studio]], [[feature-flag-system]], [[step6-decision]], [[step6-direction-a-decision]], [[step6-patch-decision]]
+---
+
+Step 6 Relationships feature: typed edges between entities with IE / IDEF1X notation, identifying-rel PK propagation, FK <-> rel sync, infer-from-FK-graph, cascade-delete, Mermaid export.
+
 # Relationships (Step 6) — user guide + ops runbook
 
 **Status:** shipped 2026-04-20 (Step 6, feature-flag gated).

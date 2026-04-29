@@ -1,3 +1,13 @@
+---
+title: Step 6 Post-Ship Patch (undo/redo + 7 fixes)
+category: decision
+created: 2026-04-29
+updated: 2026-04-29
+related: [[step6-decision]], [[relationships-feature]]
+---
+
+Locked decisions for the Step 6 post-ship patch round: full undo/redo (cathedral scope, not deferred) plus 7 fixes (notation pill removal, smooth-step rel paths, scroll bouncing fix, validation toast, flag default-on, self-ref arc visibility, showcase seed model).
+
 # Step 6 post-ship patch — undo/redo + 7 fixes (alignment addendum)
 
 > **Every agent working on this round MUST read this file AND

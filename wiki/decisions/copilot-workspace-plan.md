@@ -1,3 +1,13 @@
+---
+title: Co-Pilot Workspace Plan
+category: decision
+created: 2026-04-29
+updated: 2026-04-29
+related: [[spresso-data-studio]]
+---
+
+CEO-review locked decisions for evolving the Content Builder centre column into a co-pilot workspace (chat + editor split, unified sendMessage, no right-panel transcript).
+
 # Plan: Co-Pilot Workspace — Center Column as the MOAT
 
 ## Context

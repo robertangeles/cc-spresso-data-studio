@@ -1,3 +1,13 @@
+---
+title: Model Studio Feature Flag System
+category: entity
+created: 2026-04-29
+updated: 2026-04-29
+related: [[spresso-data-studio]], [[relationships-feature]], [[layer-linking-api]]
+---
+
+Env-var based feature-flag system that gates Model Studio slices for safe ship + verify + flip on Render.
+
 # Model Studio feature flags
 
 Model Studio ships in **step-gated slices**. Every slice has a feature
