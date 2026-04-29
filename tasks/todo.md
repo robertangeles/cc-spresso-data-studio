@@ -1,5 +1,70 @@
 # Spresso Data Studio — Task Tracking
 
+> **Backlog source of truth.** When the user asks "what's our backlog"
+> or "what's next", read THIS file. The "Current backlog at-a-glance"
+> section below is the answer; the rest of this file is detail.
+
+## Current backlog at-a-glance _(updated 2026-04-28)_
+
+### In progress — Step 7 (Layer Linking, full cathedral)
+
+Branch: `feature/model-studio-step7-layer-linking` — local-only, no
+push yet. 6 of 8 lanes shipped:
+
+- [x] **Lane 1** — Backend (entity-link CRUD, attribute-link CRUD,
+      auto-projection, projection-chain, layer-coverage, name-match
+      suggester endpoint, cycle guard via SERIALIZABLE+retry). Commit
+      `f65b005`.
+- [x] **Lane 2** — Client hooks (useLayerLinks, useAttributeLinks,
+      useProjection, useProjectionChain, useLayerCoverage). Commit
+      `0586b54`.
+- [x] **Lane 3** — Layer switcher + origin badge + canvas crossfade + Shift+Alt+C/L/P shortcuts + URL `?layer=` source of truth.
+      Commit `4d972dc`. Bonus fix folded in: lesson L34 — `isLoading`
+      stale-false on routing-param change.
+- [x] **Lane 4** — Entity-card decorations (CoverageBadges,
+      UnlinkedEntityGlow, AutoProjectButton greenfield-only),
+      LinkedObjectsPanel, ProjectToModal, breadcrumb mount, D-2
+      LayerSwitcher glow. Commit `6bc9dc0`.
+- [x] **Lane 5** — Name-match auto-link suggester (EXP-3). Bottom
+      drawer, from/to layer pickers, per-row Accept + Accept-all
+      batch. Commit `6f44196`.
+- [x] **Lane 6** — Attribute layer-links editor (EXP-4). Wires the
+      previously-stubbed `'layerLinks'` tab in AttributePropertyEditor
+      with a row-per-partner dropdown picker; bidirectional view via
+      `currentPartnerAttrId`. Commit `8224618`.
+- [ ] **Lane 7** — **EXP-5 Cross-layer overlay mode** (~⌘L). Toggleable
+      canvas split into 3 columns (Conceptual / Logical / Physical)
+      so all layers read side-by-side. ~2 days CC-paced.
+- [ ] **Lane 8** — **EXP-8 CDMP-style PDF export.** Server-side
+      `@react-pdf/renderer` route producing cover + trust chain +
+      coverage matrix + per-entity chains + canvas raster snapshot.
+      ~2 days CC-paced.
+
+### Step 7 polish (deferred to Step 11 polish pass)
+
+- [ ] **Initial-load entity flash** — entities render at `{0,0}` for
+      ~100-300ms before canvas-state lands. Resolution: fold canvas-
+      state into the entity fetch (Option C). User chose this on
+      2026-04-24. Detail: see "Step 11 polish backlog" section below.
+- [ ] **Optional polish — clickable CoverageBadges.** Bright pill
+      jumps to the linked partner on that layer. Considered + parked
+      during Lane 4 testing. Defer until users ask.
+
+### After Step 7 ships
+
+- [ ] **Step 8** — Semantic layer bridge (binds conceptual entities ↔
+      business glossary). Step 7's layer-links + attribute-links are
+      the prereq. Unlocks the chatbot's ability to talk about a model
+      in business terms.
+- [ ] **Step 9** — DDL export (Snowflake + SQL Server + Postgres).
+      Now traceable per attribute thanks to Lane 6.
+- [ ] **Step 10** — AI chat (SSE streaming) + RAG over the model.
+- [ ] **Step 11** — Polish (Cmd+K palette, whiteboard empty state,
+      onboarding, responsive, error boundaries) + the Step 7 polish
+      items above.
+
+---
+
 ## Model Studio — remaining build steps
 
 Authoritative build order from `tasks/alignment-model-studio.md`. Each
